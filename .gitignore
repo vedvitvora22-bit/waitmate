@@ -1,0 +1,4 @@
+waitmate.db
+*.db
+.env
+.env.*

@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏳</text></svg>">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+              900: '#7c2d12',
+            },
+            slate: {
+              850: '#151f32',
+              950: '#090d16',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-orange-500 selection:text-white">
+
+  <!-- Top App Live Status Bar -->
+  <div class="bg-slate-900 text-slate-200 text-xs py-2 px-4 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse"></span>
+          LIVE NETWORK ACTIVE 🇮🇳
+        </span>
+        <span class="text-slate-300 font-medium">WaitMate India: Real-Time Restaurant & Food Truck Queue Platform</span>
+      </div>
+      <div class="flex items-center gap-4 text-[11px]">
+        <span class="flex items-center gap-1.5 text-slate-400">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5 text-orange-400"></i>
+          <span>Hub: <strong class="text-slate-200" id="topActiveCity">Indiranagar, Bengaluru</strong></span>
+        </span>
+        <span class="hidden sm:inline text-slate-600">•</span>
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <span>Active Diners:</span>
+          <span id="topLiveDinersCount" class="font-bold text-orange-400 bg-orange-500/10 px-1.5 py-0.2 rounded">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Primary Header & Tri-Interface Navigation -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
+          <i data-lucide="timer" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-heading font-extrabold text-xl tracking-tight text-slate-900">Wait<span class="text-orange-500">Mate</span></span>
+            <span class="bg-orange-100 text-orange-900 text-[10px] font-black px-1.5 py-0.5 rounded border border-orange-300">INDIA</span>
+          </div>
+          <p class="text-[11px] text-slate-500 font-medium hidden sm:block">Zero waiting, verified seating.</p>
+        </div>
+      </div>
+
+      <!-- Center / Right: 3 Live Dedicated Interfaces -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        
+        <!-- Active Ticket Pill (Appears when customer has active queue ticket) -->
+        <button id="activeTicketPill" onclick="openTicketModal()" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/25 hover:bg-orange-600 transition animate-bounce">
+          <span class="w-2 h-2 rounded-full bg-white live-pulse"></span>
+          <span>My Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
+        </button>
+
+        <!-- Push Notification Permission Badge -->
+        <div id="notifPermBadge" class="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 cursor-pointer hover:bg-orange-500/20 transition">
+          <i data-lucide="bell" class="w-3 h-3 text-orange-400 animate-bounce"></i>
+          <span class="text-orange-400 font-bold">Enable Alerts</span>
+        </div>
+
+        <!-- 3-Way Role Mode Switcher Tabs -->
+        <div class="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
+          
+          <!-- 1. Customer View -->
+          <button id="tabCustomer" onclick="switchInterface('customer')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm" title="Customer View: Browse spots & join queues">
+            <i data-lucide="utensils" class="w-3.5 h-3.5 text-orange-500"></i>
+            <span>Customer</span>
+          </button>
+
+          <!-- 2. Restaurant Owner View -->
+          <button id="tabOwner" onclick="switchInterface('owner')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900" title="Restaurant Owner View: Add restaurant & manage host stand">
+            <i data-lucide="store" class="w-3.5 h-3.5 text-slate-500"></i>
+            <span>Restaurant Owner</span>
+          </button>
+
+          <!-- 3. Founder View -->
+          <button id="tabFounder" onclick="switchInterface('founder')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900" title="Founder Command Center: Overview of entire network">
+            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-indigo-500"></i>
+            <span class="flex items-center gap-1">
+              Founder
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            </span>
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Multi-Interface Content Area -->
+  <main id="mainContainer" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ========================================================================= -->
+    <!-- INTERFACE 1: CUSTOMER VIEW (DISCOVERY, JOIN QUEUE & DIGITAL PASS)        -->
+    <!-- ========================================================================= -->
+    <div id="customerInterface">
+      
+      <!-- Customer Hero Banner -->
+      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white p-6 sm:p-8 mb-6 border border-slate-800 shadow-lg">
+        <div class="absolute -right-10 -bottom-10 w-72 h-72 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute right-20 -top-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        
+        <div class="relative z-10 max-w-3xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-orange-300 text-xs font-semibold mb-3 border border-white/10">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>Live Restaurant Queues • Crowd-Verified Waiting Times</span>
+          </div>
+          <h1 class="text-2xl sm:text-4xl font-extrabold font-heading tracking-tight mb-2">
+            Skip the sidewalk wait. <br class="hidden sm:block">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-300">Join queues remotely across India.</span>
+          </h1>
+          <p class="text-slate-300 text-sm leading-relaxed mb-6">
+            Join the line remotely from up to 5 km away. Track your exact queue rank in real time, receive high-urgency <strong>"Table is Near"</strong> alerts, and enjoy transparent dining at popular restaurants and street food trucks.
+          </p>
+
+          <!-- Core Value Badges -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/10 text-xs">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
+                <i data-lucide="smartphone" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <span class="font-bold text-white block">Remote Queue Entry</span>
+                <span class="text-slate-400 text-[11px]">Join within 5 km radius</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <i data-lucide="award" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <span class="font-bold text-white block">Reliability Score™</span>
+                <span class="text-slate-400 text-[11px]">Honest, verified ETAs</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                <i data-lucide="bell-ring" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <span class="font-bold text-white block">Table-Near Alert</span>
+                <span class="text-slate-400 text-[11px]">WhatsApp & audio chime</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- City Switcher Pills -->
+      <div class="flex items-center gap-2 mb-4 overflow-x-auto pb-1 text-xs">
+        <span class="text-slate-500 font-bold shrink-0">Select City:</span>
+        <button onclick="setCityFilter('all')" class="city-btn active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs" data-city="all">All India</button>
+        <button onclick="setCityFilter('Bengaluru')" class="city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-city="Bengaluru">📍 Bengaluru</button>
+        <button onclick="setCityFilter('Mumbai')" class="city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-city="Mumbai">📍 Mumbai</button>
+        <button onclick="setCityFilter('Delhi NCR')" class="city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-city="Delhi NCR">📍 Delhi NCR</button>
+        <button onclick="setCityFilter('Pune')" class="city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-city="Pune">📍 Pune</button>
+      </div>
+
+      <!-- Filters & Search Toolbar -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        
+        <!-- Search bar -->
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search dosa, biryani, kebabs, Rameshwaram, Meghana, Toit..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition">
+        </div>
+
+        <!-- Category Filters -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          <button onclick="setCategoryFilter('all')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white" data-cat="all">
+            All Spots
+          </button>
+          <button onclick="setCategoryFilter('restaurant')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="restaurant">
+            🍽️ Restaurants
+          </button>
+          <button onclick="setCategoryFilter('food_truck')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="food_truck">
+            🚚 Food Trucks & Kiosks
+          </button>
+        </div>
+
+        <!-- Sort By & Toggles -->
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <span>Sort:</span>
+            <select id="sortSelect" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg py-1.5 px-2.5 font-medium focus:outline-none focus:ring-1 focus:ring-orange-500">
+              <option value="reliability">Highest Reliability Score</option>
+              <option value="wait_asc">Shortest Wait Time</option>
+              <option value="distance">Closest Distance</option>
+            </select>
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" id="openOnlyCheckbox" onchange="applyFilters()" checked class="rounded text-orange-500 focus:ring-orange-500">
+            <span>Open Queues</span>
+          </label>
+        </div>
+
+      </div>
+
+      <!-- Restaurant Grid -->
+      <div id="restaurantsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rendered via JavaScript -->
+        <div class="col-span-full py-16 text-center text-slate-400">
+          <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-orange-500"></i>
+          <p>Loading live restaurants & queues...</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- INTERFACE 2: RESTAURANT OWNER PORTAL                                      -->
+    <!-- ========================================================================= -->
+    <div id="ownerInterface" class="hidden">
+      
+      <!-- Owner Navigation Tabs -->
+      <div class="flex items-center justify-between border-b border-slate-200 mb-6 pb-2">
+        <div class="flex items-center gap-3">
+          <button onclick="switchOwnerTab('host')" id="ownerTabHost" class="px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2">
+            <i data-lucide="clipboard-list" class="w-4 h-4 text-orange-500"></i>
+            <span>Live Host Stand & Queue Manager</span>
+          </button>
+          <button onclick="switchOwnerTab('register')" id="ownerTabRegister" class="px-4 py-2 font-semibold text-sm text-slate-500 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Add New Restaurant to WaitMate</span>
+          </button>
+        </div>
+        <span class="text-xs text-slate-400 font-medium hidden sm:inline">Owner Management Portal</span>
+      </div>
+
+      <!-- SUB-TAB 1: LIVE HOST STAND -->
+      <div id="ownerSubTabHost">
+        
+        <!-- Host Top Control Bar -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+              <i data-lucide="store" class="w-5 h-5 text-orange-400"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="font-heading font-extrabold text-xl text-slate-900" id="hostVenueName">The Rameshwaram Cafe</h2>
+                <span id="hostQueueOpenBadge" class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">QUEUE ACTIVE</span>
+              </div>
+              <p class="text-xs text-slate-500" id="hostVenueLocationSub">100ft Road, Indiranagar • Host Stand Dashboard</p>
+            </div>
+          </div>
+
+          <!-- Venue Selector Dropdown & Actions -->
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-500 font-medium">Your Restaurant:</span>
+              <select id="hostVenueSelect" onchange="switchHostVenue(this.value)" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg py-2 px-3 font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <!-- Populated via JS -->
+              </select>
+            </div>
+
+            <button onclick="openWalkinModal()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition">
+              <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+              <span>Add Walk-In Guest (+91)</span>
+            </button>
+
+            <button onclick="toggleQueueStatus()" id="hostToggleQueueBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+              <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+              <span>Pause Queue</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Host KPI Summary Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-slate-500">Active Waiting Parties</span>
+              <div class="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                <i data-lucide="users" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiParties">0</span>
+              <span class="text-xs text-slate-500" id="hostKpiHeads">(0 guests)</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-slate-500">Current Wait Estimate</span>
+              <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiWait">-- min</span>
+              <span class="text-[11px] text-slate-400" id="hostKpiCalcType">Algorithmic</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-slate-500">Reliability Score</span>
+              <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <i data-lucide="award" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl font-extrabold text-emerald-600" id="hostKpiScore">--%</span>
+              <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700" id="hostKpiGrade">A</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-slate-500">Avg Wait Discrepancy</span>
+              <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                <i data-lucide="activity" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiVariance">± 0m</span>
+              <span class="text-[11px] text-slate-400">vs promised</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Host Wait Adjustment & Anti-Overpromising Warning -->
+        <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-xl p-5 mb-6 border border-slate-700">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-bold flex items-center gap-1.5 text-orange-400">
+                  <i data-lucide="sliders" class="w-4 h-4"></i> Wait Time Estimate Control
+                </span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Dynamic Anti-Overpromising Engine</span>
+              </div>
+              <p class="text-xs text-slate-300">
+                WaitMate automatically computes estimated wait based on table turnaround pace. You can manually override, but underestimating will harm your public Reliability Score!
+              </p>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700">
+                <span class="text-xs text-slate-300">Set Wait:</span>
+                <input type="number" id="hostManualWaitInput" min="0" max="180" step="5" class="w-16 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs font-bold text-white text-center focus:outline-none focus:ring-1 focus:ring-orange-500" placeholder="Auto">
+                <span class="text-xs text-slate-400">mins</span>
+                <button onclick="saveHostWaitEstimate()" class="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-bold transition">Apply</button>
+                <button onclick="resetHostWaitToAuto()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-xs transition" title="Revert to algorithm">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="hostOverrideWarning" class="hidden mt-3 p-2.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400 shrink-0"></i>
+            <span><strong>Reliability Warning:</strong> You set wait to <span id="warnMins">10m</span>, but with multiple parties ahead, the real wait is estimated at <span id="warnAlgo">25m</span>. Diners will penalize this score if seated late!</span>
+          </div>
+        </div>
+
+        <!-- Live Queue Table -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-slate-900 text-sm">Live Waitlist Queue</h3>
+              <span class="text-xs text-slate-500">(Ranked by arrival / priority)</span>
+            </div>
+            <span class="text-xs text-slate-400">Live queue sync</span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th class="py-3 px-4">Ticket / Rank</th>
+                  <th class="py-3 px-4">Guest Info (+91)</th>
+                  <th class="py-3 px-4">Party & Seating</th>
+                  <th class="py-3 px-4">Wait Progress</th>
+                  <th class="py-3 px-4">Arrival & Near Radar</th>
+                  <th class="py-3 px-4 text-right">Host Actions</th>
+                </tr>
+              </thead>
+              <tbody id="hostQueueTableBody" class="divide-y divide-slate-100">
+                <!-- Rendered via JS -->
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-slate-400">Loading queue entries...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- SUB-TAB 2: ADD NEW RESTAURANT ONBOARDING FORM -->
+      <div id="ownerSubTabRegister" class="hidden">
+        
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 max-w-3xl mx-auto">
+          
+          <div class="border-b border-slate-200 pb-5 mb-6">
+            <span class="badge-tag bg-orange-100 text-orange-900 font-bold uppercase text-[10px] mb-1">Owner Self-Serve Onboarding</span>
+            <h2 class="text-2xl font-heading font-extrabold text-slate-900">List Your Restaurant on WaitMate India</h2>
+            <p class="text-xs text-slate-500 mt-1">
+              Start managing transparent queues, eliminating sidewalk bottlenecks, and protecting your diner retention with zero commission fees.
+            </p>
+          </div>
+
+          <form id="ownerAddRestaurantForm" onsubmit="submitNewRestaurant(event)" class="space-y-5">
+            
+            <!-- Row 1: Restaurant Name & Cuisine -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant / Brand Name *</label>
+                <input type="text" id="regName" required placeholder="e.g. Vidyarthi Bhavan, Nagarjuna, Chai Point" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Cuisine / Category *</label>
+                <input type="text" id="regCategory" required placeholder="e.g. South Indian Tiffin, Dum Biryani, Kebab Rolls" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+              </div>
+            </div>
+
+            <!-- Row 2: Venue Type & City -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Venue Type *</label>
+                <select id="regType" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                  <option value="restaurant">🍽️ Dine-in Restaurant</option>
+                  <option value="food_truck">🚚 Food Truck / Street Kiosk</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">City *</label>
+                <select id="regCity" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                  <option value="Bengaluru">Bengaluru</option>
+                  <option value="Mumbai">Mumbai</option>
+                  <option value="Delhi NCR">Delhi NCR</option>
+                  <option value="Pune">Pune</option>
+                  <option value="Hyderabad">Hyderabad</option>
+                  <option value="Chennai">Chennai</option>
+                  <option value="Kolkata">Kolkata</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Price Tier *</label>
+                <select id="regPriceRange" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                  <option value="₹">₹ (Budget / Street / Quick-Service)</option>
+                  <option value="₹₹" selected>₹₹ (Casual Dining / Popular Dine-in)</option>
+                  <option value="₹₹₹">₹₹₹ (Premium / Microbrewery / Fine Dining)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Row 3: Street Address & Landmark -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Full Street Address & Landmark *</label>
+              <input type="text" id="regAddress" required placeholder="e.g. 32 Gandhi Bazaar Main Rd, Basavanagudi, Bengaluru, Karnataka 560004" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+            </div>
+
+            <!-- Row 4: Owner Details & Phone -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Manager / Owner Name *</label>
+                <input type="text" id="regOwnerName" required placeholder="e.g. Suresh Kumar" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Owner Contact (+91 Phone) *</label>
+                <input type="tel" id="regOwnerPhone" required placeholder="+91 98450 12345" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
+              </div>
+            </div>
+
+            <!-- Row 5: Table Capacity & Turnover Pace -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Total Table Capacity (or Service Counters)</label>
+                <input type="number" id="regTables" min="1" max="150" value="16" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                <span class="text-[10px] text-slate-400">Used by algorithm to calculate wait times</span>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Average Dining Pace (mins per party)</label>
+                <input type="number" id="regPrepTime" min="3" max="90" value="15" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                <span class="text-[10px] text-slate-400">e.g. 8m for Dosa/Chai, 20m for Biryani, 40m for Brewery</span>
+              </div>
+            </div>
+
+            <!-- Row 6: Cover Image URL & Quick Presets -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Food / Venue Cover Photo URL</label>
+              <input type="url" id="regImageUrl" placeholder="https://images.unsplash.com/..." value="https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none text-slate-600">
+              <div class="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
+                <span>Quick Photo Presets:</span>
+                <button type="button" onclick="setPresetPhoto('dosa')" class="text-orange-600 hover:underline">South Indian Dosa</button> •
+                <button type="button" onclick="setPresetPhoto('biryani')" class="text-orange-600 hover:underline">Hyderabadi Biryani</button> •
+                <button type="button" onclick="setPresetPhoto('kebab')" class="text-orange-600 hover:underline">Tandoori / Kebab</button> •
+                <button type="button" onclick="setPresetPhoto('cafe')" class="text-orange-600 hover:underline">Cafe & Bakery</button>
+              </div>
+            </div>
+
+            <!-- Row 7: Description -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant Bio & Specialties</label>
+              <textarea id="regDescription" rows="2" placeholder="Tell diners about your signature dishes, history, and dining atmosphere..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="regSubmitBtn" class="w-full py-3 bg-slate-900 hover:bg-orange-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center gap-2">
+              <i data-lucide="store" class="w-4 h-4 text-orange-400"></i>
+              <span>Launch Restaurant on WaitMate Live Network</span>
+            </button>
+
+            <p class="text-[11px] text-center text-slate-400">
+              Zero commission platform. Instant live activation on WaitMate India.
+            </p>
+
+          </form>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- INTERFACE 3: FOUNDER OVERVIEW & AUDIT COMMAND CENTER                     -->
+    <!-- ========================================================================= -->
+    <div id="founderInterface" class="hidden">
+      
+      <!-- Founder Header Banner -->
+      <div class="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white rounded-2xl p-6 sm:p-8 border border-indigo-900/40 shadow-xl mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500 text-white tracking-wider">
+                FOUNDER COMMAND CENTER
+              </span>
+              <span class="text-xs text-indigo-300 font-medium">Live Cross-Platform Network Surveillance</span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-heading font-extrabold text-white">
+              WaitMate Executive Dashboard
+            </h2>
+            <p class="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+              Real-time oversight across all Indian partner venues. Monitor active queue depths, seating throughput, queue accuracy ratings, and anti-overpromising compliance.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="loadFounderDashboard()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Refresh Network Data</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Top Founder Metrics -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-indigo-900/50">
+          <div>
+            <span class="text-[11px] font-bold text-indigo-300 uppercase block">Registered Venues</span>
+            <div class="text-2xl sm:text-3xl font-black text-white mt-0.5" id="fndTotalVenues">--</div>
+            <span class="text-[10px] text-slate-400" id="fndCitiesSummary">Across 4 major hubs</span>
+          </div>
+
+          <div>
+            <span class="text-[11px] font-bold text-orange-400 uppercase block">Waiting Diners (Live)</span>
+            <div class="text-2xl sm:text-3xl font-black text-orange-400 mt-0.5" id="fndWaitingDiners">--</div>
+            <span class="text-[10px] text-slate-400" id="fndWaitingParties">-- parties in queues</span>
+          </div>
+
+          <div>
+            <span class="text-[11px] font-bold text-emerald-400 uppercase block">Diners Seated</span>
+            <div class="text-2xl sm:text-3xl font-black text-emerald-400 mt-0.5" id="fndSeatedDiners">--</div>
+            <span class="text-[10px] text-slate-400">Total throughput today</span>
+          </div>
+
+          <div>
+            <span class="text-[11px] font-bold text-purple-300 uppercase block">Network Reliability</span>
+            <div class="text-2xl sm:text-3xl font-black text-white mt-0.5" id="fndAvgReliability">--%</div>
+            <span class="text-[10px] text-emerald-400 font-bold">87.4% Walkaway Saved</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Founder 2-Column Grid: Live Queue Stream & Reliability Audit -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        
+        <!-- Left Column (2 Cols): All Restaurants Live State -->
+        <div class="lg:col-span-2 space-y-6">
+          
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-slate-900 text-sm">Registered Restaurant Network</h3>
+                <p class="text-xs text-slate-500">Live operational status, queue load & controls</p>
+              </div>
+              <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700" id="fndVenueCountBadge">0 venues</span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th class="py-3 px-4">Restaurant & City</th>
+                    <th class="py-3 px-4">Type & Pricing</th>
+                    <th class="py-3 px-4">Current Queue</th>
+                    <th class="py-3 px-4">Reliability</th>
+                    <th class="py-3 px-4 text-right">Founder Controls</th>
+                  </tr>
+                </thead>
+                <tbody id="fndRestaurantsTable" class="divide-y divide-slate-100">
+                  <!-- Populated via JS -->
+                  <tr>
+                    <td colspan="5" class="py-8 text-center text-slate-400">Loading restaurants...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Cross-Platform Live Queue Stream -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-slate-900 text-sm">Live Cross-Platform Queue Stream</h3>
+                <p class="text-xs text-slate-500">Real-time incoming parties across all Indian venues</p>
+              </div>
+              <span class="w-2 h-2 rounded-full bg-emerald-500 live-pulse"></span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th class="py-3 px-4">Ticket</th>
+                    <th class="py-3 px-4">Venue</th>
+                    <th class="py-3 px-4">Diner Name & Contact</th>
+                    <th class="py-3 px-4">Status & Wait</th>
+                    <th class="py-3 px-4 text-right">Channel</th>
+                  </tr>
+                </thead>
+                <tbody id="fndLiveQueuesTable" class="divide-y divide-slate-100">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Real-Time Reliability Audit Stream -->
+        <div class="space-y-6">
+          
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+                <span>Reliability Audit Watchdog</span>
+              </h3>
+              <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Real-time</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">
+              Real-time feed of diners verifying queue accuracy upon being seated. Flags venues guilty of underestimating wait times.
+            </p>
+
+            <div id="fndRecentReviewsList" class="space-y-3 max-h-[550px] overflow-y-auto pr-1">
+              <!-- Populated via JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: JOIN REMOTE QUEUE MODAL                                          -->
+  <!-- ========================================================================= -->
+  <div id="joinQueueModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeJoinModal()"></div>
+    <div class="modal-content relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+      
+      <!-- Modal Header -->
+      <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
+        <div>
+          <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • India</span>
+          <h3 id="joinModalVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
+          <p id="joinModalAddress" class="text-xs text-slate-400">100ft Road, Indiranagar, Bengaluru</p>
+        </div>
+        <button onclick="closeJoinModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Proximity Verification Banner -->
+      <div class="bg-emerald-50 border-b border-emerald-100 p-3 px-5 flex items-center justify-between text-xs text-emerald-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+          <span><strong>Within Remote Queue Range:</strong> You are 0.8 km away (Limit: 5 km).</span>
+        </div>
+        <span class="text-emerald-700 font-semibold">Verified</span>
+      </div>
+
+      <!-- Queue Form -->
+      <form id="joinQueueForm" onsubmit="submitJoinQueue(event)" class="p-6 space-y-4">
+        <input type="hidden" id="joinVenueId">
+
+        <!-- Estimated Wait Preview Card -->
+        <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-orange-800 uppercase">Live Estimate</span>
+            <div class="text-xl font-extrabold text-orange-950" id="joinPreviewWait">~10 mins wait</div>
+            <span class="text-xs text-orange-700" id="joinPreviewAhead">2 parties ahead of you</span>
+          </div>
+          <div class="text-right">
+            <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300" id="joinPreviewScore">
+              <i data-lucide="award" class="w-3 h-3"></i> 96% Accurate
+            </span>
+            <span class="text-[10px] text-slate-500 block mt-1">± 1.9m avg variance</span>
+          </div>
+        </div>
+
+        <!-- Party Size -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">How many guests in your party?</label>
+          <div class="grid grid-cols-6 gap-2">
+            <button type="button" onclick="setPartySize(1)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="1">1</button>
+            <button type="button" onclick="setPartySize(2)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none bg-orange-500 text-white border-orange-500" data-size="2">2</button>
+            <button type="button" onclick="setPartySize(3)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="3">3</button>
+            <button type="button" onclick="setPartySize(4)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="4">4</button>
+            <button type="button" onclick="setPartySize(5)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="5">5</button>
+            <button type="button" onclick="setPartySize(6)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="6">6+</button>
+          </div>
+          <input type="hidden" id="joinPartySizeInput" value="2">
+        </div>
+
+        <!-- Seating Preference -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">Seating Preference</label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button type="button" onclick="setSeatingPref('First Available')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-orange-500 bg-orange-50 text-orange-950" data-pref="First Available">First Available</button>
+            <button type="button" onclick="setSeatingPref('Family AC Section')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Family AC Section">Family AC Section</button>
+            <button type="button" onclick="setSeatingPref('Outdoor / Standing')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Outdoor / Standing">Outdoor / Standing</button>
+            <button type="button" onclick="setSeatingPref('Bar Counter')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Bar Counter">Bar Counter</button>
+          </div>
+          <input type="hidden" id="joinSeatingPrefInput" value="First Available">
+        </div>
+
+        <!-- Contact Information -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Your Name</label>
+            <input type="text" id="joinCustomerName" required value="Aarav Mehta" placeholder="Aarav Mehta" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Mobile Phone (India +91)</label>
+            <input type="tel" id="joinCustomerPhone" required value="+91 98201 44521" placeholder="+91 98450 12345" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
+          </div>
+        </div>
+
+        <!-- Special Requests -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Special Notes (Optional)</label>
+          <input type="text" id="joinSpecialReq" placeholder="Filter coffee priority, high chair, baby stroller, booth..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="joinSubmitBtn" class="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm shadow-md shadow-orange-500/25 transition flex items-center justify-center gap-2">
+          <i data-lucide="ticket" class="w-4 h-4"></i>
+          <span>Join Online Queue & Get Pass</span>
+        </button>
+
+        <p class="text-[11px] text-center text-slate-400">
+          Zero fees. Verified queueing sponsored by WaitMate India.
+        </p>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2: LIVE DIGITAL QUEUE TICKET PASS & TRACKER                         -->
+  <!-- ========================================================================= -->
+  <div id="ticketModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeTicketModal()"></div>
+    <div class="modal-content relative w-full max-w-md z-10">
+      
+      <!-- Boarding Pass Style Digital Ticket -->
+      <div class="ticket-container bg-white text-slate-900 border border-slate-200 shadow-2xl">
+        <div class="ticket-notch-left"></div>
+        <div class="ticket-notch-right"></div>
+
+        <!-- Ticket Header -->
+        <div class="bg-slate-900 text-white p-5 pb-6">
+          <div class="flex items-center justify-between mb-3">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-500 text-white">
+              <span class="w-1.5 h-1.5 rounded-full bg-white live-pulse"></span>
+              LIVE QUEUE PASS
+            </span>
+            <button onclick="closeTicketModal()" class="text-slate-400 hover:text-white p-1">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
+              <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian & Filter Coffee</p>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-slate-400 uppercase font-mono block">Ticket Number</span>
+              <span id="ticketNumber" class="text-lg font-mono font-black text-orange-400">#WM-104</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Position & Countdown Display -->
+        <div class="p-6 text-center bg-gradient-to-b from-orange-50/60 to-white">
+          
+          <div class="inline-block relative mb-4">
+            <svg class="w-36 h-36 mx-auto" viewBox="0 0 100 100">
+              <circle class="text-slate-200" stroke-width="8" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
+              <circle id="ticketProgressCircle" class="text-orange-500 progress-ring__circle" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="60" stroke-linecap="round" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Queue Rank</span>
+              <span id="ticketPosition" class="text-3xl font-heading font-black text-slate-900">#2</span>
+              <span id="ticketPartiesAhead" class="text-[11px] text-slate-500">1 party ahead</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Remaining Time -->
+          <div class="mb-4">
+            <span class="text-xs font-bold text-slate-500 uppercase">Estimated Call Time</span>
+            <div id="ticketEtaCountdown" class="text-2xl font-black text-slate-900">~10 mins remaining</div>
+            <p id="ticketStatusMsg" class="text-xs text-emerald-700 font-medium mt-1">
+              You're in good shape! Host estimates are 96% accurate.
+            </p>
+          </div>
+
+          <!-- Timeline Stepper -->
+          <div class="grid grid-cols-4 gap-1 text-[10px] font-semibold text-slate-500 pt-2 border-t border-slate-100">
+            <div class="text-center" id="step1">
+              <div class="w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold">✓</div>
+              <span>Joined</span>
+            </div>
+            <div class="text-center" id="step2">
+              <div class="w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold" id="step2Icon">✓</div>
+              <span>En Route</span>
+            </div>
+            <div class="text-center" id="step3">
+              <div class="w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1" id="step3Icon">3</div>
+              <span>Table Ready</span>
+            </div>
+            <div class="text-center" id="step4">
+              <div class="w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1" id="step4Icon">4</div>
+              <span>Seated</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Dotted Ticket Divider -->
+        <div class="ticket-divider mx-6"></div>
+
+        <!-- Ticket Details Body -->
+        <div class="p-6 pt-4 space-y-4">
+          <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+              <span class="text-[10px] text-slate-400 block uppercase">Party Size</span>
+              <span id="ticketPartySize" class="font-bold text-slate-800">2 Guests</span>
+            </div>
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+              <span class="text-[10px] text-slate-400 block uppercase">Preference</span>
+              <span id="ticketSeating" class="font-bold text-slate-800">Indoor</span>
+            </div>
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+              <span class="text-[10px] text-slate-400 block uppercase">Arrival</span>
+              <span id="ticketArrivalStatus" class="font-bold text-emerald-600">En Route</span>
+            </div>
+          </div>
+
+          <!-- High-Urgency "Table is Near / Next in Line" Alert Box -->
+          <div id="tableNearAlertBanner" class="hidden p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border-2 border-orange-500/80 table-near-pulse text-xs relative overflow-hidden">
+            <div class="flex items-start gap-3">
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                <i data-lucide="bell-ring" class="w-5 h-5 animate-bounce"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-500 text-white tracking-wider animate-pulse">
+                    🚨 TABLE ALMOST READY
+                  </span>
+                  <span class="text-[10px] text-orange-950 font-bold" id="nearDistanceNotice">~3 mins walking distance</span>
+                </div>
+                <h4 class="font-heading font-extrabold text-sm text-slate-900 leading-tight" id="nearHeadline">
+                  Start heading to the host counter now!
+                </h4>
+                <p class="text-slate-700 text-[11px] mt-1 leading-snug" id="nearSubtext">
+                  You are <strong id="nearPositionBadge">#1 in line</strong>. The host is currently clearing a table for your party. Please arrive at the entrance to secure your spot.
+                </p>
+                
+                <div class="mt-2.5 flex items-center gap-2">
+                  <button onclick="dinerArrivedAction()" class="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition shadow-xs flex items-center justify-center gap-1">
+                    <i data-lucide="map-pin-check" class="w-3.5 h-3.5"></i> I'm at the Entrance
+                  </button>
+                  <button onclick="dinerDelayAction(5)" class="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-[11px] transition flex items-center gap-1" title="Stuck in parking or traffic">
+                    <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-500"></i> +5m Grace
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WhatsApp Notification Preview for India -->
+          <div id="simulatedWhatsAppCard" class="hidden p-3.5 rounded-xl whatsapp-card text-xs text-slate-800 shadow-sm space-y-1">
+            <div class="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-0.5">
+              <span class="flex items-center gap-1">
+                <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-600"></i> WhatsApp Alert • WaitMate India
+              </span>
+              <span class="text-slate-400 font-normal">Just now</span>
+            </div>
+            <p class="text-slate-800 font-medium text-[11px]" id="simulatedWhatsAppText">
+              "Namaste Aarav! 🍽️ Your table at The Rameshwaram Cafe is almost ready (#1 in line, ~4 mins). Please make your way to the host desk. Table held for 5 mins."
+            </p>
+            <div class="flex items-center gap-2 text-[10px] text-emerald-700 pt-1 font-semibold">
+              <span>✓ Delivered to <strong id="simulatedWhatsAppPhone">+91 98201 44521</strong></span>
+            </div>
+          </div>
+
+          <!-- Simulated SMS Notification Box -->
+          <div id="simulatedSmsBanner" class="hidden p-3 rounded-xl bg-slate-900 text-white text-xs border border-slate-800 flex items-start gap-2.5 shadow-inner">
+            <div class="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center text-white shrink-0">
+              <i data-lucide="message-square" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <span class="text-[10px] font-bold text-orange-400 uppercase">Simulated SMS Alert Sent to +91 Phone</span>
+              <p class="text-slate-200 mt-0.5" id="simulatedSmsText">"Your table is ready! Please proceed to the host counter."</p>
+            </div>
+          </div>
+
+          <!-- Diner Action Buttons -->
+          <div class="space-y-2">
+            <button onclick="dinerArrivedAction()" id="btnArrivedAction" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i data-lucide="map-pin-check" class="w-4 h-4"></i>
+              <span>I've Arrived at the Venue</span>
+            </button>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="dinerDelayAction(5)" class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1">
+                <i data-lucide="clock-plus" class="w-3.5 h-3.5"></i>
+                <span>Need +5 Mins</span>
+              </button>
+              <button onclick="dinerCancelAction()" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                <span>Leave Queue</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Ticket Footer / QR Scanner -->
+        <div class="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <div class="flex items-center gap-2">
+            <i data-lucide="qr-code" class="w-6 h-6 text-slate-700"></i>
+            <span class="text-[11px]">Show token to host counter upon arrival</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400">WM-SECURE-INDIA</span>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 3: RELIABILITY AUDIT DEEP-DIVE                                      -->
+  <!-- ========================================================================= -->
+  <div id="reliabilityModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeReliabilityModal()"></div>
+    <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90vh] flex flex-col">
+      
+      <!-- Header -->
+      <div class="bg-slate-900 text-white p-5 flex items-start justify-between shrink-0">
+        <div>
+          <span class="text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> WaitMate Reliability Audit™
+          </span>
+          <h3 id="relModalVenueName" class="text-xl font-heading font-bold text-white mt-1">The Rameshwaram Cafe</h3>
+          <p class="text-xs text-slate-400">Algorithmic & diner-verified queue accuracy breakdown</p>
+        </div>
+        <button onclick="closeReliabilityModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Scrollable Body -->
+      <div class="p-6 overflow-y-auto space-y-6">
+
+        <!-- Score Hero Card -->
+        <div class="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-slate-50 to-emerald-500/10 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="text-center sm:text-left">
+            <span class="text-xs font-bold text-emerald-800 uppercase">Wait Accuracy Rating</span>
+            <div class="flex items-baseline gap-2 mt-1">
+              <span id="relModalScoreNum" class="text-4xl font-extrabold text-emerald-700">96%</span>
+              <span id="relModalGrade" class="text-xl font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900">Grade A+</span>
+            </div>
+            <p id="relModalVerdict" class="text-xs text-slate-600 mt-1 font-medium">Exceptionally accurate. Seated within 2 mins of estimated wait.</p>
+          </div>
+
+          <div class="bg-white p-3 rounded-xl border border-slate-200 text-center shrink-0 shadow-sm w-full sm:w-auto">
+            <span class="text-[10px] text-slate-400 font-bold uppercase block">Avg Variance</span>
+            <span id="relModalVariance" class="text-2xl font-black text-slate-900">± 1.9 mins</span>
+            <span id="relModalTotalReviews" class="text-[10px] text-slate-500 block mt-0.5">31 verified check-ins</span>
+          </div>
+        </div>
+
+        <!-- Accuracy Distribution Breakdown -->
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Wait Time Outcome Distribution</h4>
+          <div class="space-y-2 text-xs">
+            <div>
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-emerald-700 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Spot On (Within 3 mins of estimate)
+                </span>
+                <span id="distSpotOn" class="font-bold">77%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barSpotOn" class="h-full bg-emerald-500 rounded-full" style="width: 77%"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-blue-700 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-blue-500"></span> Seated Faster than Promised
+                </span>
+                <span id="distFaster" class="font-bold">16%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barFaster" class="h-full bg-blue-500 rounded-full" style="width: 16%"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-amber-700 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-amber-500"></span> Slight Delay (4–7 mins late)
+                </span>
+                <span id="distSlight" class="font-bold">7%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barSlight" class="h-full bg-amber-500 rounded-full" style="width: 7%"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-rose-700 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-rose-500"></span> Severe Delay (> 10 mins late)
+                </span>
+                <span id="distSevere" class="font-bold">0%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barSevere" class="h-full bg-rose-500 rounded-full" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rush Hour Wait Patterns Chart -->
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Rush Hour Wait vs Accuracy Forecast</h4>
+          <div id="hourlyChartContainer" class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <!-- Dynamic Chart via JS -->
+          </div>
+        </div>
+
+        <!-- Recent Verified Check-ins -->
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Recent Verified Diner Check-ins</h4>
+          <div id="relRecentReviews" class="space-y-2">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 4: POST-SEATING DINER ACCURACY VERIFICATION                         -->
+  <!-- ========================================================================= -->
+  <div id="feedbackModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0"></div>
+    <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+      <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 text-center">
+        <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2 text-2xl">
+          🎉
+        </div>
+        <h3 class="text-lg font-heading font-bold">You've Been Seated!</h3>
+        <p class="text-xs text-emerald-100">Help the community maintain an honest Reliability Score</p>
+      </div>
+
+      <form id="feedbackForm" onsubmit="submitDinerFeedback(event)" class="p-6 space-y-4">
+        <input type="hidden" id="fbTicketId">
+        <input type="hidden" id="fbRestaurantId">
+
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs flex justify-between">
+          <div>
+            <span class="text-slate-400 block">Promised Wait</span>
+            <span id="fbPromisedWait" class="font-bold text-slate-800">12 mins</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">Actual Wait</span>
+            <span id="fbActualWait" class="font-bold text-slate-800">11 mins</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">Accuracy</span>
+            <span class="font-bold text-emerald-600">Spot On</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">How accurate was your wait time?</label>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button type="button" onclick="selectFbRating('spot_on')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-emerald-500 bg-emerald-50 text-emerald-900" data-rating="spot_on">
+              🎯 Spot On (Exact)
+            </button>
+            <button type="button" onclick="selectFbRating('faster')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-blue-400 text-slate-700" data-rating="faster">
+              ⚡ Faster than ETA
+            </button>
+            <button type="button" onclick="selectFbRating('slight_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-amber-400 text-slate-700" data-rating="slight_delay">
+              ⏳ Slight Delay (+5m)
+            </button>
+            <button type="button" onclick="selectFbRating('severe_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-rose-400 text-slate-700" data-rating="severe_delay">
+              ⚠️ Too Long (+15m)
+            </button>
+          </div>
+          <input type="hidden" id="fbRatingInput" value="spot_on">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Optional comment</label>
+          <input type="text" id="fbNoteInput" placeholder="Token called right on time, great host staff!" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md">
+          Submit Verified Check-in & Update Score
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 5: HOST STAND ADD WALK-IN GUEST                                     -->
+  <!-- ========================================================================= -->
+  <div id="walkinModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeWalkinModal()"></div>
+    <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+      <div class="bg-slate-900 text-white p-5 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-heading font-bold text-white">Add Walk-in to Queue</h3>
+          <p class="text-xs text-slate-400">Guest at host stand</p>
+        </div>
+        <button onclick="closeWalkinModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="walkinForm" onsubmit="submitWalkin(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Customer / Party Name *</label>
+          <input type="text" id="walkinName" required placeholder="Rohan Verma" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Party Size *</label>
+            <input type="number" id="walkinPartySize" min="1" max="20" value="2" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Seating Pref</label>
+            <select id="walkinSeatingPref" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+              <option value="First Available">First Available</option>
+              <option value="Family AC Section">Family AC Section</option>
+              <option value="Outdoor / Standing">Outdoor / Standing</option>
+              <option value="Bar Counter">Bar Counter</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Mobile Phone (India +91) *</label>
+          <input type="tel" id="walkinPhone" placeholder="+91 98765 43210" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs transition shadow-sm">
+          Add Party to Live Queue
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
