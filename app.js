@@ -1060,11 +1060,10 @@ function openJoinModal(venueId) {
   document.getElementById('joinPreviewAhead').textContent = `${r.live_stats ? r.live_stats.queue_count : 2} parties ahead of you`;
   document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Accurate`;
 
-  // Reset defaults with Indian sample profile
+  // Reset defaults (empty fields for clean customer entry)
   setPartySize(2);
   setSeatingPref('First Available');
-  document.getElementById('joinCustomerName').value = 'Aarav Mehta';
-  document.getElementById('joinCustomerPhone').value = '+91 98201 44521';
+  document.getElementById('joinCustomerName').value = '';
   document.getElementById('joinSpecialReq').value = '';
 
   document.getElementById('joinQueueModal').classList.remove('hidden');
@@ -1101,10 +1100,14 @@ async function submitJoinQueue(e) {
   e.preventDefault();
   const restId = document.getElementById('joinVenueId').value;
   const name = document.getElementById('joinCustomerName').value.trim();
-  const phone = document.getElementById('joinCustomerPhone').value.trim();
   const partySize = parseInt(document.getElementById('joinPartySizeInput').value);
   const seatingPref = document.getElementById('joinSeatingPrefInput').value;
   const specialReq = document.getElementById('joinSpecialReq').value.trim();
+
+  if (!name) {
+    showToast("Please enter your name", "error");
+    return;
+  }
 
   const submitBtn = document.getElementById('joinSubmitBtn');
   submitBtn.disabled = true;
@@ -1118,7 +1121,7 @@ async function submitJoinQueue(e) {
       body: JSON.stringify({
         restaurant_id: restId,
         name: name,
-        phone: phone,
+        phone: '',
         party_size: partySize,
         seating_pref: seatingPref,
         special_requests: specialReq,

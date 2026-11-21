@@ -789,11 +789,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             special_req = data.get("special_requests", "")
             entry_type = data.get("entry_type", "remote")
 
-            if not rest_id or not name or not phone:
-                self.send_json({"error": "Missing required fields (restaurant_id, name, phone)"}, 400)
+            if not rest_id or not name:
+                self.send_json({"error": "Missing required fields (restaurant_id, name)"}, 400)
                 return
 
-            if not phone.startswith("+91"):
+            if phone and not phone.startswith("+91"):
                 clean_digits = "".join(filter(str.isdigit, phone))
                 if len(clean_digits) == 10:
                     phone = f"+91 {clean_digits[:5]} {clean_digits[5:]}"
