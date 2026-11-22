@@ -775,7 +775,9 @@ async function submitFounderLogin(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pwd })
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
 
     if (res.ok && data.success) {
       sessionStorage.setItem(FOUNDER_PWD_KEY, pwd);
@@ -1155,11 +1157,17 @@ async function founderToggleQueue(restId) {
       headers: { 'Content-Type': 'application/json', ...founderHeaders() },
       body: JSON.stringify({ restaurant_id: restId })
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
     if (res.status === 401) {
       sessionStorage.removeItem(FOUNDER_PWD_KEY);
       openFounderLoginModal();
       showToast('Founder session expired. Re-enter password.', 'error');
+      return;
+    }
+    if (!res.ok) {
+      showToast(data.error || "Error updating queue status", "error");
       return;
     }
     showToast(data.message || "Queue state updated", "info");
@@ -1622,7 +1630,12 @@ async function fetchTicketStatus() {
       clearCurrentTicket();
       return;
     }
-    const data = await res.json();
+    if (!res.ok) {
+      // Non-404 error (e.g. 503 unconfigured): keep last known state, don't crash.
+      return;
+    }
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { return; }
     activeTicketData = data;
     updateTicketUI();
   } catch (err) {
@@ -1841,7 +1854,9 @@ async function dinerArrivedAction() {
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
     if (res.ok && data.success) {
       showToast(data.message || "Host stand notified! You've arrived at the venue.", "success");
     } else {
@@ -1869,7 +1884,8 @@ async function dinerDelayAction(mins) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticket_id: tId, action: 'delay', minutes: mins })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || `Holding token for +${mins} minutes grace buffer.`, "info");
     if (activeTicketData) {
       activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
@@ -1897,7 +1913,8 @@ async function dinerCancelAction() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticket_id: tId, action: 'cancel' })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || "Queue spot cancelled.", "info");
     clearCurrentTicket();
     await loadRestaurants();
@@ -2071,7 +2088,8 @@ async function submitDinerFeedback(e) {
         note: note
       })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || "Thank you! Your verified check-in directly updated the Reliability Score.", "success");
     document.getElementById('feedbackModal').classList.add('hidden');
     clearCurrentTicket();
@@ -2247,7 +2265,8 @@ async function hostAction(ticketId, action) {
       })
     });
     if (!res.ok) throw new Error('Host API action failed');
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || "Host action saved", "success");
     if (action === 'notify') playNotificationChime();
     await loadHostStand();
@@ -2319,7 +2338,9 @@ async function saveHostWaitEstimate() {
         manual_wait_mins: val
       })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || "Error updating estimate", "error"); return; }
     showToast(data.message || "Wait time estimate updated.", "success");
     await loadHostStand();
     await loadRestaurants();
@@ -2341,7 +2362,9 @@ async function resetHostWaitToAuto() {
         manual_wait_mins: null
       })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || "Error resetting estimate", "error"); return; }
     showToast("Reset to automatic algorithmic wait calculation.", "info");
     await loadHostStand();
     await loadRestaurants();
@@ -2363,7 +2386,9 @@ async function toggleQueueStatus() {
         is_open: newStatus
       })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || "Error toggling queue", "error"); return; }
     showToast(data.message || "Queue status updated.", "info");
     await loadHostStand();
     await loadRestaurants();
@@ -2402,9 +2427,11 @@ async function submitWalkin(e) {
         seating_pref: seatingPref
       })
     });
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || "Error adding walk-in", "error"); return; }
     closeWalkinModal();
-    showToast(`Walk-in added: Ticket #${data.ticket_number}`, "success");
+    showToast(data.message || `Walk-in added: Ticket #${data.ticket_number}`, "success");
     await loadHostStand();
     await loadRestaurants();
   } catch (err) {

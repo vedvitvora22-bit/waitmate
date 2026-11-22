@@ -258,7 +258,7 @@ async function route(request, response, pathParts) {
     let queue = [];
     try { queue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
-    return send(response, 200, { restaurant, live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => ({ ...entry, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(entry.status) })) });
+    return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => ({ ...entry, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(entry.status) })) });
   }
 
   if (request.method === "POST" && path === "/api/founder/verify-password") {
@@ -359,7 +359,7 @@ const entries = await listCollection("queue_entries").catch(error => { if (error
     const id = `rest-${Date.now().toString().slice(-6)}`;
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Bengaluru", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
-    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant });
+    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
   }
 
   if (request.method === "POST" && path === "/api/host/change-password") {
