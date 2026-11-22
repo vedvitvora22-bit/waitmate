@@ -1238,8 +1238,6 @@ function renderRestaurantsGrid() {
       return (b.reliability?.score || 0) - (a.reliability?.score || 0);
     } else if (currentSort === 'wait_asc') {
       return (a.live_stats?.estimated_wait_mins || 0) - (b.live_stats?.estimated_wait_mins || 0);
-    } else if (currentSort === 'distance') {
-      return (a.distance_km || 0) - (b.distance_km || 0);
     }
     return 0;
   });
