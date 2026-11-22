@@ -1,3 +1,48 @@
+
+function showOwnerDirectory() {
+  const dirEl = document.getElementById('ownerVenueDirectory');
+  const dashEl = document.getElementById('ownerDashboardContent');
+  if (dirEl) dirEl.classList.remove('hidden');
+  if (dashEl) dashEl.classList.add('hidden');
+  renderOwnerDirectory();
+}
+
+function renderOwnerDirectory() {
+  const grid = document.getElementById('ownerDirectoryGrid');
+  if (!grid) return;
+  const list = (allRestaurants && allRestaurants.length) ? allRestaurants : (typeof fallbackRestaurants !== 'undefined' ? fallbackRestaurants : []);
+  grid.innerHTML = list.map(r => {
+    const isUnlocked = Boolean(getSavedHostPassword(r.id));
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
+        <div>
+          <div class="h-32 w-full bg-slate-100 relative overflow-hidden">
+            <img src="${r.image_url}" alt="${r.name}" class="w-full h-full object-cover">
+            <span class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isUnlocked ? 'bg-emerald-600 text-white' : 'bg-slate-900/80 text-white'}">
+              ${isUnlocked ? 'Unlocked' : 'Password Protected'}
+            </span>
+          </div>
+          <div class="p-4">
+            <h4 class="font-heading font-extrabold text-base text-slate-900">${r.name}</h4>
+            <p class="text-xs text-slate-500 mt-0.5">${r.category}</p>
+            <p class="text-[11px] text-slate-400 mt-2">${r.address}</p>
+          </div>
+        </div>
+        <div class="px-4 pb-4">
+          <button onclick="openProtectedHostStand('${r.id}')" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-orange-600 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2">
+            <span>${isUnlocked ? 'Open Host Stand' : 'Unlock Host Stand'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function openProtectedHostStand(venueId) {
+  currentHostVenueId = venueId;
+  await loadHostStand();
+}
+
 // Per-restaurant owner password storage & verification
 const verifiedHostPasswords = JSON.parse(sessionStorage.getItem('wm_host_passwords') || '{}');
 
@@ -569,7 +614,7 @@ function switchInterface(role) {
   } else if (role === 'owner') {
     ownerDiv.classList.remove('hidden');
     tabOwner.className = activeTabClass;
-    loadHostStand();
+    showOwnerDirectory();
   } else if (role === 'founder') {
     founderDiv.classList.remove('hidden');
     tabFounder.className = activeTabClass;
@@ -590,7 +635,7 @@ function switchOwnerTab(tab) {
     regSub.classList.add('hidden');
     tabHost.className = "px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2";
     tabReg.className = "px-4 py-2 font-semibold text-sm text-slate-500 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2";
-    loadHostStand();
+    showOwnerDirectory();
   } else {
     hostSub.classList.add('hidden');
     regSub.classList.remove('hidden');
@@ -1763,14 +1808,7 @@ async function switchHostVenue(venueId) {
 async function loadHostStand() {
   const pwd = await ensureHostAccess(currentHostVenueId);
   if (!pwd) {
-    const listEl = document.getElementById('hostQueueList');
-    if (listEl) {
-      listEl.innerHTML = `<div class="p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
-        <p class="text-sm font-bold text-amber-900 mb-2">Owner Password Required</p>
-        <p class="text-xs text-amber-700 mb-3">Enter this restaurant's owner password to view or manage its live queue data.</p>
-        <button onclick="loadHostStand()" class="px-4 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700">Enter Password</button>
-      </div>`;
-    }
+    showOwnerDirectory();
     return;
   }
   try {
@@ -1783,6 +1821,11 @@ async function loadHostStand() {
     }
     if (!res.ok) throw new Error('Host API unavailable');
     hostData = await res.json();
+    const dirEl = document.getElementById('ownerVenueDirectory');
+    const dashEl = document.getElementById('ownerDashboardContent');
+    if (dirEl) dirEl.classList.add('hidden');
+    if (dashEl) dashEl.classList.remove('hidden');
+    populateHostDropdown();
     renderHostDashboard();
   } catch (err) {
     console.error("Failed to load host stand:", err);

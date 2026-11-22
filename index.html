@@ -269,6 +269,21 @@
 
       <!-- SUB-TAB 1: LIVE HOST STAND -->
       <div id="ownerSubTabHost">
+      <!-- Step 1: Browse Registered Restaurants Directory -->
+      <div id="ownerVenueDirectory" class="space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="font-heading font-extrabold text-lg text-slate-900">Registered Restaurants on WaitMate</h3>
+            <p class="text-xs text-slate-500">Select your restaurant below and enter its owner password to access live queue data and host controls.</p>
+          </div>
+          <span class="text-xs font-semibold px-3 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-full">Owner Access Protected</span>
+        </div>
+        <div id="ownerDirectoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- Step 2: Locked Host Dashboard (Hidden until password verified) -->
+      <div id="ownerDashboardContent" class="hidden">
+        
         
         <!-- Host Top Control Bar -->
         <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -289,6 +304,7 @@
           <!-- Venue Selector Dropdown & Actions -->
           <div class="flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2">
+              <button onclick="showOwnerDirectory()" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition mr-1">← All Restaurants</button>
               <span class="text-xs text-slate-500 font-medium">Your Restaurant:</span>
               <select id="hostVenueSelect" onchange="switchHostVenue(this.value)" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg py-2 px-3 font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500">
                 <!-- Populated via JS -->
@@ -430,7 +446,9 @@
       </div>
 
       <!-- SUB-TAB 2: ADD NEW RESTAURANT ONBOARDING FORM -->
-      <div id="ownerSubTabRegister" class="hidden">
+      
+      </div>
+    <div id="ownerSubTabRegister" class="hidden">
         
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 max-w-3xl mx-auto">
           
