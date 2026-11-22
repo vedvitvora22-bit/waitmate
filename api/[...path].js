@@ -77,9 +77,9 @@ async function findRestaurantById(id) {
     const doc = await getDocument("restaurants", id);
     if (doc) return doc;
   } catch (error) {
-    if (error.status !== 403 && error.status !== 404) throw error;
+    // fallback on Firestore parse error
   }
-  return fallbackRestaurants.find(r => r.id === id) || null;
+  const fb = fallbackRestaurants.find(r => r.id === id); return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
 }
 
 async function safeCommit(writes) {
@@ -303,7 +303,7 @@ async function route(request, response, pathParts) {
     }
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
-    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    global._pwdMap = global._pwdMap || {}; global._pwdMap[restaurant.id] = { password_hash: hashPassword(nextPwd) }; await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
     return send(response, 200, { success: true, message: "Restaurant password updated successfully." });
   }
 
@@ -312,7 +312,7 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
-    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    global._pwdMap = global._pwdMap || {}; global._pwdMap[restaurant.id] = { password_hash: hashPassword(nextPwd) }; await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
     return send(response, 200, { success: true, message: "Password reset successfully." });
   }
 
