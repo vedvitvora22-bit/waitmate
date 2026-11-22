@@ -1,3 +1,4 @@
+// cache-bust-1795369198
 // WaitMate India — Service Worker
 // Handles background push notifications for "Table is Near" and "Table Ready" alerts
 

@@ -37,7 +37,7 @@ function verifyRestaurantPassword(restaurant, password) {
       return true;
     }
   }
-  const fallback = fallbackRestaurants.find(r => r.id === restaurant.id);
+  const fallback = fallbackRestaurants.find(r => r.id === restaurant.id || String(r.name || "").toLowerCase() === String(restaurant.name || "").toLowerCase());
   if (fallback && fallback.password_hash) {
     if (hashPassword(provided) === fallback.password_hash || hashPassword(lower) === fallback.password_hash) {
       return true;
