@@ -872,6 +872,7 @@ function switchInterface(role) {
     tabOwner.className = activeTabClass;
     showOwnerDirectory();
   } else if (role === 'founder') {
+    ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
     founderDiv.classList.remove('hidden');
     tabFounder.className = activeTabClass + ' hidden';
     loadFounderDashboard();
