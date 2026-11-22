@@ -98,16 +98,21 @@ async function findRestaurantById(id) {
     const doc = await getDocument("restaurants", id);
     if (doc) return doc;
   } catch (error) {
-    // fallback on Firestore parse error
+    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+      // fallback on Firestore parse error or unconfigured Firebase
+    } else {
+      throw error;
+    }
   }
-  const fb = fallbackRestaurants.find(r => r.id === id); return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
+  const fb = fallbackRestaurants.find(r => r.id === id);
+  return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
 }
 
 async function safeCommit(writes) {
   try {
     return await commitWrites(writes);
   } catch (error) {
-    if (true) {
+    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
       console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
       return null;
     }
@@ -118,11 +123,27 @@ async function safeCommit(writes) {
 async function ensureRestaurants() {
   try {
     const restaurants = await listCollection("restaurants");
-    if (restaurants.length) return restaurants;
+    if (restaurants.length) {
+      return restaurants.map(r => {
+        const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
+        delete merged.password_hash;
+        return merged;
+      });
+    }
     await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
-    return fallbackRestaurants;
+    return fallbackRestaurants.map(r => {
+      const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
+      delete merged.password_hash;
+      return merged;
+    });
   } catch (error) {
-    if (error.status === 403 || error.status === 404) return fallbackRestaurants;
+    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+      return fallbackRestaurants.map(r => {
+        const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
+        delete merged.password_hash;
+        return merged;
+      });
+    }
     throw error;
   }
 }
@@ -155,7 +176,7 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/restaurants") {
     const restaurants = await ensureRestaurants();
     let queueEntries = [];
-    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 403 && error.status !== 404) throw error; }
+    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const result = [];
     for (const restaurant of restaurants) {
       const liveStats = await getLiveStats(restaurant, queueEntries);
@@ -169,7 +190,7 @@ async function route(request, response, pathParts) {
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     let queueEntries = [];
-    try { queueEntries = await listCollection("queue_entries"); } catch {}
+    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback() });
   }
 
@@ -220,7 +241,7 @@ async function route(request, response, pathParts) {
     const ticket = await getDocument("queue_entries", id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     const restaurant = await getDocument("restaurants", ticket.restaurant_id);
-    const entries = await listCollection("queue_entries").catch(() => []);
+    const entries = await listCollection("queue_entries").catch(error => { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; return []; });
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
@@ -234,7 +255,8 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const suppliedPwd = request.headers["x-restaurant-password"] || request.query?.password;
     if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Restaurant password required." });
-    const queue = await listCollection("queue_entries");
+    let queue = [];
+    try { queue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant, live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => ({ ...entry, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(entry.status) })) });
   }
@@ -263,7 +285,8 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/analytics") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
-    const queueEntries = await listCollection("queue_entries").catch(() => []);
+    let queueEntries = [];
+    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
     const enriched = [];
@@ -312,7 +335,7 @@ async function route(request, response, pathParts) {
       const restaurant = await findRestaurantById(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Invalid restaurant password." });
-      const entries = await listCollection("queue_entries").catch(() => []);
+const entries = await listCollection("queue_entries").catch(error => { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; return []; });
       const ticketId = `q-${Date.now().toString().slice(-6)}`;
       const ticketNumber = `WM-${entries.length + 101}`;
       await safeCommit([setDocument("queue_entries", ticketId, { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), notified_at: null, seated_at: null, has_arrived: true, delay_mins: 0 })]);
@@ -384,8 +407,9 @@ module.exports = async function handler(request, response) {
     await route(request, response, pathParts);
   } catch (error) {
     console.error("WaitMate API error:", error);
-    if (error.status === 403) return send(response, 503, { error: "Firebase permissions are not configured yet." });
+    if (error.status === 503 || error.status === 403) return send(response, 503, { error: "Firebase permissions are not configured yet." });
     if (error.status === 404) return send(response, 503, { error: "Firebase database is not available yet." });
+    if (error instanceof SyntaxError) return send(response, 503, { error: "Firebase credentials are malformed." });
     return send(response, 500, { error: error.message || "Unexpected server error." });
   }
 };

@@ -44,9 +44,32 @@ async function getAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiry) return cachedAccessToken;
 
   const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!rawCredentials) throw new Error("FIREBASE_SERVICE_ACCOUNT is not configured");
+  if (!rawCredentials) {
+    const err = new Error("Firebase credentials not configured");
+    err.status = 503;
+    throw err;
+  }
 
-  const credentials = JSON.parse(rawCredentials);
+  let credentials;
+  try {
+    credentials = JSON.parse(rawCredentials);
+  } catch (parseError) {
+    try {
+      const fixedCredentials = rawCredentials.replace(/\r?\n/g, "\\n");
+      credentials = JSON.parse(fixedCredentials);
+    } catch {
+      const err = new Error("Firebase credentials not configured");
+      err.status = 503;
+      throw err;
+    }
+  }
+
+  if (!credentials.client_email || !credentials.private_key) {
+    const err = new Error("Firebase credentials not configured");
+    err.status = 503;
+    throw err;
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({
