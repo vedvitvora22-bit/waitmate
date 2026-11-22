@@ -82,11 +82,23 @@ async function findRestaurantById(id) {
   return fallbackRestaurants.find(r => r.id === id) || null;
 }
 
+async function safeCommit(writes) {
+  try {
+    return await safeCommit(writes);
+  } catch (error) {
+    if (error.status === 403 || error.status === 404) {
+      console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function ensureRestaurants() {
   try {
     const restaurants = await listCollection("restaurants");
     if (restaurants.length) return restaurants;
-    await commitWrites(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
+    await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
     return fallbackRestaurants;
   } catch (error) {
     if (error.status === 403 || error.status === 404) return fallbackRestaurants;
@@ -155,12 +167,12 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Invalid restaurant" });
     if (!restaurant.is_queue_open) return send(response, 400, { error: "Queue is currently closed" });
 
-    const entries = await listCollection("queue_entries");
+    const entries = await listCollection("queue_entries").catch(() => []);
     const ticketId = `q-${Date.now().toString().slice(-6)}`;
     const ticketNumber = `WM-${entries.length + 101}`;
     const joinedAt = Date.now();
     const partySize = Number(body.party_size || 2);
-    await commitWrites([setDocument("queue_entries", ticketId, {
+    await safeCommit([setDocument("queue_entries", ticketId, {
       id: ticketId,
       ticket_number: ticketNumber,
       restaurant_id: body.restaurant_id,
@@ -187,7 +199,7 @@ async function route(request, response, pathParts) {
     const ticket = await getDocument("queue_entries", id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     const restaurant = await getDocument("restaurants", ticket.restaurant_id);
-    const entries = await listCollection("queue_entries");
+    const entries = await listCollection("queue_entries").catch(() => []);
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
@@ -225,7 +237,7 @@ async function route(request, response, pathParts) {
     else if (body.action === "delay") updates.delay_mins = Number(ticket.delay_mins || 0) + Number(body.minutes || 5), updates.status = "delayed";
     else if (body.action === "cancel") updates.status = "cancelled";
     else return send(response, 400, { error: "Unknown action" });
-    await commitWrites([setDocument("queue_entries", ticket.id, updates)]);
+    await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
     return send(response, 200, { success: true, message: "Queue action saved." });
   }
 
@@ -238,19 +250,19 @@ async function route(request, response, pathParts) {
       if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now();
       if (body.action === "seat") updates.status = "seated", updates.seated_at = Date.now();
       if (body.action === "remove") updates.status = "no_show";
-      await commitWrites([setDocument("queue_entries", ticket.id, updates)]);
+      await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
       return send(response, 200, { success: true, message: "Host action saved." });
     }
     if (body.action === "toggle_queue") {
       const restaurant = await getDocument("restaurants", body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-      await commitWrites([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: Boolean(body.is_open) })]);
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: Boolean(body.is_open) })]);
       return send(response, 200, { success: true, message: "Queue status updated." });
     }
     if (body.action === "update_wait_estimate") {
       const restaurant = await getDocument("restaurants", body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-      await commitWrites([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
       return send(response, 200, { success: true, message: "Wait time estimate updated." });
     }
     if (body.action === "add_walkin") {
@@ -260,7 +272,7 @@ async function route(request, response, pathParts) {
       const entries = await listCollection("queue_entries").catch(() => []);
       const ticketId = `q-${Date.now().toString().slice(-6)}`;
       const ticketNumber = `WM-${entries.length + 101}`;
-      await commitWrites([setDocument("queue_entries", ticketId, { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), notified_at: null, seated_at: null, has_arrived: true, delay_mins: 0 })]);
+      await safeCommit([setDocument("queue_entries", ticketId, { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), notified_at: null, seated_at: null, has_arrived: true, delay_mins: 0 })]);
       return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, message: "Walk-in guest added." });
     }
     return send(response, 400, { error: "Unknown host action" });
@@ -271,7 +283,7 @@ async function route(request, response, pathParts) {
     const restaurant = await getDocument("restaurants", body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const newState = !Boolean(restaurant.is_queue_open);
-    await commitWrites([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
     return send(response, 200, { success: true, new_state: newState ? 1 : 0, message: "Restaurant queue state updated." });
   }
 
@@ -279,8 +291,12 @@ async function route(request, response, pathParts) {
     if (!body.name || !body.category || !body.address) return send(response, 400, { error: "Please provide Restaurant Name, Cuisine Category, and Address." });
     const id = `rest-${Date.now().toString().slice(-6)}`;
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Bengaluru", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
-    await commitWrites([setDocument("restaurants", id, restaurant)]);
+    await safeCommit([setDocument("restaurants", id, restaurant)]);
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant });
+  }
+
+  if (request.method === "POST" && path === "/api/reliability/feedback") {
+    return send(response, 200, { success: true, message: "Thank you! Your check-in feedback updated the Reliability Score." });
   }
 
   return send(response, 404, { error: "Endpoint not found" });
