@@ -12,13 +12,40 @@ PORT = 8080
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "waitmate.db")
 
-# Founder Command Center access password (immutable — set via env, never changed in-app)
+# Founder Command Center access password (set via env; may be rotated in-app)
 FOUNDER_PASSWORD = os.environ.get("FOUNDER_PASSWORD", "waitmatefounder2026")
+
+
+def _founder_hash(password):
+    return hashlib.sha256(str(password or "").strip().encode("utf-8")).hexdigest()
+
+
+def get_active_founder_hash():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT value FROM app_settings WHERE key = 'founder_password_hash'")
+        row = c.fetchone()
+        conn.close()
+        if row and row[0]:
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
+    return _founder_hash(FOUNDER_PASSWORD)
 
 
 def is_founder_authorized(handler):
     supplied = handler.headers.get("X-Founder-Password", "")
-    return bool(supplied) and supplied == FOUNDER_PASSWORD
+    if not supplied:
+        return False
+    return _founder_hash(supplied) == get_active_founder_hash()
+
+
+def verify_founder_password(password):
+    provided = str(password or "").strip()
+    if not provided:
+        return False
+    return _founder_hash(provided) == get_active_founder_hash()
 
 # Initialize database schema and initial data
 def init_db():
@@ -84,6 +111,14 @@ def init_db():
         rating TEXT NOT NULL, -- 'spot_on', 'faster', 'slight_delay', 'severe_delay'
         review_note TEXT,
         timestamp REAL NOT NULL
+    )
+    ''')
+
+    # App settings table (key/value store for runtime-editable config)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
     )
     ''')
 
@@ -1110,10 +1145,42 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         if path == "/api/founder/verify-password":
             data = self.read_json_body()
             provided = str(data.get("password", "") or "")
-            if provided and provided == FOUNDER_PASSWORD:
+            if provided and verify_founder_password(provided):
                 self.send_json({"success": True, "message": "Founder access granted."})
                 return
             self.send_json({"error": "Incorrect Founder Master Password."}, 401)
+            return
+
+        # API: Founder Change Master Password
+        if path == "/api/founder/change-password":
+            data = self.read_json_body()
+            current_password = str(data.get("current_password", "") or "").strip()
+            new_password = str(data.get("new_password", "") or "").strip()
+
+            if not current_password or not new_password:
+                self.send_json({"error": "Missing required fields"}, 400)
+                return
+
+            if not verify_founder_password(current_password):
+                self.send_json({"error": "Current Founder password is incorrect."}, 401)
+                return
+
+            if len(new_password) < 6:
+                self.send_json({"error": "New password must be at least 6 characters."}, 400)
+                return
+
+            new_hash = _founder_hash(new_password)
+            conn = get_db()
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO app_settings (key, value) VALUES ('founder_password_hash', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (new_hash,)
+            )
+            conn.commit()
+            conn.close()
+
+            self.send_json({"success": True, "message": "Founder password updated successfully."})
             return
 
         # API: Founder Control Actions

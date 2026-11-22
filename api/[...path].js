@@ -12,9 +12,21 @@ function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
 }
 
+function getActiveFounderHash() {
+  if (global._founderPwdHash) return global._founderPwdHash;
+  return hashPassword(founderPassword());
+}
+
 function isFounderAuthorized(request) {
   const supplied = request.headers["x-founder-password"];
-  return Boolean(supplied) && supplied === founderPassword();
+  if (!supplied) return false;
+  return hashPassword(supplied) === getActiveFounderHash();
+}
+
+function verifyFounderPassword(password) {
+  const provided = String(password || "").trim();
+  if (!provided) return false;
+  return hashPassword(provided) === getActiveFounderHash();
 }
 
 function hashPassword(password) {
@@ -229,10 +241,23 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && path === "/api/founder/verify-password") {
     const provided = String(body.password || "");
-    if (provided && provided === founderPassword()) {
+    if (provided && hashPassword(provided) === getActiveFounderHash()) {
       return send(response, 200, { success: true, message: "Founder access granted." });
     }
     return send(response, 401, { error: "Incorrect Founder Master Password." });
+  }
+
+  if (request.method === "POST" && path === "/api/founder/change-password") {
+    if (!verifyFounderPassword(body.current_password)) {
+      return send(response, 401, { error: "Current Founder password is incorrect." });
+    }
+    const nextPwd = String(body.new_password || "").trim();
+    if (nextPwd.length < 6) {
+      return send(response, 400, { error: "New password must be at least 6 characters." });
+    }
+    global._founderPwdHash = hashPassword(nextPwd);
+    await safeCommit([setDocument("settings", "founder", { password_hash: global._founderPwdHash })]);
+    return send(response, 200, { success: true, message: "Founder password updated successfully." });
   }
 
   if (request.method === "GET" && path === "/api/founder/analytics") {

@@ -2626,3 +2626,86 @@ async function submitFounderResetPassword(event) {
     }
   }
 }
+
+// ==========================================
+// 13. FOUNDER CHANGE PASSWORD
+// ==========================================
+function openFounderChangePasswordModal() {
+  const modal = document.getElementById('founderChangePasswordModal');
+  const errEl = document.getElementById('founderChangePwdError');
+  const currentInput = document.getElementById('founderCurrentPwdInput');
+  const newInput = document.getElementById('founderNewPwdInput');
+  if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  if (currentInput) currentInput.value = '';
+  if (newInput) newInput.value = '';
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => currentInput && currentInput.focus(), 50);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeFounderChangePasswordModal() {
+  const modal = document.getElementById('founderChangePasswordModal');
+  const errEl = document.getElementById('founderChangePwdError');
+  const currentInput = document.getElementById('founderCurrentPwdInput');
+  const newInput = document.getElementById('founderNewPwdInput');
+  if (modal) modal.classList.add('hidden');
+  if (errEl) errEl.classList.add('hidden');
+  if (currentInput) currentInput.value = '';
+  if (newInput) newInput.value = '';
+}
+
+async function submitFounderChangePassword(event) {
+  if (event) event.preventDefault();
+  const currentInput = document.getElementById('founderCurrentPwdInput');
+  const newInput = document.getElementById('founderNewPwdInput');
+  const errEl = document.getElementById('founderChangePwdError');
+  const btn = document.getElementById('founderChangePwdSubmitBtn');
+
+  const currentPwd = (currentInput ? currentInput.value : '').trim();
+  const newPwd = (newInput ? newInput.value : '').trim();
+
+  if (!currentPwd || !newPwd) return;
+  if (newPwd.length < 6) {
+    if (errEl) {
+      errEl.textContent = 'New password must be at least 6 characters.';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+  if (errEl) errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/founder/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ current_password: currentPwd, new_password: newPwd })
+    });
+
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+
+    if (res.ok && data.success) {
+      sessionStorage.setItem(FOUNDER_PWD_KEY, newPwd);
+      closeFounderChangePasswordModal();
+      showToast('Founder password updated successfully.', 'success');
+      return;
+    }
+
+    if (errEl) {
+      errEl.textContent = data.error || text || 'Failed to change password.';
+      errEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = 'Network error. Please retry.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Update Password'; }
+  }
+}
