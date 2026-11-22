@@ -1,3 +1,55 @@
+// Per-restaurant owner password storage & verification
+const verifiedHostPasswords = JSON.parse(sessionStorage.getItem('wm_host_passwords') || '{}');
+
+function getSavedHostPassword(venueId) {
+  return verifiedHostPasswords[venueId] || '';
+}
+
+function saveHostPassword(venueId, password) {
+  verifiedHostPasswords[venueId] = password;
+  sessionStorage.setItem('wm_host_passwords', JSON.stringify(verifiedHostPasswords));
+}
+
+function clearHostPassword(venueId) {
+  delete verifiedHostPasswords[venueId];
+  sessionStorage.setItem('wm_host_passwords', JSON.stringify(verifiedHostPasswords));
+}
+
+async function ensureHostAccess(venueId) {
+  let pwd = getSavedHostPassword(venueId);
+  const venue = (allRestaurants || []).find(r => r.id === venueId);
+  const venueName = venue ? venue.name : venueId;
+
+  while (true) {
+    if (!pwd) {
+      const entered = window.prompt(`Owner Verification Required\nEnter the dashboard password for "${venueName}":`);
+      if (entered === null) return null;
+      pwd = entered.trim();
+      if (!pwd) continue;
+    }
+    try {
+      const verifyRes = await fetch('/api/host/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurant_id: venueId, password: pwd })
+      });
+      if (verifyRes.ok) {
+        saveHostPassword(venueId, pwd);
+        return pwd;
+      }
+      if (verifyRes.status === 401) {
+        clearHostPassword(venueId);
+        pwd = '';
+        alert(`Incorrect password for "${venueName}". Please try again.`);
+        continue;
+      }
+    } catch (e) {
+      console.warn("Password verification network error:", e);
+    }
+    return null;
+  }
+}
+
 // WaitMate India • Core Application Logic
 // Tri-Interface Architecture: Customer Remote Pass, Restaurant Owner Stand, Founder Command Center
 
@@ -573,6 +625,7 @@ async function submitNewRestaurant(e) {
   const address = document.getElementById('regAddress').value.trim();
   const ownerName = document.getElementById('regOwnerName').value.trim();
   const ownerPhone = document.getElementById('regOwnerPhone').value.trim();
+  const ownerPassword = (document.getElementById('regOwnerPassword')?.value || '').trim();
   const totalTables = parseInt(document.getElementById('regTables').value) || 16;
   const prepTime = parseInt(document.getElementById('regPrepTime').value) || 15;
   const imageUrl = document.getElementById('regImageUrl').value.trim() || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80";
@@ -596,6 +649,7 @@ async function submitNewRestaurant(e) {
         address,
         owner_name: ownerName,
         owner_phone: ownerPhone,
+        password: ownerPassword,
         total_tables: totalTables,
         base_prep_time: prepTime,
         image_url: imageUrl,
@@ -1707,22 +1761,32 @@ async function switchHostVenue(venueId) {
 }
 
 async function loadHostStand() {
+  const pwd = await ensureHostAccess(currentHostVenueId);
+  if (!pwd) {
+    const listEl = document.getElementById('hostQueueList');
+    if (listEl) {
+      listEl.innerHTML = `<div class="p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
+        <p class="text-sm font-bold text-amber-900 mb-2">Owner Password Required</p>
+        <p class="text-xs text-amber-700 mb-3">Enter this restaurant's owner password to view or manage its live queue data.</p>
+        <button onclick="loadHostStand()" class="px-4 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700">Enter Password</button>
+      </div>`;
+    }
+    return;
+  }
   try {
-    const res = await fetch(`/api/host/queue/${currentHostVenueId}`);
+    const res = await fetch(`/api/host/queue/${currentHostVenueId}`, {
+      headers: { 'X-Restaurant-Password': pwd }
+    });
+    if (res.status === 401) {
+      clearHostPassword(currentHostVenueId);
+      return loadHostStand();
+    }
     if (!res.ok) throw new Error('Host API unavailable');
     hostData = await res.json();
     renderHostDashboard();
   } catch (err) {
-    console.warn("Using offline fallback for host stand:", err);
-    const r = allRestaurants.find(x => x.id === currentHostVenueId) || fallbackRestaurants[0];
-    const q = localMockQueues[currentHostVenueId] || [];
-    hostData = {
-      restaurant: r,
-      live_stats: r.live_stats || { queue_count: 0, estimated_wait_mins: 10, is_queue_open: true },
-      reliability: r.reliability || { score: 95, grade: 'A+' },
-      queue: q
-    };
-    renderHostDashboard();
+    console.error("Failed to load host stand:", err);
+    if (typeof showToast === 'function') showToast("Unable to load restaurant dashboard data.", "error");
   }
 }
 
@@ -1854,7 +1918,7 @@ async function hostAction(ticketId, action) {
   try {
     const res = await fetch('/api/host/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
       body: JSON.stringify({
         restaurant_id: currentHostVenueId,
         ticket_id: ticketId,
@@ -1927,7 +1991,7 @@ async function saveHostWaitEstimate() {
   try {
     const res = await fetch('/api/host/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
       body: JSON.stringify({
         restaurant_id: currentHostVenueId,
         action: 'update_wait_estimate',
@@ -1949,7 +2013,7 @@ async function resetHostWaitToAuto() {
   try {
     const res = await fetch('/api/host/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
       body: JSON.stringify({
         restaurant_id: currentHostVenueId,
         action: 'update_wait_estimate',
@@ -1971,7 +2035,7 @@ async function toggleQueueStatus() {
   try {
     const res = await fetch('/api/host/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
       body: JSON.stringify({
         restaurant_id: currentHostVenueId,
         action: 'toggle_queue',
@@ -2007,7 +2071,7 @@ async function submitWalkin(e) {
   try {
     const res = await fetch('/api/host/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
       body: JSON.stringify({
         restaurant_id: currentHostVenueId,
         action: 'add_walkin',
