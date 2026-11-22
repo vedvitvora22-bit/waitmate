@@ -125,7 +125,7 @@ async function route(request, response, pathParts) {
 
   if (request.method === "GET" && path.startsWith("/api/restaurants/")) {
     const id = normalized[normalized.length - 1];
-    const restaurant = await getDocument("restaurants", id);
+    const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     let queueEntries = [];
     try { queueEntries = await listCollection("queue_entries"); } catch {}
@@ -143,7 +143,7 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && path === "/api/queue/join") {
     if (!body.restaurant_id || !String(body.name || "").trim()) return send(response, 400, { error: "Missing required fields" });
-    const restaurant = await getDocument("restaurants", body.restaurant_id);
+    const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Invalid restaurant" });
     if (!restaurant.is_queue_open) return send(response, 400, { error: "Queue is currently closed" });
 
