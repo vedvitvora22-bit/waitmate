@@ -1100,6 +1100,7 @@ async function submitJoinQueue(e) {
   e.preventDefault();
   const restId = document.getElementById('joinVenueId').value;
   const name = document.getElementById('joinCustomerName').value.trim();
+  const phone = document.getElementById('joinCustomerPhone').value.trim();
   const partySize = parseInt(document.getElementById('joinPartySizeInput').value);
   const seatingPref = document.getElementById('joinSeatingPrefInput').value;
   const specialReq = document.getElementById('joinSpecialReq').value.trim();
@@ -1121,7 +1122,7 @@ async function submitJoinQueue(e) {
       body: JSON.stringify({
         restaurant_id: restId,
         name: name,
-        phone: '',
+        phone: phone,
         party_size: partySize,
         seating_pref: seatingPref,
         special_requests: specialReq,
@@ -1159,7 +1160,7 @@ async function submitJoinQueue(e) {
       ticket_number: ticketNum,
       restaurant_id: restId,
       customer_name: name,
-      phone: phone,
+      phone: phone || "+91 99999 00000",
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
@@ -1373,7 +1374,7 @@ function updateTicketUI() {
   // Update SVG Progress ring
   const circle = document.getElementById('ticketProgressCircle');
   if (circle) {
-    const totalEst = d.estimated_wait_mins + d.delay_mins || 20;
+    const totalEst = Math.max(20, (d.estimated_wait_mins || 0) + (d.delay_mins || 0));
     const progressPct = Math.min(100, Math.max(10, ((totalEst - d.estimated_remaining_mins) / totalEst) * 100));
     const circumference = 2 * Math.PI * 42; // ~264
     const offset = circumference - (progressPct / 100) * circumference;
@@ -1431,7 +1432,7 @@ async function dinerArrivedAction() {
   // 2. Transmit to backend with robust fallback parameters
   try {
     const payload = {
-      ticket_id: currentTicketId || (activeTicketData ? activeTicketData.id : "WM-101"),
+      ticket_id: currentTicketId || (activeTicketData ? (activeTicketData.id || activeTicketData.ticket_number) : "WM-101"),
       action: 'arrived',
       restaurant_id: activeTicketData ? activeTicketData.restaurant_id : 'rest-1',
       customer_name: activeTicketData ? activeTicketData.customer_name : 'Arrived Guest',
@@ -1657,6 +1658,10 @@ async function submitDinerFeedback(e) {
   const rating = document.getElementById('fbRatingInput').value;
   const note = document.getElementById('fbNoteInput').value.trim();
 
+  // Get the ticket data from the feedback modal's context
+  const promisedWait = parseInt(document.getElementById('fbPromisedWait').textContent) || 15;
+  const actualWait = parseInt(document.getElementById('fbActualWait').textContent) || 15;
+
   try {
     const res = await fetch('/api/reliability/feedback', {
       method: 'POST',
@@ -1664,8 +1669,8 @@ async function submitDinerFeedback(e) {
       body: JSON.stringify({
         restaurant_id: restId,
         ticket_id: ticketId,
-        promised_wait: activeTicketData ? activeTicketData.estimated_wait_mins : 15,
-        actual_wait: activeTicketData ? (activeTicketData.actual_wait_mins || 15) : 15,
+        promised_wait: promisedWait,
+        actual_wait: actualWait,
         rating: rating,
         note: note
       })

@@ -15,8 +15,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'WaitMate India 🇮🇳';
   const options = {
     body: data.body || 'Your table update is ready.',
-    icon: data.icon || '/icon-192.png',
-    badge: data.badge || '/icon-192.png',
+    icon: data.icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
+    badge: data.badge || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
     tag: data.tag || 'waitmate-queue',
     renotify: true,
     vibrate: [200, 100, 200, 100, 400],

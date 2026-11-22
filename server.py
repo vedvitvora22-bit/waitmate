@@ -412,7 +412,9 @@ def get_restaurant_live_stats(restaurant_id):
         algorithmic_wait = 0
     else:
         effective_queue = max(0, queue_count - avail_tables)
-        algorithmic_wait = max(4, int((effective_queue * (base_time * 0.75)) + (avail_tables == 0 and base_time or 0)))
+        # If no tables available, add base prep time; otherwise 0
+        no_table_penalty = base_time if avail_tables == 0 else 0
+        algorithmic_wait = max(4, int((effective_queue * (base_time * 0.75)) + no_table_penalty))
 
     current_wait = manual_wait if manual_wait is not None else algorithmic_wait
 
@@ -793,10 +795,24 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing required fields (restaurant_id, name)"}, 400)
                 return
 
-            if phone and not phone.startswith("+91"):
+            def normalize_phone(phone):
+                """Normalize Indian phone numbers to +91 XXXXX XXXXX format."""
+                if not phone:
+                    return phone
                 clean_digits = "".join(filter(str.isdigit, phone))
+                # Remove leading 91 or 0 if present
+                if clean_digits.startswith("91") and len(clean_digits) == 12:
+                    clean_digits = clean_digits[2:]
+                elif clean_digits.startswith("0") and len(clean_digits) == 11:
+                    clean_digits = clean_digits[1:]
                 if len(clean_digits) == 10:
-                    phone = f"+91 {clean_digits[:5]} {clean_digits[5:]}"
+                    return f"+91 {clean_digits[:5]} {clean_digits[5:]}"
+                elif len(clean_digits) == 12 and clean_digits.startswith("91"):
+                    return f"+91 {clean_digits[2:7]} {clean_digits[7:]}"
+                return phone  # Return as-is if can't normalize
+
+            if phone:
+                phone = normalize_phone(phone)
 
             conn = get_db()
             c = conn.cursor()
@@ -981,7 +997,6 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"success": True, "ticket_id": ticket_id, "ticket_number": ticket_num})
                 return
 
-            conn.close()
             self.send_json({"error": "Unknown host action"}, 400)
             return
 
@@ -997,7 +1012,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 conn.close()
                 self.send_json({"error": "Restaurant not found"}, 404)
                 return
-            new_state = 0 if row['is_queue_open'] else 1
+            new_state = 0 if row['is_queue_open'] == 1 else 1
             c.execute('UPDATE restaurants SET is_queue_open = ? WHERE id = ?', (new_state, rest_id))
             conn.commit()
             conn.close()
