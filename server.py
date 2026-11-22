@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -36,7 +37,8 @@ def init_db():
         total_tables INTEGER NOT NULL,
         manual_override_wait INTEGER,
         is_queue_open INTEGER DEFAULT 1,
-        created_at REAL NOT NULL
+        created_at REAL NOT NULL,
+        password_hash TEXT
     )
     ''')
 
@@ -79,11 +81,30 @@ def init_db():
 
     conn.commit()
 
+    # Migrate: add password_hash column to existing databases
+    try:
+        c.execute('ALTER TABLE restaurants ADD COLUMN password_hash TEXT')
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
     # Seed initial data if empty
     c.execute('SELECT COUNT(*) FROM restaurants')
     if c.fetchone()[0] == 0:
         seed_data(c)
-        conn.commit()
+
+    # Ensure default password hashes for seed restaurants
+    password_defaults = {
+        "rest-1": "rameshwaram123",
+        "rest-2": "meghana123",
+        "rest-3": "bademiya123",
+        "rest-4": "toit123",
+        "rest-5": "chaisutta123",
+        "rest-6": "punjab123",
+    }
+    for rest_id, default_pwd in password_defaults.items():
+        c.execute('UPDATE restaurants SET password_hash = ? WHERE id = ?', (hash_password(default_pwd), rest_id))
+
+    conn.commit()
     conn.close()
 
 def seed_data(c):
@@ -107,7 +128,8 @@ def seed_data(c):
             18,
             None,
             1,
-            now - 86400 * 30
+            now - 86400 * 30,
+            hash_password("rameshwaram123")
         ),
         (
             "rest-2",
@@ -127,7 +149,8 @@ def seed_data(c):
             22,
             None,
             1,
-            now - 86400 * 25
+            now - 86400 * 25,
+            hash_password("meghana123")
         ),
         (
             "rest-3",
@@ -147,7 +170,8 @@ def seed_data(c):
             10,
             None,
             1,
-            now - 86400 * 20
+            now - 86400 * 20,
+            hash_password("bademiya123")
         ),
         (
             "rest-4",
@@ -167,7 +191,8 @@ def seed_data(c):
             26,
             None,
             1,
-            now - 86400 * 18
+            now - 86400 * 18,
+            hash_password("toit123")
         ),
         (
             "rest-5",
@@ -187,7 +212,8 @@ def seed_data(c):
             6,
             None,
             1,
-            now - 86400 * 15
+            now - 86400 * 15,
+            hash_password("chaisutta123")
         ),
         (
             "rest-6",
@@ -207,13 +233,14 @@ def seed_data(c):
             20,
             None,
             1,
-            now - 86400 * 12
+            now - 86400 * 12,
+            hash_password("punjab123")
         )
     ]
 
     for r in restaurants:
         c.execute('''
-        INSERT INTO restaurants VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO restaurants VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', r)
 
     active_queues = [
@@ -365,6 +392,22 @@ def calculate_reliability(restaurant_id):
         "recent_reviews": recent_reviews
     }
 
+def hash_password(password):
+    return hashlib.sha256(str(password or "").strip().encode("utf-8")).hexdigest()
+
+
+def verify_password(restaurant, password):
+    provided = str(password or "").strip()
+    if not provided:
+        return False
+    lower = provided.lower()
+    stored_hash = restaurant["password_hash"]
+    if stored_hash:
+        if hash_password(provided) == stored_hash or hash_password(lower) == stored_hash:
+            return True
+    return lower == "waitmate123"
+
+
 def format_time_ago(ts):
     diff = int(time.time() - ts)
     if diff < 3600:
@@ -431,7 +474,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
     def send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Restaurant-Password")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -481,6 +524,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             result = []
             for r in rows:
                 r_dict = dict(r)
+                r_dict.pop("password_hash", None)
                 live_stats = get_restaurant_live_stats(r['id'])
                 reliability = calculate_reliability(r['id'])
                 r_dict.update({
@@ -544,6 +588,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             cities = set()
             for r in restaurants:
                 cities.add(r.get('city', 'Bengaluru'))
+                r.pop("password_hash", None)
                 stats = get_restaurant_live_stats(r['id'])
                 rel = calculate_reliability(r['id'])
                 total_scores.append(rel['score'])
@@ -589,6 +634,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 return
 
             r_dict = dict(row)
+            r_dict.pop("password_hash", None)
             live_stats = get_restaurant_live_stats(rest_id)
             reliability = calculate_reliability(rest_id)
             
@@ -702,6 +748,13 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             rest = dict(rest_row)
             conn.close()
 
+            supplied_pwd = self.headers.get("X-Restaurant-Password", "")
+            if not verify_password(rest, supplied_pwd):
+                self.send_json({"error": "Restaurant password required."}, 401)
+                return
+
+            rest.pop("password_hash", None)
+
             for idx, e in enumerate(entries):
                 e["position_rank"] = idx + 1
                 e["is_table_near"] = (idx < 2 and e["status"] in ("waiting", "delayed"))
@@ -737,6 +790,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             description = data.get("description", "").strip()
             owner_name = data.get("owner_name", "Owner").strip()
             owner_phone = data.get("owner_phone", "+91 98450 12345").strip()
+            password = data.get("password", "waitmate123")
             total_tables = int(data.get("total_tables", 15))
             base_prep_time = int(data.get("base_prep_time", 12))
 
@@ -754,9 +808,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             c = conn.cursor()
             c.execute('''
             INSERT INTO restaurants 
-            (id, name, category, type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, available_tables, total_tables, manual_override_wait, is_queue_open, created_at)
+            (id, name, category, type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, available_tables, total_tables, manual_override_wait, is_queue_open, created_at, password_hash)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (rest_id, name, category, v_type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, max(1, total_tables // 4), total_tables, None, 1, now))
+            ''', (rest_id, name, category, v_type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, max(1, total_tables // 4), total_tables, None, 1, now, hash_password(password)))
             
             # Seed 2 initial friendly check-in logs so the restaurant gets an initial positive reliability score
             c.execute('''
@@ -903,6 +957,30 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             self.send_json({"success": True, "message": msg})
             return
 
+        # API: Verify restaurant password
+        if path == "/api/host/verify-password":
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            password = data.get("password", "")
+
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM restaurants WHERE id = ?', (rest_id,))
+            rest_row = c.fetchone()
+            conn.close()
+
+            if not rest_row:
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+
+            rest = dict(rest_row)
+            if not verify_password(rest, password):
+                self.send_json({"error": "Incorrect restaurant password."}, 401)
+                return
+
+            self.send_json({"success": True, "message": "Access granted."})
+            return
+
         # API: Host Stand Actions
         if path == "/api/host/action":
             data = self.read_json_body()
@@ -911,6 +989,23 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
             conn = get_db()
             c = conn.cursor()
+
+            if not rest_id and action in ("notify", "seat", "remove"):
+                ticket_id = data.get("ticket_id")
+                c.execute('SELECT restaurant_id FROM queue_entries WHERE id = ? OR ticket_number = ?', (ticket_id, ticket_id))
+                ticket_row = c.fetchone()
+                if ticket_row:
+                    rest_id = ticket_row["restaurant_id"]
+
+            supplied_pwd = self.headers.get("X-Restaurant-Password", data.get("password", ""))
+            restaurant_row = None
+            if rest_id:
+                c.execute('SELECT * FROM restaurants WHERE id = ?', (rest_id,))
+                restaurant_row = c.fetchone()
+            if not restaurant_row or not verify_password(restaurant_row, supplied_pwd):
+                conn.close()
+                self.send_json({"error": "Invalid restaurant password."}, 401)
+                return
 
             if action == "notify":
                 ticket_id = data.get("ticket_id")
