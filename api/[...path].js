@@ -313,7 +313,7 @@ async function route(request, response, pathParts) {
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
-    return send(response, 200, { success: true, message: `Password reset for ${restaurant.name}.` });
+    return send(response, 200, { success: true, message: "Password reset successfully." });
   }
 
   if (request.method === "POST" && path === "/api/reliability/feedback") {
