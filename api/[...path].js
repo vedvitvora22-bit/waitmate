@@ -84,7 +84,7 @@ async function findRestaurantById(id) {
 
 async function safeCommit(writes) {
   try {
-    return await safeCommit(writes);
+    return await commitWrites(writes);
   } catch (error) {
     if (error.status === 403 || error.status === 404) {
       console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
