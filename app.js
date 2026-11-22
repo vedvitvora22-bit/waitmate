@@ -935,9 +935,14 @@ function renderFounderData(data) {
             <div class="text-[10px] text-slate-400">± ${rel.avg_variance_mins || 1.5}m variance</div>
           </td>
           <td class="py-3 px-4 text-right">
-            <button onclick="founderToggleQueue('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
-              ${isOpen ? 'Pause Queue' : 'Open Queue'}
-            </button>
+            <div class="flex items-center justify-end gap-1.5">
+              <button onclick="founderToggleQueue('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
+                ${isOpen ? 'Pause Queue' : 'Open Queue'}
+              </button>
+              <button onclick="openFounderResetPasswordModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -2276,4 +2281,200 @@ function showToast(message, type = "info") {
     toast.style.transform = 'translateY(10px)';
     setTimeout(() => toast.remove(), 300);
   }, 4000);
+}
+
+// ==========================================
+// 11. OWNER CHANGE PASSWORD
+// ==========================================
+function openOwnerChangePasswordModal() {
+  const modal = document.getElementById('ownerChangePasswordModal');
+  const errEl = document.getElementById('ownerChangePwdError');
+  const currentInput = document.getElementById('ownerCurrentPwdInput');
+  const newInput = document.getElementById('ownerNewPwdInput');
+  const titleEl = document.getElementById('ownerChangePwdModalTitle');
+  const venue = allRestaurants.find(r => r.id === currentHostVenueId);
+  const venueName = venue ? venue.name : 'Restaurant';
+
+  if (titleEl) titleEl.textContent = `Change Password: ${venueName}`;
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+  if (currentInput) currentInput.value = '';
+  if (newInput) newInput.value = '';
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => currentInput && currentInput.focus(), 50);
+  }
+}
+
+function closeOwnerChangePasswordModal() {
+  const modal = document.getElementById('ownerChangePasswordModal');
+  const errEl = document.getElementById('ownerChangePwdError');
+  const currentInput = document.getElementById('ownerCurrentPwdInput');
+  const newInput = document.getElementById('ownerNewPwdInput');
+  if (modal) modal.classList.add('hidden');
+  if (errEl) errEl.classList.add('hidden');
+  if (currentInput) currentInput.value = '';
+  if (newInput) newInput.value = '';
+}
+
+async function submitOwnerChangePassword(event) {
+  if (event) event.preventDefault();
+  const currentInput = document.getElementById('ownerCurrentPwdInput');
+  const newInput = document.getElementById('ownerNewPwdInput');
+  const errEl = document.getElementById('ownerChangePwdError');
+  const btn = document.getElementById('ownerChangePwdSubmitBtn');
+
+  const currentPwd = (currentInput ? currentInput.value : '').trim();
+  const newPwd = (newInput ? newInput.value : '').trim();
+
+  if (!currentPwd || !newPwd) return;
+  if (newPwd.length < 4) {
+    if (errEl) {
+      errEl.textContent = 'New password must be at least 4 characters';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Updating...';
+  }
+  if (errEl) errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/host/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurant_id: currentHostVenueId,
+        current_password: currentPwd,
+        new_password: newPwd
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      showToast(data.message || 'Password updated successfully.', 'success');
+      closeOwnerChangePasswordModal();
+      // Update sessionStorage with new password
+      saveHostPassword(currentHostVenueId, newPwd);
+      return;
+    }
+
+    if (errEl) {
+      errEl.textContent = data.error || 'Failed to change password';
+      errEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = 'Network error. Please retry.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Update Password';
+    }
+  }
+}
+
+// ==========================================
+// 12. FOUNDER RESET PASSWORD
+// ==========================================
+function openFounderResetPasswordModal(restaurantId) {
+  const modal = document.getElementById('founderResetPasswordModal');
+  const errEl = document.getElementById('founderResetPwdError');
+  const input = document.getElementById('founderNewPwdInput');
+  const hiddenId = document.getElementById('founderResetRestaurantId');
+  const titleEl = document.getElementById('founderResetPwdModalTitle');
+  const venue = allRestaurants.find(r => r.id === restaurantId);
+  const venueName = venue ? venue.name : restaurantId;
+
+  if (titleEl) titleEl.textContent = `Reset Password: ${venueName}`;
+  if (hiddenId) hiddenId.value = restaurantId;
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+  if (input) input.value = '';
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => input && input.focus(), 50);
+  }
+}
+
+function closeFounderResetPasswordModal() {
+  const modal = document.getElementById('founderResetPasswordModal');
+  const errEl = document.getElementById('founderResetPwdError');
+  const input = document.getElementById('founderNewPwdInput');
+  const hiddenId = document.getElementById('founderResetRestaurantId');
+  if (modal) modal.classList.add('hidden');
+  if (errEl) errEl.classList.add('hidden');
+  if (input) input.value = '';
+  if (hiddenId) hiddenId.value = '';
+}
+
+async function submitFounderResetPassword(event) {
+  if (event) event.preventDefault();
+  const hiddenId = document.getElementById('founderResetRestaurantId');
+  const input = document.getElementById('founderNewPwdInput');
+  const errEl = document.getElementById('founderResetPwdError');
+  const btn = document.getElementById('founderResetPwdSubmitBtn');
+
+  const restaurantId = hiddenId ? hiddenId.value : '';
+  const newPwd = (input ? input.value : '').trim();
+
+  if (!restaurantId || !newPwd) return;
+  if (newPwd.length < 4) {
+    if (errEl) {
+      errEl.textContent = 'Password must be at least 4 characters';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Resetting...';
+  }
+  if (errEl) errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/founder/restaurant/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurant_id: restaurantId,
+        new_password: newPwd
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      showToast(data.message || 'Restaurant password has been reset.', 'success');
+      closeFounderResetPasswordModal();
+      await loadFounderDashboard();
+      return;
+    }
+
+    if (errEl) {
+      errEl.textContent = data.error || 'Failed to reset password';
+      errEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = 'Network error. Please retry.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Reset Password';
+    }
+  }
 }

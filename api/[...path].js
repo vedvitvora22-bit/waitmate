@@ -295,6 +295,27 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant });
   }
 
+  if (request.method === "POST" && path === "/api/host/change-password") {
+    const restaurant = await findRestaurantById(body.restaurant_id);
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    if (!verifyRestaurantPassword(restaurant, body.current_password)) {
+      return send(response, 401, { error: "Current password is incorrect." });
+    }
+    const nextPwd = String(body.new_password || "").trim();
+    if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    return send(response, 200, { success: true, message: "Restaurant password updated successfully." });
+  }
+
+  if (request.method === "POST" && path === "/api/founder/restaurant/reset-password") {
+    const restaurant = await findRestaurantById(body.restaurant_id);
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const nextPwd = String(body.new_password || "").trim();
+    if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    return send(response, 200, { success: true, message: `Password reset for ${restaurant.name}.` });
+  }
+
   if (request.method === "POST" && path === "/api/reliability/feedback") {
     return send(response, 200, { success: true, message: "Thank you! Your check-in feedback updated the Reliability Score." });
   }

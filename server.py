@@ -1114,6 +1114,74 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             self.send_json({"success": True, "new_state": new_state, "message": "Restaurant queue state updated."})
             return
 
+        # API: Founder Reset Restaurant Password
+        if path == "/api/founder/restaurant/reset-password":
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            new_password = data.get("new_password", "").strip()
+
+            if not rest_id or not new_password:
+                self.send_json({"error": "Missing restaurant_id or new_password"}, 400)
+                return
+
+            if len(new_password) < 4:
+                self.send_json({"error": "Password must be at least 4 characters"}, 400)
+                return
+
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT id FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+
+            new_hash = hash_password(new_password)
+            c.execute('UPDATE restaurants SET password_hash = ? WHERE id = ?', (new_hash, rest_id))
+            conn.commit()
+            conn.close()
+
+            self.send_json({"success": True, "message": "Restaurant password has been reset."})
+            return
+
+        # API: Owner Change Password
+        if path == "/api/host/change-password":
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            current_password = data.get("current_password", "").strip()
+            new_password = data.get("new_password", "").strip()
+
+            if not rest_id or not current_password or not new_password:
+                self.send_json({"error": "Missing required fields"}, 400)
+                return
+
+            if len(new_password) < 4:
+                self.send_json({"error": "New password must be at least 4 characters"}, 400)
+                return
+
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM restaurants WHERE id = ?', (rest_id,))
+            rest_row = c.fetchone()
+            if not rest_row:
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+
+            rest = dict(rest_row)
+            if not verify_password(rest, current_password):
+                conn.close()
+                self.send_json({"error": "Current password is incorrect"}, 401)
+                return
+
+            new_hash = hash_password(new_password)
+            c.execute('UPDATE restaurants SET password_hash = ? WHERE id = ?', (new_hash, rest_id))
+            conn.commit()
+            conn.close()
+
+            self.send_json({"success": True, "message": "Password updated successfully."})
+            return
+
         # API: Reliability Verification Feedback
         if path == "/api/reliability/feedback":
             data = self.read_json_body()
