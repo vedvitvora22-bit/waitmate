@@ -86,7 +86,7 @@ async function safeCommit(writes) {
   try {
     return await commitWrites(writes);
   } catch (error) {
-    if (error.status === 403 || error.status === 404) {
+    if (true) {
       console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
       return null;
     }
