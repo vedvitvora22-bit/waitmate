@@ -959,7 +959,8 @@ async function submitNewRestaurant(e) {
       })
     });
 
-    const data = await res.json();
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
     if (!res.ok) throw new Error(data.error || 'Failed to register restaurant');
 
     showToast(`🎉 "${name}" is now live on WaitMate!`, "success");
@@ -1487,31 +1488,47 @@ async function submitJoinQueue(e) {
   submitBtn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Securing Queue Spot...`;
   lucide.createIcons();
 
+  const joinPayload = {
+    restaurant_id: restId,
+    name: name,
+    phone: phone,
+    party_size: partySize,
+    seating_pref: seatingPref,
+    special_requests: specialReq,
+    entry_type: 'remote'
+  };
+
+  let res;
   try {
-    const res = await fetch('/api/queue/join', {
+    res = await fetch('/api/queue/join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        restaurant_id: restId,
-        name: name,
-        phone: phone,
-        party_size: partySize,
-        seating_pref: seatingPref,
-        special_requests: specialReq,
-        entry_type: 'remote'
-      })
+      body: JSON.stringify(joinPayload)
     });
+  } catch (networkErr) {
+    // Network/transport failure only — fall through to offline fallback below.
+    res = null;
+  }
+
+  if (res) {
+    // A real HTTP response was received: it is authoritative.
+    // Parse safely so non-JSON bodies don't masquerade as network errors.
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
 
     if (!res.ok) {
-      throw new Error('API server unreachable');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
+      lucide.createIcons();
+      showToast(data.error || 'Unable to join the queue right now. Please try again.', "error");
+      return;
     }
-    const data = await res.json();
 
     currentTicketId = data.ticket_id;
     localStorage.setItem('waitmate_ticket_id', currentTicketId);
 
     closeJoinModal();
-    showToast(`Spot reserved! Ticket #${data.ticket_number}`, "success");
+    showToast(data.message || `Spot reserved! Ticket #${data.ticket_number}`, "success");
     playNotificationChime();
 
     // Start live ticket tracking
@@ -1519,8 +1536,15 @@ async function submitJoinQueue(e) {
     startTicketPolling();
     openTicketModal();
     await loadRestaurants(); // refresh queue counts
-  } catch (err) {
-    // Graceful offline fallback join
+
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
+    lucide.createIcons();
+    return;
+  }
+
+  // No HTTP response (server unreachable) — graceful offline fallback.
+  {
     console.warn("Using offline join queue fallback");
     const ticketId = `q-${Date.now().toString().slice(-6)}`;
     const ticketNum = `WM-${Math.floor(Math.random() * 800) + 100}`;
@@ -1573,7 +1597,7 @@ async function submitJoinQueue(e) {
     startTicketPolling();
     openTicketModal();
     renderRestaurantsGrid();
-  } finally {
+
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
     lucide.createIcons();
