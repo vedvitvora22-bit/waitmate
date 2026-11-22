@@ -8,6 +8,15 @@ const {
 
 const now = Date.now();
 
+function founderPassword() {
+  return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
+}
+
+function isFounderAuthorized(request) {
+  const supplied = request.headers["x-founder-password"];
+  return Boolean(supplied) && supplied === founderPassword();
+}
+
 function hashPassword(password) {
   return crypto.createHash("sha256").update(String(password || "").trim()).digest("hex");
 }
@@ -50,7 +59,7 @@ function send(response, status, data) {
   response.status(status);
   response.setHeader("Content-Type", "application/json");
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Restaurant-Password");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Restaurant-Password, X-Founder-Password");
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   response.send(JSON.stringify(data));
 }
@@ -218,7 +227,16 @@ async function route(request, response, pathParts) {
     return send(response, 200, { restaurant, live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => ({ ...entry, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(entry.status) })) });
   }
 
+  if (request.method === "POST" && path === "/api/founder/verify-password") {
+    const provided = String(body.password || "");
+    if (provided && provided === founderPassword()) {
+      return send(response, 200, { success: true, message: "Founder access granted." });
+    }
+    return send(response, 401, { error: "Incorrect Founder Master Password." });
+  }
+
   if (request.method === "GET" && path === "/api/founder/analytics") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
     const queueEntries = await listCollection("queue_entries").catch(() => []);
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
@@ -279,6 +297,7 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/founder/restaurant/toggle") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const body = request.body || {};
     const restaurant = await getDocument("restaurants", body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
@@ -308,6 +327,7 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/founder/restaurant/reset-password") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const nextPwd = String(body.new_password || "").trim();

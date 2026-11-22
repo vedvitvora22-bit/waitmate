@@ -12,6 +12,14 @@ PORT = 8080
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "waitmate.db")
 
+# Founder Command Center access password (immutable — set via env, never changed in-app)
+FOUNDER_PASSWORD = os.environ.get("FOUNDER_PASSWORD", "waitmatefounder2026")
+
+
+def is_founder_authorized(handler):
+    supplied = handler.headers.get("X-Founder-Password", "")
+    return bool(supplied) and supplied == FOUNDER_PASSWORD
+
 # Initialize database schema and initial data
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -474,7 +482,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
     def send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Restaurant-Password")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Restaurant-Password, X-Founder-Password")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -537,6 +545,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
         # API: Founder Analytics Dashboard (Live Platform Command Center)
         if path == "/api/founder/analytics":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
             conn = get_db()
             c = conn.cursor()
             
@@ -1095,8 +1106,21 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Unknown host action"}, 400)
             return
 
+        # API: Founder Verify Master Password
+        if path == "/api/founder/verify-password":
+            data = self.read_json_body()
+            provided = str(data.get("password", "") or "")
+            if provided and provided == FOUNDER_PASSWORD:
+                self.send_json({"success": True, "message": "Founder access granted."})
+                return
+            self.send_json({"error": "Incorrect Founder Master Password."}, 401)
+            return
+
         # API: Founder Control Actions
         if path == "/api/founder/restaurant/toggle":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
             data = self.read_json_body()
             rest_id = data.get("restaurant_id")
             conn = get_db()
@@ -1116,6 +1140,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
         # API: Founder Reset Restaurant Password
         if path == "/api/founder/restaurant/reset-password":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
             data = self.read_json_body()
             rest_id = data.get("restaurant_id")
             new_password = data.get("new_password", "").strip()

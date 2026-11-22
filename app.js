@@ -472,6 +472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (currentTicketId) {
     startTicketPolling();
   }
+  initFounderSecretTriggers();
   lucide.createIcons();
 });
 
@@ -716,7 +717,131 @@ let localMockQueues = {
 // ==========================================
 // 1. TRI-INTERFACE NAVIGATION & SWITCHING
 // ==========================================
+// ==========================================
+// FOUNDER COMMAND CENTER: SECRET ACCESS & AUTH
+// ==========================================
+const FOUNDER_PWD_KEY = 'waitmate_founder_pwd';
+
+function getFounderPassword() {
+  return sessionStorage.getItem(FOUNDER_PWD_KEY) || '';
+}
+
+function isFounderUnlocked() {
+  return Boolean(getFounderPassword());
+}
+
+function founderHeaders() {
+  const pwd = getFounderPassword();
+  return pwd ? { 'X-Founder-Password': pwd } : {};
+}
+
+function triggerFounderAccess() {
+  if (isFounderUnlocked()) switchInterface('founder');
+  else openFounderLoginModal();
+}
+
+function openFounderLoginModal() {
+  const modal = document.getElementById('founderLoginModal');
+  const errEl = document.getElementById('founderLoginError');
+  const input = document.getElementById('founderLoginInput');
+  if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  if (input) input.value = '';
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => input && input.focus(), 50);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeFounderLoginModal() {
+  const modal = document.getElementById('founderLoginModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitFounderLogin(event) {
+  if (event) event.preventDefault();
+  const input = document.getElementById('founderLoginInput');
+  const errEl = document.getElementById('founderLoginError');
+  const btn = document.getElementById('founderLoginSubmitBtn');
+  const pwd = (input ? input.value : '').trim();
+  if (!pwd) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+  if (errEl) errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/founder/verify-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      sessionStorage.setItem(FOUNDER_PWD_KEY, pwd);
+      closeFounderLoginModal();
+      showToast(data.message || 'Founder access granted.', 'success');
+      switchInterface('founder');
+      return;
+    }
+
+    if (errEl) {
+      errEl.textContent = data.error || 'Incorrect Founder Master Password.';
+      errEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = 'Network error. Please retry.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Unlock Command Center'; }
+  }
+}
+
+function initFounderSecretTriggers() {
+  // Keyboard shortcut: Alt+Shift+F (or Ctrl/Cmd+Shift+F)
+  document.addEventListener('keydown', (e) => {
+    const key = (e.key || '').toLowerCase();
+    if (key === 'f' && e.shiftKey && (e.altKey || e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      triggerFounderAccess();
+    }
+  });
+
+  // URL triggers: ?founder=1 or #founder
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const hash = (window.location.hash || '').toLowerCase();
+    if (params.get('founder') === '1' || hash === '#founder') {
+      triggerFounderAccess();
+    }
+  } catch (e) { /* ignore */ }
+
+  // Footer brand text clicked 5 times
+  const brandEl = document.getElementById('footerBrandText');
+  if (brandEl) {
+    let count = 0;
+    let resetTimer = null;
+    brandEl.addEventListener('click', () => {
+      count++;
+      if (resetTimer) clearTimeout(resetTimer);
+      if (count >= 5) {
+        count = 0;
+        triggerFounderAccess();
+      } else {
+        resetTimer = setTimeout(() => { count = 0; }, 1500);
+      }
+    });
+  }
+}
+
 function switchInterface(role) {
+  // Founder view requires secret unlock; otherwise prompt for the Master Password.
+  if (role === 'founder' && !isFounderUnlocked()) {
+    openFounderLoginModal();
+    return;
+  }
   currentInterface = role;
   const custDiv = document.getElementById('customerInterface');
   const ownerDiv = document.getElementById('ownerInterface');
@@ -735,7 +860,8 @@ function switchInterface(role) {
 
   tabCust.className = inactiveTabClass;
   tabOwner.className = inactiveTabClass;
-  tabFounder.className = inactiveTabClass;
+  // Founder tab stays hidden from the public navbar at all times.
+  tabFounder.className = inactiveTabClass + ' hidden';
 
   if (role === 'customer') {
     custDiv.classList.remove('hidden');
@@ -747,7 +873,7 @@ function switchInterface(role) {
     showOwnerDirectory();
   } else if (role === 'founder') {
     founderDiv.classList.remove('hidden');
-    tabFounder.className = activeTabClass;
+    tabFounder.className = activeTabClass + ' hidden';
     loadFounderDashboard();
   }
   lucide.createIcons();
@@ -860,8 +986,15 @@ async function submitNewRestaurant(e) {
 // 2. FOUNDER OVERVIEW & PLATFORM COMMAND CENTER
 // ==========================================
 async function loadFounderDashboard() {
+  if (!isFounderUnlocked()) { openFounderLoginModal(); return; }
   try {
-    const res = await fetch('/api/founder/analytics');
+    const res = await fetch('/api/founder/analytics', { headers: founderHeaders() });
+    if (res.status === 401) {
+      sessionStorage.removeItem(FOUNDER_PWD_KEY);
+      openFounderLoginModal();
+      showToast('Founder session expired. Re-enter password.', 'error');
+      return;
+    }
     if (!res.ok) throw new Error('Founder API unavailable');
     const data = await res.json();
     renderFounderData(data);
@@ -1017,10 +1150,16 @@ async function founderToggleQueue(restId) {
   try {
     const res = await fetch('/api/founder/restaurant/toggle', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...founderHeaders() },
       body: JSON.stringify({ restaurant_id: restId })
     });
     const data = await res.json();
+    if (res.status === 401) {
+      sessionStorage.removeItem(FOUNDER_PWD_KEY);
+      openFounderLoginModal();
+      showToast('Founder session expired. Re-enter password.', 'error');
+      return;
+    }
     showToast(data.message || "Queue state updated", "info");
     await loadFounderDashboard();
     await loadRestaurants();
@@ -2446,7 +2585,7 @@ async function submitFounderResetPassword(event) {
   try {
     const res = await fetch('/api/founder/restaurant/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...founderHeaders() },
       body: JSON.stringify({
         restaurant_id: restaurantId,
         new_password: newPwd
@@ -2454,6 +2593,14 @@ async function submitFounderResetPassword(event) {
     });
 
     const data = await res.json();
+
+    if (res.status === 401) {
+      sessionStorage.removeItem(FOUNDER_PWD_KEY);
+      closeFounderResetPasswordModal();
+      openFounderLoginModal();
+      showToast('Founder session expired. Re-enter password.', 'error');
+      return;
+    }
 
     if (res.ok && data.success) {
       showToast(data.message || 'Restaurant password has been reset.', 'success');
