@@ -64,6 +64,16 @@ function reliabilityFallback() {
   return { score: 92, grade: "A", verdict: "Verified demo data", badge_color: "emerald", avg_variance_mins: 2.5, total_verified_checkins: 0, on_time_pct: 90, early_pct: 5, slight_late_pct: 5, severe_late_pct: 0, recent_reviews: [] };
 }
 
+async function findRestaurantById(id) {
+  try {
+    const doc = await getDocument("restaurants", id);
+    if (doc) return doc;
+  } catch (error) {
+    if (error.status !== 403 && error.status !== 404) throw error;
+  }
+  return fallbackRestaurants.find(r => r.id === id) || null;
+}
+
 async function ensureRestaurants() {
   try {
     const restaurants = await listCollection("restaurants");
@@ -123,7 +133,7 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
-    const restaurant = await getDocument("restaurants", body.restaurant_id);
+    const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     if (!verifyRestaurantPassword(restaurant, body.password)) {
       return send(response, 401, { error: "Incorrect restaurant password." });
