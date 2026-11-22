@@ -803,7 +803,7 @@ function initFounderSecretTriggers() {
   // Keyboard shortcut: Alt+Shift+F (or Ctrl/Cmd+Shift+F)
   document.addEventListener('keydown', (e) => {
     const key = (e.key || '').toLowerCase();
-    if (key === 'f' && e.shiftKey && (e.altKey || e.ctrlKey || e.metaKey)) {
+    if ((key === 'f' || e.code === 'KeyF') && e.shiftKey && (e.altKey || e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       triggerFounderAccess();
     }
