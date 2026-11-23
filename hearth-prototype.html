@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hearth · Food Discovery & Ordering</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍽️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Fraunces', 'serif'],
+            body: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            cream: '#faf8f5',
+            charcoal: '#1a1a1a',
+            terracotta: '#b45439',
+            terracottaDark: '#93432e',
+            terracottaSoft: '#f3e1d6',
+            border: '#e3d8c9',
+            borderSoft: '#ede4d8',
+            muted: '#6e5e52',
+            soft: '#c9b9a8',
+            veg: '#4a6b4f',
+            nonveg: '#b45439',
+          },
+          borderRadius: {
+            xl: '12px',
+            '2xl': '16px',
+            full: '9999px',
+          },
+        },
+      },
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+  </style>
+</head>
+<body class="bg-cream text-charcoal font-body antialiased selection:bg-terracotta selection:text-white">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    const formatPrice = (p) => '₹' + p.toLocaleString('en-IN');
+
+    /* ---------- Dummy data ---------- */
+    const RESTAURANTS = [
+      {
+        id: 'vt-1',
+        name: 'The Spice Thread',
+        cuisine: 'North Indian · Mughlai',
+        rating: 4.8,
+        reviews: 1240,
+        price: '₹₹',
+        distance: '1.2 km',
+        delivery: '30–40 min',
+        tags: ['Popular', 'Takeaway'],
+        featured: true,
+        image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=900&q=80&auto=format&fit=crop',
+        ratio: 'landscape',
+      },
+      {
+        id: 'vt-2',
+        name: 'Crumb & Co.',
+        cuisine: 'Bakery · Café',
+        rating: 4.6,
+        reviews: 890,
+        price: '₹',
+        distance: '0.6 km',
+        delivery: '18–25 min',
+        tags: ['100% Veg'],
+        image: 'https://images.unsplash.com/photo-1543365187-3527627ad976?w=900&q=80&auto=format&fit=crop',
+        ratio: 'portrait',
+      },
+      {
+        id: 'vt-3',
+        name: 'Tamarind Tree',
+        cuisine: 'South Indian',
+        rating: 4.9,
+        reviews: 2100,
+        price: '₹₹',
+        distance: '2.3 km',
+        delivery: '28–38 min',
+        tags: ['Popular'],
+        image: 'https://images.unsplash.com/photo-1563256797-61e396d06974?w=900&q=80&auto=format&fit=crop',
+        ratio: 'landscape',
+      },
+      {
+        id: 'vt-4',
+        name: 'Charcoal & Vine',
+        cuisine: 'Barbecue · Grill',
+        rating: 4.7,
+        reviews: 640,
+        price: '₹₹₹',
+        distance: '3.1 km',
+        delivery: '35–45 min',
+        tags: [],
+        image: 'https://images.unsplash.com/photo-1550595607-4268743e789a?w=900&q=80&auto=format&fit=crop',
+        ratio: 'portrait',
+      },
+      {
+        id: 'vt-5',
+        name: 'Green Bowl',
+        cuisine: 'Salads · Bowls',
+        rating: 4.4,
+        reviews: 520,
+        price: '₹',
+        distance: '0.9 km',
+        delivery: '15–22 min',
+        tags: ['100% Veg'],
+        image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=900&q=80&auto=format&fit=crop',
+        ratio: 'square',
+      },
+      {
+        id: 'vt-6',
+        name: 'Golden Wok',
+        cuisine: 'Chinese · Asian',
+        rating: 4.5,
+        reviews: 1050,
+        price: '₹₹',
+        distance: '1.8 km',
+        delivery: '25–35 min',
+        tags: ['Takeaway'],
+        image: 'https://images.unsplash.com/photo-1529165777815-88e24c109a96?w=900&q=80&auto=format&fit=crop',
+        ratio: 'landscape',
+      },
+    ];
+
+    const MENUS = {
+      'vt-1': {
+        categories: [
+          { id: 'starters', label: 'Starters' },
+          { id: 'mains', label: 'Mains' },
+          { id: 'breads', label: 'Breads' },
+          { id: 'desserts', label: 'Desserts' },
+          { id: 'beverages', label: 'Beverages' },
+        ],
+        items: [
+          { id: 'm1', name: 'Paneer Tikka', category: 'starters', price: 340, desc: 'Cottage cheese marinated in spiced yogurt, charred in the tandoor', veg: true, spicy: false, popular: true, image: 'https://images.unsplash.com/photo-1559339352-12d044a56889?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm2', name: 'Chicken Seekh Kebab', category: 'starters', price: 420, desc: 'Minced chicken with onion, ginger, and garam masala, grilled over charcoal', veg: false, spicy: true, popular: false, image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm3', name: 'Amritsari Fish Fry', category: 'starters', price: 480, desc: 'River fish in carom-spiced gram flour batter, crisp and golden', veg: false, spicy: true, popular: false, image: 'https://images.unsplash.com/photo-1550595607-4268743e789a?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm4', name: 'Hara Bhara Kebab', category: 'starters', price: 290, desc: 'Spinach and potato patties, shallow-fried', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm5', name: 'Butter Chicken', category: 'mains', price: 560, desc: 'Tandoori chicken in velvety tomato and fenugreek gravy', veg: false, spicy: false, popular: true, image: 'https://images.unsplash.com/photo-1563256797-61e396d06974?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm6', name: 'Paneer Makhani', category: 'mains', price: 440, desc: 'Cottage cheese cubes in buttery tomato gravy', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1529165777815-88e24c109a96?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm7', name: 'Dal Makhani', category: 'mains', price: 320, desc: 'Slow-simmered black lentils finished with cream', veg: true, spicy: false, popular: true, image: 'https://images.unsplash.com/photo-1543365187-3527627ad976?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm8', name: 'Mutton Rogan Josh', category: 'mains', price: 620, desc: 'Kashmiri mutton curry with yogurt and aromatic spices', veg: false, spicy: true, popular: false, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm9', name: 'Vegetable Biryani', category: 'mains', price: 380, desc: 'Basmati rice layered with seasonal vegetables and saffron', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1559339352-12d044a56889?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm10', name: 'Hyderabadi Chicken Biryani', category: 'mains', price: 460, desc: 'Dum-cooked basmati with marinated chicken and fried onions', veg: false, spicy: true, popular: false, image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm11', name: 'Garlic Naan', category: 'breads', price: 90, desc: 'Leavened flatbread topped with roasted garlic and cilantro', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1550595607-4268743e789a?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm12', name: 'Butter Roti', category: 'breads', price: 40, desc: 'Whole-wheat flatbread brushed with salted butter', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm13', name: 'Laccha Paratha', category: 'breads', price: 110, desc: 'Flaky layered whole-wheat flatbread', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1529165777815-88e24c109a96?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm14', name: 'Keema Naan', category: 'breads', price: 130, desc: 'Stuffed with spiced minced lamb', veg: false, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm15', name: 'Gulab Jamun', category: 'desserts', price: 120, desc: 'Milk-solids dumplings soaked in cardamom syrup', veg: true, spicy: false, popular: true, image: 'https://images.unsplash.com/photo-1559339352-12d044a56889?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm16', name: 'Rasmalai', category: 'desserts', price: 140, desc: 'Soft cheese patties in sweetened saffron milk', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1563256797-61e396d06974?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm17', name: 'Gajar Ka Halwa', category: 'desserts', price: 130, desc: 'Slow-cooked carrots with ghee, milk, and dried nuts', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1543365187-3527627ad976?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm18', name: 'Masala Chai', category: 'beverages', price: 60, desc: 'Strong black tea brewed with ginger and cardamom', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1559339352-12d044a56889?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm19', name: 'Mango Lassi', category: 'beverages', price: 110, desc: 'Thick yogurt blended with Alphonso mango pulp', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm20', name: 'Cold Coffee', category: 'beverages', price: 130, desc: 'Iced coffee with vanilla ice cream and chocolate drizzle', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1550595607-4268743e789a?w=600&q=80&auto=format&fit=crop' },
+          { id: 'm21', name: 'Bottled Water', category: 'beverages', price: 30, desc: 'Still mineral water', veg: true, spicy: false, popular: false, image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80&auto=format&fit=crop' },
+        ],
+      },
+    };
+
+    const ALL_ITEMS = {};
+    Object.values(MENUS).forEach((menu) =>
+      menu.items.forEach((item) => { ALL_ITEMS[item.id] = item; })
+    );
+
+    /* ---------- Shared UI ---------- */
+    function Toast({ message }) {
+      if (!message) return null;
+      return (
+        React.createElement('div', {
+          className: 'fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-charcoal text-cream text-xs font-medium border border-white/10 animate-in fade-in slide-in-from-bottom-2 duration-300',
+        },
+          React.createElement('i', { 'data-lucide': 'check-circle', className: 'w-4 h-4 text-terracottaSoft' }),
+          React.createElement('span', null, message)
+        )
+      );
+    }
+
+    function Rating({ rating, reviews, className }) {
+      const full = Math.floor(rating);
+      const stars = [];
+      for (let i = 0; i < 5; i++) stars.push(i < full);
+      return (
+        React.createElement('div', { className: 'flex items-center gap-1 ' + (className || '') },
+          stars.map((filled, i) =>
+            React.createElement('i', { key: i, 'data-lucide': filled ? 'star' : 'star', className: 'w-3.5 h-3.5 fill-terracotta text-terracotta' })
+          ),
+          React.createElement('span', { className: 'text-[11px] font-semibold text-charcoal' }, rating.toFixed(1)),
+          reviews && React.createElement('span', { className: 'text-[11px] text-muted' }, ' (' + reviews.toLocaleString('en-IN') + ')')
+        )
+      );
+    }
+
+    function Pill({ children, variant = 'soft', className }) {
+      const base = 'inline-flex items-center gap-1 rounded-full border text-[10px] font-semibold uppercase tracking-tighter px-2 py-0.5';
+      const variants = {
+        soft: 'border-terracottaSoft bg-terracottaSoft text-terracottaDark',
+        veg: 'border-[#d8e3da] bg-[#d8e3da] text-[#354d38]',
+        neutral: 'border-border bg-white text-muted',
+      };
+      return React.createElement('span', { className: base + ' ' + variants[variant] + ' ' + (className || '') }, children);
+    }
+
+    function DotVeg({ veg }) {
+      return React.createElement('div', { className: 'flex items-center gap-1' },
+        React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full ' + (veg ? 'bg-veg' : 'bg-nonveg') }),
+        React.createElement('span', { className: 'text-[10px] font-medium' }, veg ? 'Veg' : 'Non-Veg')
+      );
+    }
+
+    function EmptyState({ icon, title, subtitle }) {
+      return (
+        React.createElement('div', { className: 'flex flex-col items-center justify-center py-24 text-center' },
+          React.createElement('i', { 'data-lucide': icon, className: 'w-12 h-12 text-soft mx-auto mb-4' }),
+          React.createElement('h3', { className: 'font-display text-lg font-semibold text-charcoal' }, title),
+          React.createElement('p', { className: 'text-[11px] text-muted mt-1' }, subtitle)
+        )
+      );
+    }
+
+    /* ---------- Listing view ---------- */
+    function RestaurantCard({ venue, onSelect, onBookmark, styleOverride }) {
+      const isVegOnly = venue.tags.includes('100% Veg');
+      const isPopular = venue.tags.includes('Popular');
+      return (
+        React.createElement('article', {
+          className: 'group relative rounded-2xl border border-border bg-cream overflow-hidden flex flex-col',
+          style: Object.assign({ height: venue.featured ? 'auto' : 430 }, styleOverride || {}),
+          onClick: (e) => { if (!e.target.closest('button')) onSelect(venue.id); },
+        },
+          React.createElement('div', { className: `relative overflow-hidden ${venue.featured ? 'aspect-[16/9]' : 'aspect-[4/5]'}` },
+            React.createElement('img', {
+              src: venue.image, alt: venue.name, className: 'w-full h-full object-cover group-hover:scale-105 transition duration-700', loading: 'lazy',
+            }),
+            React.createElement('div', { className: 'absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 rounded-full border border-white/90 bg-white/90 backdrop-blur-sm text-[10px] font-semibold text-charcoal' },
+              isVegOnly && React.createElement(React.Fragment, null,
+                React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-veg' }),
+                React.createElement('span', null, 'Veg Only')
+              ),
+              isPopular && React.createElement(React.Fragment, null,
+                React.createElement('span', { className: 'w-1.5 h-1.5 rounded-full bg-terracotta' }),
+                React.createElement('span', null, 'Popular')
+              )
+            ),
+            React.createElement('button', {
+              onClick: (e) => { e.stopPropagation(); onBookmark(venue.id); },
+              className: 'absolute top-3 right-3 w-9 h-9 rounded-full border border-border bg-white/90 flex items-center justify-center text-charcoal hover:bg-terracotta hover:text-cream hover:border-transparent transition focus:outline-none focus:ring-2 focus:ring-terracotta focus:ring-offset-2 focus:ring-offset-cream',
+              'aria-label': 'Bookmark',
+            },
+              React.createElement('i', { 'data-lucide': 'heart', className: 'w-4.5 h-4.5' })
+            )
+          ),
+          React.createElement('div', { className: 'p-4 flex flex-col flex-1' },
+            React.createElement('div', { className: 'flex items-center justify-between mb-1' },
+              React.createElement('h3', { className: 'font-display text-lg font-semibold text-charcoal leading-none' }, venue.name),
+              React.createElement('span', { className: 'inline-flex items-center gap-1 rounded-full border border-terracottaSoft bg-terracottaSoft px-2 py-0.5 text-[10px] font-bold text-terracottaDark uppercase tracking-tighter' }, venue.price.replace(/₹/g, '₹'))
+            ),
+            React.createElement('p', { className: 'text-[11px] font-medium text-muted leading-none mb-3' }, venue.cuisine),
+            React.createElement('div', { className: 'flex items-center gap-2 text-[11px] mb-3' },
+              React.createElement(Rating, { rating: venue.rating, reviews: venue.reviews, className: 'shrink-0' }),
+              React.createElement('span', { className: 'w-0.5 h-2.5 bg-soft rounded-full shrink-0' }),
+              React.createElement('span', { className: 'font-semibold text-charcoal' }, venue.distance),
+              React.createElement('span', { className: 'w-0.5 h-2.5 bg-soft rounded-full shrink-0' }),
+              React.createElement('span', { className: 'font-semibold text-charcoal' }, venue.delivery)
+            ),
+            React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-auto' },
+              venue.tags.map((tag) =>
+                React.createElement(Pill, { key: tag, variant: tag === '100% Veg' ? 'veg' : tag === 'Popular' ? 'soft' : 'neutral' }, tag)
+              )
+            )
+          )
+        )
+      );
+    }
+
+    function FilterPill({ label, value, active, onChange }) {
+      return React.createElement('button', {
+        onClick: () => onChange(value),
+        className: `px-3 py-1.5 rounded-full border text-xs font-semibold whitespace-nowrap transition ${active ? 'border-terracotta bg-terracottaSoft text-terracottaDark' : 'border-border bg-white text-muted hover:bg-surface'}`,
+      }, label);
+    }
+
+    function Listing() {
+      const [query, setQuery] = useState('');
+      const [filter, setFilter] = useState('all');
+      const [venueBookmarks, setVenueBookmarks] = useState(new Set());
+      const [mounted, setMounted] = useState(false);
+
+      useEffect(() => { setMounted(true); }, []);
+
+      const q = query.toLowerCase();
+      const filtered = useMemo(() => RESTAURANTS.filter((r) => {
+        const match = r.name.toLowerCase().includes(q) || r.cuisine.toLowerCase().includes(q) || r.tags.some((t) => t.toLowerCase().includes(q));
+        if (filter === 'veg') return match && r.tags.includes('100% Veg');
+        if (filter === 'popular') return match && r.tags.includes('Popular');
+        return match;
+      }), [query, filter]);
+
+      const toggleBookmark = (id) => {
+        setVenueBookmarks((prev) => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      };
+
+      return (
+        React.createElement('div', { className: 'min-h-screen bg-cream' },
+          React.createElement('div', { className: 'sticky top-0 z-20 border-b border-border bg-cream/80 backdrop-blur-sm' },
+            React.createElement('div', { className: 'max-w-7xl mx-auto px-4 py-3 flex items-center justify-between' },
+              React.createElement('div', { className: 'flex items-center gap-3' },
+                React.createElement('span', { className: 'font-display text-xl font-semibold text-charcoal tracking-tight' }, 'hearth.'),
+                React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-terracottaSoft bg-terracottaSoft text-[10px] font-bold text-terracottaDark uppercase tracking-wider' }, 'Open')
+              ),
+              React.createElement('div', { className: 'flex items-center gap-2' },
+                React.createElement('button', {
+                  className: 'flex items-center gap-1.5 rounded-xl border border-border bg-white px-3 py-1.5 text-xs font-semibold text-charcoal hover:bg-surface transition focus:outline-none focus:ring-2 focus:ring-terracotta',
+                },
+                  React.createElement('i', { 'data-lucide': 'map-pin', className: 'w-3.5 h-3.5 text-terracotta' }),
+                  React.createElement('span', null, 'Mumbai · Bandra West')
+                ),
+                React.createElement('button', {
+                  className: 'w-9 h-9 rounded-xl border border-border flex items-center justify-center text-charcoal hover:bg-terracotta hover:text-cream transition focus:outline-none focus:ring-2 focus:ring-terracotta',
+                  'aria-label': 'Cart',
+                },
+                  React.createElement('i', { 'data-lucide': 'shopping-basket', className: 'w-5 h-5' })
+                )
+              )
+            )
+          ),
+          React.createElement('div', { className: 'max-w-7xl mx-auto px-4 py-4' },
+            React.createElement('div', { className: 'relative mb-6' },
+              React.createElement('i', { 'data-lucide': 'search', className: 'absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted' }),
+              React.createElement('input', {
+                type: 'text',
+                placeholder: 'Search biryani, dosa, cafe, bakery...',
+                value: query,
+                onChange: (e) => setQuery(e.target.value),
+                className: 'w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition',
+              }),
+              query && React.createElement('button', {
+                onClick: () => setQuery(''),
+                className: 'absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-border flex items-center justify-center text-xs font-bold text-muted hover:text-charcoal hover:bg-terracottaSoft transition',
+              }, '×')
+            ),
+            React.createElement('div', { className: 'flex flex-wrap gap-2 mt-3 mb-2' },
+              React.createElement(FilterPill, { label: 'All', value: 'all', active: filter === 'all', onChange: setFilter }),
+              React.createElement(FilterPill, { label: 'Veg only', value: 'veg', active: filter === 'veg', onChange: setFilter }),
+              React.createElement(FilterPill, { label: 'Popular', value: 'popular', active: filter === 'popular', onChange: setFilter })
+            ),
+            React.createElement('h2', { className: 'font-display text-lg font-semibold text-charcoal mb-4' }, 'Near you in Bandra West'),
+            React.createElement('p', { className: 'text-[11px] text-muted mb-5' }, filtered.length + ' place' + (filtered.length !== 1 ? 's' : '') + ' found'),
+            React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5' },
+              RESTAURANTS[0].featured && filtered.some((r) => r.id === RESTAURANTS[0].id)
+                ? React.createElement('div', { className: 'col-span-full lg:col-span-2' },
+                    React.createElement(RestaurantCard, { venue: RESTAURANTS[0], onSelect: () => {}, onBookmark: toggleBookmark })
+                  )
+                : null,
+              filtered.filter((venue) => venue.id !== RESTAURANTS[0].id).map((venue, i) =>
+                React.createElement(RestaurantCard, {
+                  key: venue.id, venue,
+                  onSelect: () => {},
+                  onBookmark: toggleBookmark,
+                  styleOverride: { transitionDelay: (i * 55) + 'ms', opacity: mounted ? 1 : 0, transform: mounted ? 'none' : 'translateY(10px)' },
+                })
+              )
+            ),
+            filtered.length === 0 && React.createElement(EmptyState, {
+              icon: 'search-x',
+              title: 'No restaurants found',
+              subtitle: 'Try "biryani", "cafe", or "bakery"',
+            })
+          )
+        )
+      );
+    }
+
+    /* ---------- Menu view ---------- */
+    function MenuItem({ item, onToggleCart, onToggleBookmark, bookmarked, qty, inCart }) {
+      return (
+        React.createElement('div', { className: 'group flex items-center gap-4 py-4 border-b border-border/60 last:border-0' },
+          React.createElement('div', { className: 'relative w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden border border-border bg-borderSoft' },
+            React.createElement('img', {
+              src: item.image, alt: item.name, className: 'w-full h-full object-cover group-hover:scale-105 transition duration-500', loading: 'lazy',
+            }),
+            React.createElement('span', { className: 'absolute bottom-1 left-1 w-2.5 h-2.5 rounded-full ' + (item.veg ? 'bg-veg' : 'bg-nonveg') }),
+            item.popular && React.createElement('span', { className: 'absolute top-1 right-1 w-5 h-5 rounded-full bg-terracotta/90 flex items-center justify-center text-[9px] text-cream' }, React.createElement('i', { 'data-lucide': 'star', className: 'w-3 h-3' }))
+          ),
+          React.createElement('div', { className: 'flex-1 min-w-0' },
+            React.createElement('div', { className: 'flex items-center justify-between gap-2 mb-0.5' },
+              React.createElement('h4', { className: 'font-body text-sm font-semibold text-charcoal leading-none' }, item.name),
+              React.createElement('span', { className: 'font-semibold text-charcoal' }, formatPrice(item.price))
+            ),
+            React.createElement('p', { className: 'text-xs text-muted line-clamp-1' }, item.desc),
+            React.createElement('div', { className: 'flex items-center gap-2 mt-2' },
+              React.createElement(DotVeg, { veg: item.veg }),
+              item.spicy && React.createElement('span', { className: 'inline-flex items-center gap-0.5 rounded-full border border-terracottaSoft bg-terracottaSoft px-2 py-0.5 text-[10px] font-bold text-terracottaDark uppercase tracking-tighter' }, 'Spicy')
+            )
+          ),
+          React.createElement('div', { className: 'flex items-center gap-2' },
+            inCart
+              ? React.createElement('div', { className: 'flex items-center overflow-hidden rounded-lg border border-border' },
+                  React.createElement('button', {
+                    className: 'w-7 h-7 flex items-center justify-center text-charcoal hover:bg-terracottaSoft transition focus:outline-none',
+                  }, '–'),
+                  React.createElement('span', { className: 'w-6 text-center text-xs font-semibold text-charcoal' }, qty),
+                  React.createElement('button', {
+                    className: 'w-7 h-7 flex items-center justify-center text-charcoal hover:bg-terracottaSoft transition focus:outline-none',
+                  }, '+')
+                )
+              : React.createElement('button', {
+                  className: 'w-9 h-9 rounded-full bg-terracotta text-cream text-xs font-bold flex items-center justify-center hover:bg-terracottaDark transition focus:outline-none focus:ring-2 focus:ring-terracotta focus:ring-offset-2 focus:ring-offset-cream',
+                  'aria-label': 'Add ' + item.name,
+                },
+                  React.createElement('i', { 'data-lucide': 'plus', className: 'w-3.5 h-3.5' })
+                )
+          ),
+          React.createElement('button', {
+            className: 'w-7 h-7 rounded-full border border-border flex items-center justify-center text-charcoal hover:bg-terracottaSoft transition focus:outline-none focus:ring-2 focus:ring-terracotta',
+            'aria-label': bookmarked ? 'Remove bookmark' : 'Bookmark',
+          },
+            React.createElement('i', { 'data-lucide': 'heart', className: 'w-4 h-4', style: { fill: bookmarked ? '#b45439' : 'none', stroke: bookmarked ? 'none' : 'currentColor' } })
+          )
+        )
+      );
+    }
+
+    function MenuView() {
+      const [venueId, setVenueId] = useState(null);
+      const [query, setQuery] = useState('');
+      const [cart, setCart] = useState({});
+      const [itemBookmarks, setItemBookmarks] = useState(new Set());
+      const [venueBookmark, setVenueBookmark] = useState(false);
+      const [toast, setToast] = useState(null);
+      const [orderPlaced, setOrderPlaced] = useState(null);
+      const [activeCat, setActiveCat] = useState(null);
+      const catRefs = useRef({});
+
+      const menu = useMemo(() => venueId ? MENUS[venueId] : null, [venueId]);
+      const venue = useMemo(() => RESTAURANTS.find((r) => r.id === venueId), [venueId]);
+
+      const cartCount = useMemo(() => Object.values(cart).reduce((a, b) => a + b, 0), [cart]);
+      const cartTotal = useMemo(() => {
+        let total = 0;
+        Object.entries(cart).forEach(([id, qty]) => { total += (ALL_ITEMS[id].price || 0) * qty; });
+        return total;
+      }, [cart]);
+
+      const cartItems = useMemo(() =>
+        Object.entries(cart).map(([id, qty]) => ({ item: ALL_ITEMS[id], qty })), [cart]);
+
+      const itemsByCat = useMemo(() => {
+        const map = {};
+        menu && menu.categories.forEach((c) => { map[c.id] = menu.items.filter((i) => i.category === c.id); });
+        return map;
+      }, [menu]);
+
+      const toggleCart = useCallback((id, delta) => {
+        setCart((prev) => {
+          const next = { ...prev };
+          const newQty = (prev[id] || 0) + delta;
+          if (newQty <= 0) delete next[id]; else next[id] = newQty;
+          return next;
+        });
+        if (delta > 0) {
+          setToast('Added ' + ALL_ITEMS[id].name);
+          setTimeout(() => setToast(null), 2000);
+        }
+      }, []);
+
+      const toggleItemBookmark = (id) => {
+        setItemBookmarks((prev) => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      };
+
+      const handleCheckout = () => {
+        const orderId = 'H' + Math.floor(1000 + Math.random() * 9000);
+        setOrderPlaced(orderId);
+        setCart({});
+      };
+
+      const goBack = () => setVenueId(null);
+
+      useEffect(() => {
+        if (!menu) return;
+        const observer = new IntersectionObserver((entries) => {
+          const visible = entries.filter((e) => e.isIntersecting);
+          if (visible.length) setActiveCat(visible[0].target.id);
+        }, { threshold: 0.3, rootMargin: '-120px 0% -55% 0%' });
+        Object.values(catRefs).forEach((ref) => { if (ref.current) observer.observe(ref.current); });
+        return () => observer.disconnect();
+      }, [menu]);
+
+      if (!venue) return null;
+
+      return (
+        React.createElement('div', { className: 'min-h-screen bg-cream' },
+          React.createElement(Toast, { message: toast }),
+          orderPlaced ? (
+            React.createElement('div', { className: 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-cream p-6' },
+              React.createElement('i', { 'data-lucide': 'check-circle-2', className: 'w-16 h-16 text-veg mb-4' }),
+              React.createElement('h3', { className: 'font-display text-2xl font-bold text-charcoal mb-1' }, 'Order confirmed!'),
+              React.createElement('p', { className: 'text-[11px] text-muted mb-6' }, 'Thank you. Order #' + orderPlaced + ' is being prepared at ' + venue.name + '.'),
+              React.createElement('button', {
+                onClick: () => { setOrderPlaced(null); },
+                className: 'rounded-xl border border-border px-5 py-2 text-sm font-semibold text-charcoal hover:bg-terracottaSoft transition',
+              }, 'Browse more')
+            )
+          ) : (
+            React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'sticky top-0 z-20 border-b border-border bg-cream/90 backdrop-blur-sm' },
+                React.createElement('div', { className: 'max-w-7xl mx-auto px-4 py-3 flex items-center justify-between' },
+                  React.createElement('button', {
+                    onClick: goBack,
+                    className: 'w-9 h-9 rounded-xl border border-border flex items-center justify-center text-charcoal hover:bg-terracottaSoft transition focus:outline-none focus:ring-2 focus:ring-terracotta',
+                    'aria-label': 'Back',
+                  },
+                    React.createElement('i', { 'data-lucide': 'arrow-left', className: 'w-5 h-5' })
+                  ),
+                  React.createElement('div', { className: 'relative flex-1' },
+                    React.createElement('input', {
+                      type: 'text',
+                      placeholder: 'Search menu items...',
+                      value: query,
+                      onChange: (e) => setQuery(e.target.value),
+                      className: 'w-full pl-9 pr-3 py-2 bg-white border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition',
+                    }),
+                    React.createElement('i', { 'data-lucide': 'search', className: 'absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted' })
+                  ),
+                  React.createElement('button', {
+                    onClick: () => setVenueBookmark((p) => !p),
+                    className: `w-9 h-9 rounded-xl border border-border flex items-center justify-center text-charcoal hover:bg-terracottaSoft transition ${venueBookmark ? 'bg-terracotta text-cream border-transparent' : ''} focus:outline-none focus:ring-2 focus:ring-terracotta`,
+                    'aria-label': venueBookmark ? 'Remove bookmark' : 'Bookmark restaurant',
+                  },
+                    React.createElement('i', { 'data-lucide': 'heart', className: 'w-4.5 h-4.5', style: { fill: venueBookmark ? '#b45439' : 'none', stroke: venueBookmark ? 'none' : 'currentColor' } })
+                  )
+                )
+              ),
+              React.createElement('div', { className: 'relative h-56' },
+                React.createElement('img', {
+                  src: venue.image, alt: venue.name, className: 'w-full h-full object-cover', loading: 'lazy',
+                }),
+                React.createElement('div', { className: 'absolute inset-0 bg-gradient-to-t from-charcoal/85 via-charcoal/20 to-transparent' }),
+                React.createElement('div', { className: 'absolute bottom-0 left-0 w-full p-6 pb-10 text-white' },
+                  React.createElement('div', { className: 'flex items-end gap-2 mb-1' },
+                    React.createElement('h1', { className: 'font-display text-3xl font-semibold text-white tracking-tight leading-none' }, venue.name),
+                    React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/20 bg-white/10 text-[10px] font-bold text-white uppercase tracking-tighter' }, venue.price.replace(/₹/g, '₹'))
+                  ),
+                  React.createElement('p', { className: 'text-[#c9b9a8] text-[11px] font-medium' },
+                    venue.cuisine + ' · ' + venue.distance + ' · ' + venue.delivery + ' delivery'
+                  )
+                )
+              ),
+              React.createElement('div', { className: 'sticky top-14 z-10 border-b border-border bg-cream' },
+                React.createElement('div', { className: 'max-w-7xl mx-auto px-4 overflow-x-auto scrollbar-hide' },
+                  React.createElement('div', { className: 'flex gap-4' },
+                    menu.categories.map((cat) => {
+                      const active = activeCat === cat.id;
+                      return React.createElement('button', {
+                        key: cat.id,
+                        onClick: () => { setActiveCat(cat.id); catRefs[cat.id].current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+                        className: `px-3 py-2.5 border-b-2 text-sm font-semibold transition ${active ? 'border-terracotta text-charcoal' : 'border-transparent text-muted hover:bg-terracottaSoft'}`,
+                      }, cat.label);
+                    })
+                  )
+                )
+              ),
+              React.createElement('div', { className: 'max-w-7xl mx-auto px-4 pb-28' },
+                menu.categories.map((cat) => {
+                  const items = itemsByCat[cat.id].filter((i) => i.name.toLowerCase().includes(query.toLowerCase()) || i.desc.toLowerCase().includes(query.toLowerCase()));
+                  if (items.length === 0) return null;
+                  return (
+                    React.createElement('section', {
+                      key: cat.id,
+                      id: cat.id,
+                      ref: (el) => { catRefs[cat.id] = el; },
+                      className: 'scroll-mt-[150px] mb-16',
+                    },
+                      React.createElement('h2', { className: 'font-display text-lg font-semibold text-charcoal mb-4 flex items-center gap-2' },
+                        React.createElement('span', null, cat.label),
+                        React.createElement('span', { className: 'w-6 h-0.5 bg-border shrink-0' })
+                      ),
+                      React.createElement('div', { className: 'grid gap-4' },
+                        items.map((item) => {
+                          const itemQty = cart[item.id] || 0;
+                          return React.createElement(MenuItem, {
+                            key: item.id, item,
+                            bookmarked: itemBookmarks.has(item.id),
+                            qty: itemQty,
+                            inCart: itemQty > 0,
+                            onToggleCart: toggleCart,
+                            onToggleBookmark: toggleItemBookmark,
+                          })
+                        })
+                      )
+                    )
+                  )
+                }),
+                query &&
+                Object.values(itemsByCat).every((arr) => arr.filter((i) => i.name.toLowerCase().includes(query.toLowerCase()) || i.desc.toLowerCase().includes(query.toLowerCase())).length === 0) &&
+                React.createElement(EmptyState, { icon: 'search-x', title: 'No matching items', subtitle: 'Try a different dish or ingredient' })
+              ),
+              React.createElement('div', { className: 'fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-cream/95 backdrop-blur p-4 md:p-6 transition' },
+                cartCount === 0
+                  ? React.createElement('div', { className: 'p-6 text-center' },
+                      React.createElement('i', { 'data-lucide': 'shopping-basket', className: 'w-10 h-10 text-soft mx-auto mb-3' }),
+                      React.createElement('h3', { className: 'font-display text-lg font-semibold text-charcoal' }, 'Your cart is empty'),
+                      React.createElement('p', { className: 'text-[11px] text-muted mt-1' }, 'Add items from the menu to get started')
+                    )
+                  : React.createElement('div', { className: 'space-y-3' },
+                      React.createElement('div', { className: 'flex items-center justify-between mb-1' },
+                        React.createElement('span', { className: 'font-display text-sm font-semibold text-charcoal uppercase tracking-tighter' }, 'Your order'),
+                        React.createElement('span', { className: 'text-[11px] text-muted' }, cartCount + ' item' + (cartCount !== 1 ? 's' : ''))
+                      ),
+                      React.createElement('div', { className: 'max-h-44 overflow-y-auto pr-2 space-y-3 mb-2' },
+                        cartItems.map(({ item, qty }) =>
+                          React.createElement('div', { key: item.id, className: 'flex gap-2 items-center' },
+                            React.createElement('img', {
+                              src: item.image, alt: item.name, className: 'w-10 h-10 rounded-lg object-cover border border-border', loading: 'lazy',
+                            }),
+                            React.createElement('div', { className: 'flex-1 min-w-0' },
+                              React.createElement('div', { className: 'flex items-center justify-between' },
+                                React.createElement('span', { className: 'text-xs font-semibold text-charcoal leading-none' }, item.name),
+                                React.createElement('span', { className: 'text-xs font-semibold text-charcoal' }, '×' + qty)
+                              ),
+                              React.createElement('span', { className: 'text-[10px] text-muted' }, formatPrice(item.price * qty))
+                            ),
+                            React.createElement('button', {
+                              onClick: () => toggleCart(item.id, -qty),
+                              className: 'w-6 h-6 rounded-full border border-border flex items-center justify-center text-[10px] text-muted hover:text-terracotta hover:bg-terracottaSoft transition',
+                            }, '✕')
+                          )
+                        )
+                      ),
+                      React.createElement('div', { className: 'flex items-center justify-between mb-3 pt-3 border-t border-border' },
+                        React.createElement('span', { className: 'font-display text-base font-bold text-charcoal' }, 'Total'),
+                        React.createElement('span', { className: 'font-display text-base font-bold text-charcoal' }, formatPrice(cartTotal))
+                      ),
+                      React.createElement('button', {
+                        onClick: handleCheckout,
+                        className: 'w-full py-3 rounded-xl bg-terracotta text-cream font-semibold flex items-center justify-center gap-2 hover:bg-terracottaDark transition focus:outline-none focus:ring-2 focus:ring-terracotta focus:ring-offset-2 focus:ring-offset-cream',
+                      },
+                        React.createElement('span', null, 'Place order'),
+                        React.createElement('i', { 'data-lucide': 'arrow-right', className: 'w-4 h-4' })
+                      ),
+                      React.createElement('p', { className: 'text-[10px] text-muted text-center mt-2' }, 'Delivery in 28–35 mins · No platform fees')
+                    )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    /* ---------- App ---------- */
+    function App() {
+      const [view, setView] = useState('listing');
+      return (
+        React.createElement('div', { className: 'min-h-screen bg-cream' },
+          view === 'listing' ? React.createElement(Listing, null) : React.createElement(MenuView, null)
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+
+    const renderIcons = () => { if (window.lucide) window.lucide.createIcons(); };
+    renderIcons();
+    const obs = new MutationObserver(renderIcons);
+    obs.observe(document.getElementById('root'), { childList: true, subtree: true });
+  </script>
+</body>
+</html>
