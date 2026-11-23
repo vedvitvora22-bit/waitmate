@@ -2808,7 +2808,9 @@ async function submitReview() {
         restaurantId: currentReviewVenueId,
         restaurantName: currentReviewVenueName,
         rating: rating,
-        comment: comment
+        comment: comment,
+        ticket_id: activeTicketData ? activeTicketData.id : null,
+        guest_name: activeTicketData ? (activeTicketData.guest_name || activeTicketData.name) : null
       })
     });
 

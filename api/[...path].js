@@ -1088,6 +1088,17 @@ async function route(request, response, pathParts) {
       } catch (e) {}
       if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId].rated = true;
     }
+    const review = {
+      id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      restaurant_id: restaurantId,
+      restaurant_name: restaurantName,
+      rating: Number(rating),
+      stars: Number(rating),
+      comment: String(comment || '').trim(),
+      guest_name: String(body.guest_name || body.name || 'Guest').trim(),
+      ticket_id: ticketId || null,
+      created_at: Date.now()
+    };
     // recalc restaurant reliability
     try {
       const rest = await findRestaurantById(restaurantId);
@@ -1095,18 +1106,19 @@ async function route(request, response, pathParts) {
         let score = Number(rest.reliability_score || 90) + delta;
         score = Math.max(50, Math.min(99, score));
         const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
-        await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade })]);
+        // compute rating aggregates + recent checkins from persisted reviews
+        let reviews = [];
+        try {
+          const docs = await listCollection("reviews");
+          reviews = docs.filter(r => r.restaurant_id === restaurantId);
+        } catch (e) {}
+        reviews.push(review);
+        const ratingCount = reviews.length;
+        const avgRating = ratingCount ? reviews.reduce((s, r) => s + Number(r.rating || r.stars || 0), 0) / ratingCount : 0;
+        const recentCheckins = reviews.slice(-10).reverse();
+        await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade, rating_count: ratingCount, average_rating: avgRating, recent_checkins: recentCheckins, recent_reviews: recentCheckins })]);
       }
-    } catch (e) {}
-    const review = {
-      id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      restaurant_id: restaurantId,
-      restaurant_name: restaurantName,
-      rating: Number(rating),
-      comment: String(comment || '').trim(),
-      ticket_id: ticketId || null,
-      created_at: Date.now()
-    };
+    } catch (e) { console.warn("restaurant update failed:", e?.message || e); }
     try {
       await safeCommit([setDocument("reviews", review.id, review)]);
     } catch (error) {

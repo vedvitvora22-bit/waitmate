@@ -1,6 +1,6 @@
-// cache-bust-20261123-host-sync-v3
+// cache-bust-20261123-reviews-firestore-v5
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-host-sync-v3';
+const CACHE_NAME = 'waitmate-v20261123-reviews-firestore-v5';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

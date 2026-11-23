@@ -131,6 +131,7 @@ def init_db():
         restaurant_name TEXT NOT NULL,
         rating INTEGER NOT NULL, -- 1-5 stars
         comment TEXT,
+        ticket_id TEXT,
         created_at REAL NOT NULL
     )
     ''')
@@ -155,6 +156,12 @@ def init_db():
             c.execute(f'ALTER TABLE queue_entries ADD COLUMN {col_def}')
         except sqlite3.OperationalError:
             pass  # column already exists
+
+    # Migrate: add ticket_id to reviews for existing databases
+    try:
+        c.execute('ALTER TABLE reviews ADD COLUMN ticket_id TEXT')
+    except sqlite3.OperationalError:
+        pass  # column already exists
 
     # Seed initial data if empty
     c.execute('SELECT COUNT(*) FROM restaurants')
@@ -1425,7 +1432,12 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             q = c.fetchone()
             
             if not q:
-                # If ticket was cleared or created in prior session, restore gracefully so arrival works seamlessly
+                # If ticket was cleared or created in prior session, restore gracefully so arrival/seating works seamlessly.
+                # Rating/cancelling requires an existing ticket.
+                if action not in ("arrived", "delay", "seated"):
+                    conn.close()
+                    self.send_json({"error": "Ticket not found"}, 404)
+                    return
                 rest_id = data.get("restaurant_id", "rest-1")
                 name = data.get("customer_name", "Arrived Guest")
                 phone = ""
@@ -1475,6 +1487,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     conn.close()
                     self.send_json({"error": "Ticket not found"}, 404)
                     return
+                # Enforcement: only seated tickets can be rated
+                if q["status"] != "seated":
+                    conn.close()
+                    self.send_json({"error": "Ratings are only allowed after the diner has been seated (status must be 'seated')."}, 403)
+                    return
                 try:
                     stars = int(data.get("rating", 0) or 0)
                 except (TypeError, ValueError):
@@ -1485,6 +1502,12 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     return
                 comment = str(data.get("comment", "") or "")
                 c.execute('UPDATE queue_entries SET rated = 1, rating = ?, comment = ?, rated_at = ? WHERE id = ?', (stars, comment, time.time(), real_id))
+                rest_id = q["restaurant_id"] if q["restaurant_id"] else "rest-1"
+                rest_name = q["customer_name"] if q["customer_name"] else "Restaurant"
+                c.execute('''
+                    INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, ticket_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (f"rev-{int(time.time() * 1000)}", rest_id, rest_name, stars, comment, real_id, time.time()))
                 msg = "Thanks! Your rating has been saved."
             else:
                 conn.close()
@@ -1897,9 +1920,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             conn = get_db()
             c = conn.cursor()
             c.execute('''
-                INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (review_id, restaurant_id, restaurant_name, rating_int, comment, time.time()))
+                INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, ticket_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (review_id, restaurant_id, restaurant_name, rating_int, comment, data.get("ticket_id", ""), time.time()))
             conn.commit()
             conn.close()
 
