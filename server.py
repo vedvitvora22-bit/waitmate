@@ -1355,6 +1355,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             seating_pref = data.get("seating_pref", "First Available")
             special_req = data.get("special_requests", "")
             entry_type = data.get("entry_type", "remote")
+            has_arrived = 1 if entry_type == "walk_in" else 0
 
             if not rest_id or not name:
                 self.send_json({"error": "Missing required fields (restaurant_id, name)"}, 400)
@@ -1405,9 +1406,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             now = time.time()
             c.execute('''
             INSERT INTO queue_entries 
-            (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, special_req, entry_type, 'waiting', est_wait, now))
+            (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, has_arrived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, special_req, entry_type, 'waiting', est_wait, now, has_arrived))
             conn.commit()
             conn.close()
 
