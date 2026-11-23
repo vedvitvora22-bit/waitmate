@@ -3,13 +3,29 @@ let pendingUnlockVenueId = null;
 let restaurantsRefreshTimer = null;
 let restaurantsRefreshing = false;
 
+const PASSWORD_MODAL_IDS = [
+  'ownerPasswordModal',
+  'ownerChangePasswordModal',
+  'founderResetPasswordModal',
+  'founderChangePasswordModal',
+  'founderLoginModal',
+  'founderAddRestaurantModal'
+];
+
+function isAnyPasswordModalOpen() {
+  return PASSWORD_MODAL_IDS.some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+}
+
 // Refresh /api/restaurants every minute so all open browsers stay in sync
 // with the same server-computed waits and queue counts (values only change
 // per 5-minute bucket or when real diners join/leave).
 function startRestaurantsRefresh() {
   if (restaurantsRefreshTimer) return;
   restaurantsRefreshTimer = setInterval(async () => {
-    if (document.visibilityState !== 'visible' || restaurantsRefreshing) return;
+    if (document.visibilityState !== 'visible' || restaurantsRefreshing || isAnyPasswordModalOpen()) return;
     restaurantsRefreshing = true;
     try { await loadRestaurants(); } catch (err) { console.warn('Restaurants background refresh failed:', err); }
     finally { restaurantsRefreshing = false; }
@@ -296,6 +312,10 @@ let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
 
+// Seated-rating gating: a diner can only rate once they've been seated, and only once per visit
+let ratedTickets = new Set();
+const RATED_STORAGE_KEY = 'waitmate_rated_tickets';
+
 // Host Stand new-customer join alert tracking
 let seenHostTicketIds = new Set();
 let hostQueueInitializedFor = null;
@@ -504,6 +524,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         startTicketPolling();
       }
     }
+  } catch (e) { /* ignore corrupt storage */   }
+
+  // Restore already-rated tickets so a diner cannot rate the same visit twice after a reload
+  try {
+    const savedRated = JSON.parse(localStorage.getItem(RATED_STORAGE_KEY) || '[]');
+    if (Array.isArray(savedRated)) ratedTickets = new Set(savedRated);
   } catch (e) { /* ignore corrupt storage */ }
 
   // Deep link: ?venue=<id> auto-opens the join queue modal for that venue
@@ -517,6 +543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTicketPolling();
   }
   initFounderSecretTriggers();
+  initFbStarRating();
   lucide.createIcons();
 });
 
@@ -2256,8 +2283,8 @@ function updateTicketUI() {
     document.getElementById('step4Icon').className = "w-5 h-5 mx-auto rounded-full bg-blue-500 text-white flex items-center justify-center mb-1 font-bold";
     document.getElementById('step4Icon').textContent = "✓";
 
-    // Open post-seating feedback dialog once
-    if (!d._hasPromptedFeedback) {
+    // Open post-seating feedback dialog once (only if this visit hasn't been rated yet)
+    if (!d.rated && !d._hasPromptedFeedback) {
       d._hasPromptedFeedback = true;
       closeTicketModal();
       openFeedbackModal(d);
@@ -2331,6 +2358,27 @@ function clearCurrentTicket() {
   closeTicketModal();
 }
 
+// Seated-rating gate helpers
+function isTicketRated(ticketId) {
+  if (!ticketId) return false;
+  if (ratedTickets.has(ticketId)) return true;
+  return !!(activeTicketData && activeTicketData.id === ticketId && activeTicketData.rated);
+}
+
+function markTicketRated(ticketId) {
+  if (!ticketId) return;
+  ratedTickets.add(ticketId);
+  try {
+    localStorage.setItem(RATED_STORAGE_KEY, JSON.stringify([...ratedTickets]));
+  } catch (e) { /* ignore storage errors */ }
+  if (activeTicketData && activeTicketData.id === ticketId) {
+    activeTicketData.rated = true;
+    try {
+      localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+    } catch (e) { /* ignore */ }
+  }
+}
+
 function showAcknowledgedAlertBanner(mode) {
   const banner = document.getElementById('tableNearAlertBanner');
   if (!banner) return;
@@ -2349,15 +2397,18 @@ async function dinerArrivedAction() {
     return;
   }
 
-  // 1. Immediate optimistic UI state update
+  // 1. Immediate optimistic UI state update — "I'm at the Venue" confirms seating
   if (activeTicketData) {
     activeTicketData.has_arrived = 1;
-    activeTicketData.arrival_status = 'At Venue Entrance';
+    activeTicketData.arrival_status = 'Seated';
+    activeTicketData.status = 'seated';
+    activeTicketData.seated_at = Date.now();
+    activeTicketData.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(activeTicketData.joined_at || Date.now())) / 60000));
     acknowledgedAlertForTicket = currentTicketId || activeTicketData.id;
     graceUntil = null;
     activeTicketData._hasNearSoundPlayed = true;
     activeTicketData._hasNotifiedSound = true;
-    // Persist immediately to localStorage so cold starts don't lose arrival state
+    // Persist immediately to localStorage so cold starts don't lose seating state
     localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
     updateTicketUI();
     showAcknowledgedAlertBanner('entrance');
@@ -2365,7 +2416,7 @@ async function dinerArrivedAction() {
 
   const btn = document.getElementById('btnArrivedAction');
   if (btn) {
-    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Checked In at Entrance</span>`;
+    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Seated at the Venue</span>`;
     btn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
     lucide.createIcons();
   }
@@ -2374,9 +2425,9 @@ async function dinerArrivedAction() {
   try {
     const payload = {
       ticket_id: currentTicketId || (activeTicketData ? (activeTicketData.id || activeTicketData.ticket_number) : "WM-101"),
-      action: 'arrived',
+      action: 'seated',
       restaurant_id: activeTicketData ? activeTicketData.restaurant_id : 'rest-1',
-      customer_name: activeTicketData ? activeTicketData.customer_name : 'Arrived Guest',
+      customer_name: activeTicketData ? activeTicketData.customer_name : 'Seated Guest',
       phone: ''
     };
 
@@ -2390,20 +2441,22 @@ async function dinerArrivedAction() {
     let data = {};
     try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
     if (res.ok && data.success) {
-      showToast("Host notified that you are at the entrance!", "success");
+      showToast("You've been seated! Please rate your experience.", "success");
     } else {
       // Even on 404/error, local state is already updated - just show a softer message
-      showToast("Arrival registered with host stand.", "info");
+      showToast("Seating confirmed with host stand.", "info");
     }
 
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
     console.warn("Arrival sync warning:", err);
-    // Optimistic fallback: diner arrival confirmed locally
-    showToast("Host notified that you are at the entrance!", "success");
+    // Optimistic fallback: diner seating confirmed locally
+    showToast("You've been seated! Please rate your experience.", "success");
     if (activeTicketData) {
       activeTicketData.has_arrived = 1;
-      activeTicketData.arrival_status = 'At Venue Entrance';
+      activeTicketData.arrival_status = 'Seated';
+      activeTicketData.status = 'seated';
+      activeTicketData.seated_at = Date.now();
       localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
       updateTicketUI();
     }
@@ -2533,6 +2586,14 @@ async function openReliabilityModal(venueId) {
   currentReviewVenueId = venueId;
   currentReviewVenueName = r.name;
 
+  // 1–5 star rating is only available once the diner has been seated at this venue
+  const reviewWidget = document.getElementById('reviewWidget');
+  const seatedHere = activeTicketData && activeTicketData.status === 'seated' && activeTicketData.restaurant_id === venueId && !isTicketRated(activeTicketData.id);
+  if (reviewWidget) {
+    if (seatedHere) reviewWidget.classList.remove('hidden');
+    else reviewWidget.classList.add('hidden');
+  }
+
   // Initialize star rating widget
   initStarRatingWidget();
 
@@ -2568,6 +2629,42 @@ function initStarRatingWidget() {
 function updateStarDisplay(rating) {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
   const ratingDisplay = document.getElementById('starRatingDisplay');
+
+  starBtns.forEach(btn => {
+    const star = parseInt(btn.dataset.star);
+    if (star <= rating) {
+      btn.classList.remove('text-slate-300');
+      btn.classList.add('text-amber-400');
+    } else {
+      btn.classList.remove('text-amber-400');
+      btn.classList.add('text-slate-300');
+    }
+  });
+
+  if (rating > 0) {
+    ratingDisplay.textContent = `${rating} / 5`;
+  } else {
+    ratingDisplay.textContent = '';
+  }
+}
+
+function initFbStarRating() {
+  const starBtns = document.querySelectorAll('#fbStarRating .fb-star-btn');
+  const ratingInput = document.getElementById('fbStarInput');
+  const ratingDisplay = document.getElementById('fbStarDisplay');
+
+  starBtns.forEach(btn => {
+    btn.onclick = () => {
+      const star = parseInt(btn.dataset.star);
+      ratingInput.value = star;
+      updateFbStarDisplay(star);
+    };
+  });
+}
+
+function updateFbStarDisplay(rating) {
+  const starBtns = document.querySelectorAll('#fbStarRating .fb-star-btn');
+  const ratingDisplay = document.getElementById('fbStarDisplay');
 
   starBtns.forEach(btn => {
     const star = parseInt(btn.dataset.star);
@@ -2678,6 +2775,12 @@ async function submitReview() {
     return;
   }
 
+  const t = activeTicketData;
+  if (!t || t.status !== 'seated' || t.restaurant_id !== currentReviewVenueId || isTicketRated(t.id)) {
+    showToast("Star ratings are only available after you've been seated at this venue.", "error");
+    return;
+  }
+
   submitBtn.disabled = true;
   submitBtn.textContent = 'Submitting...';
 
@@ -2698,6 +2801,9 @@ async function submitReview() {
     if (!res.ok) throw new Error(data.error || 'Failed to submit review');
 
     showToast("Thanks! Your verified check-in is live.", "success");
+
+    // Mark this visit as rated so the prompt doesn't reappear
+    if (activeTicketData) markTicketRated(activeTicketData.id);
 
     // Reset widget
     resetReviewWidget();
@@ -2750,6 +2856,11 @@ function openFeedbackModal(ticket) {
   document.getElementById('fbRestaurantId').value = ticket.restaurant_id;
   document.getElementById('fbPromisedWait').textContent = `${ticket.estimated_wait_mins} mins`;
   document.getElementById('fbActualWait').textContent = `${ticket.actual_wait_mins || ticket.estimated_wait_mins} mins`;
+  // Reset the 1–5 star selector for this seated visit
+  document.getElementById('fbStarInput').value = '0';
+  updateFbStarDisplay(0);
+  document.getElementById('fbNoteInput').value = '';
+  selectFbRating('spot_on');
   document.getElementById('feedbackModal').classList.remove('hidden');
   lucide.createIcons();
 }
@@ -2822,6 +2933,7 @@ async function switchHostVenue(venueId) {
 }
 
 async function loadHostStand() {
+  if (isAnyPasswordModalOpen()) return;
   const savedPwd = getSavedHostPassword(currentHostVenueId);
   if (!savedPwd) {
     showOwnerDirectory();
