@@ -3,12 +3,16 @@ const {
   listCollection,
   getDocument,
   commitWrites,
-  setDocument
+  setDocument,
+  PROJECT_ID,
+  encodeSegment
 } = require("./_firestore");
 
 const now = Date.now();
 
 global._tickets = global._tickets || {};
+global._customRestaurants = global._customRestaurants || [];
+global._deletedRestaurantIds = global._deletedRestaurantIds || [];
 
 function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
@@ -126,29 +130,39 @@ async function safeCommit(writes) {
   }
 }
 
+function publicRestaurant(r) {
+  const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
+  delete merged.password_hash;
+  return merged;
+}
+
 async function ensureRestaurants() {
+  const deleted = global._deletedRestaurantIds || [];
+  const customList = (global._customRestaurants || [])
+    .filter(r => !deleted.includes(r.id))
+    .map(publicRestaurant);
   try {
     const restaurants = await listCollection("restaurants");
-    if (restaurants.length) {
-      return restaurants.map(r => {
-        const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
-        delete merged.password_hash;
-        return merged;
-      });
+    let merged = restaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
+    if (restaurants.length || customList.length) {
+      for (const c of customList) {
+        if (!merged.some(m => m.id === c.id)) merged.push(c);
+      }
+      return merged;
     }
     await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
-    return fallbackRestaurants.map(r => {
-      const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
-      delete merged.password_hash;
-      return merged;
-    });
+    merged = fallbackRestaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
+    for (const c of customList) {
+      if (!merged.some(m => m.id === c.id)) merged.push(c);
+    }
+    return merged;
   } catch (error) {
     if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      return fallbackRestaurants.map(r => {
-        const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
-        delete merged.password_hash;
-        return merged;
-      });
+      let merged = fallbackRestaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
+      for (const c of customList) {
+        if (!merged.some(m => m.id === c.id)) merged.push(c);
+      }
+      return merged;
     }
     throw error;
   }
@@ -608,6 +622,86 @@ async function route(request, response, pathParts) {
     const newState = !Boolean(restaurant.is_queue_open);
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
     return send(response, 200, { success: true, new_state: newState ? 1 : 0, message: "Restaurant queue state updated." });
+  }
+
+  if (request.method === "POST" && path === "/api/founder/restaurant/add") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const name = String(body.name || "").trim();
+    const category = String(body.category || "").trim();
+    const type = body.type || "restaurant";
+    const city = "Mumbai";
+    const address = String(body.address || "").trim();
+    const priceRange = body.price_range || "₹₹";
+    const password = String(body.password || "").trim();
+    const totalTables = Number(body.total_tables || 16);
+    const basePrepTime = Number(body.base_prep_time || 15);
+    const imageUrl = body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80";
+    const description = body.description || `Authentic ${category} located in ${city}.`;
+
+    if (!name || !address || !password) return send(response, 400, { error: "Restaurant name, address, and owner dashboard password are required." });
+    if (password.length < 4) return send(response, 400, { error: "Owner dashboard password must be at least 4 characters." });
+
+    const id = `rest-${Date.now()}`;
+    const restaurant = {
+      id,
+      name,
+      category,
+      type,
+      city,
+      address,
+      distance_km: 1.0,
+      price_range: priceRange,
+      image_url: imageUrl,
+      description,
+      password_hash: hashPassword(password),
+      base_prep_time: basePrepTime,
+      available_tables: Math.max(1, Math.floor(totalTables / 4)),
+      total_tables: totalTables,
+      manual_override_wait: null,
+      is_queue_open: true,
+      reliability_score: 94,
+      created_at: Date.now()
+    };
+
+    await safeCommit([setDocument("restaurants", id, restaurant)]);
+
+    global._customRestaurants = global._customRestaurants || [];
+    const publicCopy = { ...restaurant };
+    delete publicCopy.password_hash;
+    global._customRestaurants.push(publicCopy);
+
+    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
+  }
+
+  if (request.method === "POST" && path === "/api/founder/restaurant/delete") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+
+    // Remove queue entries for this restaurant from Firestore
+    try {
+      const entries = await listCollection("queue_entries");
+      const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
+        delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
+      }));
+      if (deletes.length) await safeCommit(deletes);
+    } catch (error) {
+      if (!(error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError)) throw error;
+    }
+
+    // Remove the restaurant document from Firestore
+    try {
+      await safeCommit([{ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
+    } catch (error) {
+      if (!(error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError)) throw error;
+    }
+
+    // Tombstone so deleted venues stay deleted even without Firestore
+    global._deletedRestaurantIds = global._deletedRestaurantIds || [];
+    if (!global._deletedRestaurantIds.includes(restaurantId)) global._deletedRestaurantIds.push(restaurantId);
+    global._customRestaurants = (global._customRestaurants || []).filter(r => r.id !== restaurantId);
+
+    return send(response, 200, { success: true, message: "Restaurant removed from WaitMate Mumbai network." });
   }
 
   if (request.method === "POST" && path === "/api/owner/restaurants/create") {

@@ -164,5 +164,7 @@ module.exports = {
   commitWrites,
   setDocument,
   toFirestoreFields,
-  fromFirestoreFields
+  fromFirestoreFields,
+  PROJECT_ID,
+  encodeSegment
 };

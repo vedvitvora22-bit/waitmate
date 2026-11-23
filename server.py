@@ -1542,6 +1542,74 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             self.send_json({"success": True, "message": "Restaurant password has been reset."})
             return
 
+        # API: Founder Add New Restaurant
+        if path == "/api/founder/restaurant/add":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            data = self.read_json_body()
+            name = str(data.get("name", "")).strip()
+            category = str(data.get("category", "")).strip()
+            v_type = str(data.get("type", "restaurant")).strip()
+            city = str(data.get("city", "Mumbai") or "Mumbai").strip()
+            address = str(data.get("address", "")).strip()
+            price_range = str(data.get("price_range", "₹₹")).strip()
+            password = str(data.get("password", "")).strip()
+            total_tables = int(data.get("total_tables", 16) or 16)
+            base_prep_time = int(data.get("base_prep_time", 15) or 15)
+            image_url = str(data.get("image_url", "")).strip() or "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80"
+            description = str(data.get("description", "")).strip() or f"Authentic {category} located in {city}."
+
+            if not name or not address or not password:
+                self.send_json({"error": "Restaurant name, address, and owner dashboard password are required."}, 400)
+                return
+            if len(password) < 4:
+                self.send_json({"error": "Owner dashboard password must be at least 4 characters."}, 400)
+                return
+
+            rest_id = f"rest-{int(time.time() * 1000)}"
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''
+            INSERT INTO restaurants 
+            (id, name, category, type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, available_tables, total_tables, manual_override_wait, is_queue_open, created_at, password_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (rest_id, name, category, v_type, city, address, 1.0, price_range, image_url, description, "Owner", "+91 98450 12345", base_prep_time, max(1, total_tables // 4), total_tables, None, 1, time.time(), hash_password(password)))
+            conn.commit()
+            conn.close()
+
+            self.send_json({
+                "success": True,
+                "restaurant_id": rest_id,
+                "message": f"Congratulations! '{name}' is now live on WaitMate India.",
+                "restaurant": {"id": rest_id, "name": name, "category": category, "city": city, "address": address}
+            })
+            return
+
+        # API: Founder Remove Restaurant
+        if path == "/api/founder/restaurant/delete":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT id FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            c.execute('DELETE FROM queue_entries WHERE restaurant_id = ?', (rest_id,))
+            c.execute('DELETE FROM restaurants WHERE id = ?', (rest_id,))
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Restaurant removed from WaitMate Mumbai network."})
+            return
+
         # API: Owner Change Password
         if path == "/api/host/change-password":
             data = self.read_json_body()
