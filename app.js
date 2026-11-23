@@ -3328,6 +3328,18 @@ async function updateHostAnnouncement(announcement = null) {
   }
 }
 
+// Resolve a queue entry's join moment (accepts ms or seconds stamps) and format
+// it as an Asia/Kolkata IST time plus a relative "Xm ago" string for the owner
+// Host Stand waitlist rows.
+function hostJoinInfo(q) {
+  const raw = q.joined_at_ms !== undefined && q.joined_at_ms !== null ? q.joined_at_ms : (q.joined_at !== undefined && q.joined_at !== null ? q.joined_at : Date.now());
+  const ms = Number(raw) > 1e12 ? Number(raw) : Number(raw) * 1000;
+  const ist = isNaN(ms) ? '--:--' : new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+  const mins = isNaN(ms) ? 0 : Math.floor((Date.now() - ms) / 60000);
+  const relative = mins < 1 ? 'just now' : `${mins}m ago`;
+  return { ist, relative, ms };
+}
+
 function renderHostDashboard() {
   if (!hostData) return;
   const r = hostData.restaurant;
@@ -3386,7 +3398,11 @@ function renderHostDashboard() {
       statusPill = `<span class="badge-tag bg-rose-100 text-rose-800">${q.status}</span>`;
     }
 
-    const elapsedMins = Math.floor((Date.now() / 1000 - q.joined_at) / 60);
+    const join = hostJoinInfo(q);
+    const channel = q.channel || q.entry_type || 'remote';
+    const isWalkIn = channel === 'walk_in' || channel === 'walkin' || channel === 'walk-in';
+    const channelLabel = isWalkIn ? '🚶 Walk-In' : '🌐 Remote Join';
+    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
 
     return `
       <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
@@ -3396,7 +3412,8 @@ function renderHostDashboard() {
             <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-[10px]">#${idx + 1}</span>
             <span>${q.ticket_number}</span>
           </div>
-          <span class="text-[10px] text-slate-400 font-sans block">${q.entry_type === 'remote' ? '📱 Remote App' : '🚶 Walk-in'}</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${channelClass}">${channelLabel}</span>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
         </td>
 
         <td class="py-3 px-4">
@@ -3410,7 +3427,7 @@ function renderHostDashboard() {
         </td>
 
         <td class="py-3 px-4">
-          <div class="text-slate-800 font-medium">Joined ${elapsedMins}m ago</div>
+          <div class="text-slate-800 font-medium">Joined ${join.relative}</div>
           <div class="text-[10px] text-slate-500">Promised: ${q.estimated_wait_mins}m</div>
         </td>
 

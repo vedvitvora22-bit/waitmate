@@ -196,7 +196,7 @@ function normalizeQueueEntry(raw) {
     has_arrived: Boolean(pick("11_has_arrived", "has_arrived")),
     promised_wait_mins: Number(promisedRaw || 0),
     estimated_wait_mins: Number(promisedRaw || 0),
-    joined_time_ist: pick("13_joined_time_ist", "joined_time_ist") || null,
+    joined_time_ist: pick("13_joined_time_ist", "joined_time_ist") || (joinedMs ? formatIST(joinedMs) : null),
     arrived_time_ist: pick("14_arrived_time_ist", "arrived_time_ist") || null,
     notified_time_ist: pick("15_notified_time_ist", "notified_time_ist") || null,
     seated_time_ist: pick("16_seated_time_ist", "seated_time_ist") || null,

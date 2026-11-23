@@ -1,6 +1,6 @@
-// cache-bust-20261124-seated-modal-owner-fix-v14
+// cache-bust-20261124-host-queue-join-time-channel-v15
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-seated-modal-owner-fix-v14';
+const CACHE_NAME = 'waitmate-v20261124-host-queue-join-time-channel-v15';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
