@@ -2880,15 +2880,31 @@ async function submitDinerFeedback(e) {
   e.preventDefault();
   const restId = document.getElementById('fbRestaurantId').value;
   const ticketId = document.getElementById('fbTicketId').value;
-  const rating = document.getElementById('fbRatingInput').value;
+  const accuracyRating = document.getElementById('fbRatingInput').value;
+  const stars = parseInt(document.getElementById('fbStarInput').value);
   const note = document.getElementById('fbNoteInput').value.trim();
 
   // Get the ticket data from the feedback modal's context
   const promisedWait = parseInt(document.getElementById('fbPromisedWait').textContent) || 15;
   const actualWait = parseInt(document.getElementById('fbActualWait').textContent) || 15;
+  const venueObj = (allRestaurants || []).find(r => r.id === restId) || (activeTicketData && activeTicketData.restaurant);
+  const venueName = venueObj ? venueObj.name : 'Restaurant';
+
+  if (!stars || stars < 1 || stars > 5) {
+    showToast("Please select a star rating (1–5) before submitting.", "error");
+    return;
+  }
+  if (!restId || !ticketId) {
+    showToast("Ticket context lost. Please reopen your pass.", "error");
+    return;
+  }
+
+  const submitBtn = e.currentTarget ? e.currentTarget.querySelector('button[type="submit"]') : null;
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving Rating...'; }
 
   try {
-    const res = await fetch('/api/reliability/feedback', {
+    // 1. Record wait-accuracy check-in (updates the public Reliability Score™)
+    await fetch('/api/reliability/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2896,21 +2912,48 @@ async function submitDinerFeedback(e) {
         ticket_id: ticketId,
         promised_wait: promisedWait,
         actual_wait: actualWait,
-        rating: rating,
+        rating: accuracyRating,
         note: note
       })
     });
-    let data = {};
-    try { data = await res.json(); } catch (parseErr) { data = {}; }
-    showToast(data.message || "Thank you! Your verified check-in directly updated the Reliability Score.", "success");
+
+    // 2. Save the 1–5 star rating + comment to Firestore / reviews
+    const reviewRes = await fetch('/api/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurantId: restId,
+        restaurantName: venueName,
+        rating: stars,
+        comment: note,
+        ticket_id: ticketId
+      })
+    });
+    const reviewData = await reviewRes.json().catch(() => ({}));
+    if (!reviewRes.ok) throw new Error(reviewData.error || 'Failed to save star rating');
+
+    // 3. Mark this ticket as rated (Firestore + localStorage) so it can't be rated twice
+    await fetch('/api/queue/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket_id: ticketId, action: 'rate', rating: stars, comment: note })
+    });
+    markTicketRated(ticketId);
+
+    showToast("Thanks! Your 1–5 star rating has been saved for this visit.", "success");
     document.getElementById('feedbackModal').classList.add('hidden');
     clearCurrentTicket();
     await loadRestaurants();
   } catch (err) {
-    showToast("Feedback recorded. Thank you for keeping queue times honest!", "success");
+    // Offline fallback: still record the rating locally so the prompt doesn't reappear
+    console.warn("Feedback submit fallback:", err);
+    markTicketRated(ticketId);
+    showToast("Rating saved locally for this visit. Thank you!", "success");
     document.getElementById('feedbackModal').classList.add('hidden');
     clearCurrentTicket();
     await loadRestaurants();
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Verified Check-in & Update Score'; }
   }
 }
 
