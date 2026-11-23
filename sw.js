@@ -1,6 +1,6 @@
-// cache-bust-20261124-seating-rating
+// cache-bust-20261123-deterministic-waits
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-seating-rating';
+const CACHE_NAME = 'waitmate-v20261123-deterministic-waits';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
