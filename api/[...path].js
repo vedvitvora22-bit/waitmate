@@ -436,7 +436,8 @@ async function route(request, response, pathParts) {
     const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
     const estWait = Number.isFinite(liveStats.estimated_wait_mins) ? liveStats.estimated_wait_mins : 10;
 
-    const ticketId = `q-${Date.now().toString().slice(-6)}`;
+    const revTs = String(9999999999999 - Date.now()).padStart(13, "0");
+    const ticketId = `q-${revTs}-${Math.floor(100 + Math.random() * 900)}`;
     const ticketNumber = `WM-${entries.length + 101}`;
     const joinedAt = Date.now();
     const partySize = Number(body.party_size || 2);
@@ -896,9 +897,10 @@ async function route(request, response, pathParts) {
       let firestoreWalkinEntries = [];
       try { firestoreWalkinEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
       const entries = allQueueEntries(firestoreWalkinEntries);
-      const ticketId = `q-${Date.now().toString().slice(-6)}`;
       const ticketNumber = `WM-${entries.length + 101}`;
-      const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), notified_at: null, seated_at: null, has_arrived: true, delay_mins: 0 };
+      const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
+    const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", channel: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), joined_time_ist: formatIST(Date.now()), notified_at: null, seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, ticket)]);
       } catch (error) {
@@ -1153,6 +1155,10 @@ async function route(request, response, pathParts) {
   return send(response, 404, { error: "Endpoint not found" });
 }
 
+
+function formatIST(ms) {
+  return new Date(ms).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) + " IST";
+}
 module.exports = async function handler(request, response) {
   if (request.method === "OPTIONS") return send(response, 204, {});
 
