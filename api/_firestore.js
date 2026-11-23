@@ -40,32 +40,118 @@ function fromFirestoreFields(fields) {
   return object;
 }
 
+function parseServiceAccount(raw) {
+  if (!raw || typeof raw !== "string") {
+    return { error: "FIREBASE_SERVICE_ACCOUNT is empty or not a string" };
+  }
+
+  let str = raw.trim();
+
+  // 1. Check if Base64 encoded
+  if (!str.startsWith("{")) {
+    try {
+      const decoded = Buffer.from(str, "base64").toString("utf8").trim();
+      if (decoded.startsWith("{")) {
+        str = decoded;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Strip single quotes, backticks, or outer double quotes if string was wrapped
+  if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith("`") && str.endsWith("`"))) {
+    str = str.slice(1, -1).trim();
+  } else if (str.startsWith('"') && str.endsWith('"') && !str.startsWith('{"')) {
+    try {
+      str = JSON.parse(str).trim();
+    } catch (_) {
+      str = str.slice(1, -1).trim();
+    }
+  }
+
+  // 3. Attempt direct JSON parse
+  let parsed = null;
+  let parseError = null;
+  try {
+    parsed = JSON.parse(str);
+  } catch (e1) {
+    parseError = e1;
+  }
+
+  // 4. Handle unescaped control chars / newlines inside string literals
+  if (!parsed) {
+    try {
+      const fixed = str.replace(/\r?\n/g, "\\n");
+      parsed = JSON.parse(fixed);
+    } catch (e2) {
+      try {
+        const unescaped = str.replace(/\\\\n/g, "\\n");
+        parsed = JSON.parse(unescaped);
+      } catch (e3) {
+        // 5. Fallback regex extractor for crucial service account fields
+        const emailMatch = str.match(/"client_email"\s*:\s*"([^"]+)"/);
+        const keyMatch = str.match(/"private_key"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*})/);
+        const projectMatch = str.match(/"project_id"\s*:\s*"([^"]+)"/);
+        if (emailMatch && keyMatch) {
+          parsed = {
+            client_email: emailMatch[1],
+            private_key: keyMatch[1],
+            project_id: projectMatch ? projectMatch[1] : PROJECT_ID
+          };
+        } else {
+          return { error: `JSON parse error: ${parseError?.message || e2?.message || "Invalid JSON"}` };
+        }
+      }
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return { error: "Service account is not a valid JSON object" };
+  }
+
+  if (!parsed.client_email) {
+    return { error: "Service account JSON is missing client_email" };
+  }
+
+  if (!parsed.private_key) {
+    return { error: "Service account JSON is missing private_key" };
+  }
+
+  // 6. Ensure private_key has real newline characters for OpenSSL PEM parsing
+  let privateKey = String(parsed.private_key);
+  if (privateKey.includes("\\n")) {
+    privateKey = privateKey.replace(/\\n/g, "\n");
+  }
+  privateKey = privateKey.replace(/\r/g, "");
+
+  parsed.private_key = privateKey;
+  return { credentials: parsed };
+}
+
 async function getAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiry) return cachedAccessToken;
 
-  const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!rawCredentials) {
-    const err = new Error("Firebase credentials not configured");
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT ||
+              process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+              process.env.FIREBASE_CREDENTIALS ||
+              process.env.FIREBASE_CONFIG ||
+              process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+  if (!raw) {
+    const presentKeys = Object.keys(process.env).filter(k => 
+      k.includes("FIREBASE") || k.includes("GOOGLE") || k.includes("SERVICE")
+    );
+    const err = new Error(
+      presentKeys.length 
+        ? `FIREBASE_SERVICE_ACCOUNT not set (detected env keys: ${presentKeys.join(", ")})` 
+        : "FIREBASE_SERVICE_ACCOUNT environment variable is not configured"
+    );
     err.status = 503;
     throw err;
   }
 
-  let credentials;
-  try {
-    credentials = JSON.parse(rawCredentials);
-  } catch (parseError) {
-    try {
-      const fixedCredentials = rawCredentials.replace(/\r?\n/g, "\\n");
-      credentials = JSON.parse(fixedCredentials);
-    } catch {
-      const err = new Error("Firebase credentials not configured");
-      err.status = 503;
-      throw err;
-    }
-  }
-
-  if (!credentials.client_email || !credentials.private_key) {
-    const err = new Error("Firebase credentials not configured");
+  const { credentials, error: parseError } = parseServiceAccount(raw);
+  if (parseError || !credentials) {
+    const err = new Error(`Firebase credentials invalid: ${parseError}`);
     err.status = 503;
     throw err;
   }
@@ -80,7 +166,15 @@ async function getAccessToken() {
     exp: now + 3600
   })).toString("base64url");
   const unsignedToken = `${header}.${payload}`;
-  const signature = crypto.sign("RSA-SHA256", Buffer.from(unsignedToken), credentials.private_key).toString("base64url");
+
+  let signature;
+  try {
+    signature = crypto.sign("RSA-SHA256", Buffer.from(unsignedToken), credentials.private_key).toString("base64url");
+  } catch (signErr) {
+    const err = new Error(`RSA signing failed: ${signErr.message}. Verify private_key formatting.`);
+    err.status = 503;
+    throw err;
+  }
 
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -91,7 +185,12 @@ async function getAccessToken() {
     })
   });
   const tokenData = await tokenResponse.json();
-  if (!tokenResponse.ok) throw new Error(tokenData.error_description || tokenData.error || "Firebase authentication failed");
+  if (!tokenResponse.ok) {
+    const msg = tokenData.error_description || tokenData.error || `HTTP ${tokenResponse.status}`;
+    const err = new Error(`Google OAuth2 authentication failed: ${msg}`);
+    err.status = 503;
+    throw err;
+  }
 
   cachedAccessToken = tokenData.access_token;
   cachedAccessTokenExpiry = Date.now() + Math.max(60, Number(tokenData.expires_in || 3600) - 300) * 1000;

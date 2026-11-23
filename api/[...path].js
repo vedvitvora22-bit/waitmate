@@ -306,6 +306,7 @@ async function route(request, response, pathParts) {
     const deleted = global._deletedRestaurantIds || [];
     return send(response, 200, {
       storage,
+      storage_status: storage === "firebase_firestore" ? "firebase" : "memory",
       reason,
       restaurants: restaurants.filter(r => !deleted.includes(r.id)).length,
       active_queue_entries: Object.values(byId).filter(e => ["waiting", "notified", "delayed"].includes(e.status)).length,
@@ -322,7 +323,7 @@ async function route(request, response, pathParts) {
       await listCollection("restaurants");
     } catch (error) {
       storageStatus = "memory";
-      storageReason = String(error.message || error || "Firebase unreachable").slice(0, 120);
+      storageReason = String(error.message || error || "Firebase unreachable").slice(0, 250);
     }
     const restaurants = await ensureRestaurants();
     let firestoreEntries = [];
@@ -338,7 +339,9 @@ async function route(request, response, pathParts) {
     }
     const body = { 
       restaurants: result,
-      storage_status: storageReason ? `memory: ${storageReason}` : "firebase"
+      storage_status: storageReason ? `memory: ${storageReason}` : "firebase",
+      storage_backend: storageStatus,
+      ...(storageReason ? { storage_error: storageReason, storage_reason: storageReason } : {})
     };
     return send(response, 200, body);
   }
