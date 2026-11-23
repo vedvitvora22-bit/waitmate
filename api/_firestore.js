@@ -257,7 +257,7 @@ async function commitWrites(writes) {
 
 function setDocument(collection, id, fields) {
   return {
-    set: {
+    update: {
       name: `projects/${PROJECT_ID}/databases/(default)/documents/${encodeSegment(collection)}/${encodeSegment(id)}`,
       fields: toFirestoreFields(fields)
     }
