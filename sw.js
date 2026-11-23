@@ -1,16 +1,32 @@
-// cache-bust-20261123-full-polish-v3
+// cache-bust-20261123-unfreeze
 // WaitMate India — Service Worker
-// Handles background push notifications for "Table is Near" and "Table Ready" alerts
+const CACHE_NAME = 'waitmate-v20261123-unfreeze';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => clients.claim())
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(event.request).then((cached) => {
+        const network = fetch(event.request).then((res) => {
+          if (res && res.status === 200 && event.request.method === 'GET') {
+            cache.put(event.request, res.clone());
+          }
+          return res;
+        }).catch(() => cached);
+        return cached || network;
+      })
+    )
   );
 });
 
@@ -37,7 +53,6 @@ self.addEventListener('notificationclick', (event) => {
   const url = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
 
   if (event.action === 'arrived') {
-    // Post message to any open client tab to trigger arrived action
     event.waitUntil(
       clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
         for (const client of clientList) {
