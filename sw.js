@@ -1,4 +1,4 @@
-// cache-bust-20261123-download-qr-png
+// cache-bust-20261123-dynamic-wait-algo
 // WaitMate India — Service Worker
 // Handles background push notifications for "Table is Near" and "Table Ready" alerts
 
