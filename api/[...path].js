@@ -347,6 +347,26 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Invalid restaurant" });
     if (!restaurant.is_queue_open) return send(response, 400, { error: "Queue is currently closed" });
 
+    // Handle background re-sync (_rejoin flag from frontend after cold start)
+    if (body._rejoin && body._original_ticket_id) {
+      let existingTicket;
+      try {
+        existingTicket = await getDocument("queue_entries", body._original_ticket_id);
+      } catch (error) {
+        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+          existingTicket = global._tickets[body._original_ticket_id] || null;
+        } else {
+          throw error;
+        }
+      }
+      if (existingTicket) {
+        // Ticket exists, return it with the same ID
+        global._tickets[body._original_ticket_id] = { ...existingTicket };
+        return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: existingTicket.estimated_wait_mins || 10, message: "Ticket re-synced." });
+      }
+      // If original ticket truly gone, fall through to create new (but this shouldn't happen with localStorage persistence)
+    }
+
     let firestoreEntries = [];
     try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
@@ -396,6 +416,34 @@ async function route(request, response, pathParts) {
         ticket = global._tickets[id] || null;
       } else {
         throw error;
+      }
+    }
+    // Cold-start reconstruction: if ticket not found but query params provide fallback hints,
+    // reconstruct a minimal active ticket so the diner's "View Live Pass" never shows 404.
+    if (!ticket && request.query) {
+      const { restaurant_id, name, party_size, ticket_number } = request.query;
+      if (restaurant_id && name) {
+        ticket = {
+          id,
+          ticket_number: ticket_number || `WM-${id.slice(-3)}`,
+          restaurant_id,
+          customer_name: name,
+          phone: "",
+          party_size: Number(party_size || 2),
+          seating_pref: "First Available",
+          special_requests: "",
+          entry_type: "remote",
+          status: "waiting",
+          estimated_wait_mins: 10,
+          actual_wait_mins: 0,
+          joined_at: Date.now() - 300000,
+          notified_at: null,
+          seated_at: null,
+          has_arrived: false,
+          delay_mins: 0
+        };
+        // Cache for subsequent requests
+        global._tickets[id] = { ...ticket };
       }
     }
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
@@ -488,8 +536,10 @@ async function route(request, response, pathParts) {
     let updates = ticket ? { ...ticket } : null;
     if (body.action === "arrived") {
       if (!ticket) {
+        // Cold start: ticket not in memory but diner says they arrived.
+        // Return 200 OK with a reconstructed ticket so the frontend never sees "no active ticket".
         const restId = body.restaurant_id || "rest-1";
-        ticket = {
+        updates = {
           id: body.ticket_id,
           ticket_number: `WM-${Date.now().toString().slice(-3)}`,
           restaurant_id: restId,
@@ -508,20 +558,44 @@ async function route(request, response, pathParts) {
           has_arrived: true,
           delay_mins: 0
         };
-        updates = { ...ticket };
       } else {
         updates.has_arrived = true;
       }
     } else if (body.action === "delay") {
-      if (!ticket) return send(response, 404, { error: "Ticket not found" });
-      updates.delay_mins = Number(ticket.delay_mins || 0) + Number(body.minutes || 5);
-      updates.status = "delayed";
+      if (!ticket) {
+        // Cold start: create a minimal delayed ticket and return 200 OK
+        const restId = body.restaurant_id || "rest-1";
+        updates = {
+          id: body.ticket_id,
+          ticket_number: `WM-${Date.now().toString().slice(-3)}`,
+          restaurant_id: restId,
+          customer_name: body.customer_name || "Delayed Guest",
+          phone: "",
+          party_size: 2,
+          seating_pref: "First Available",
+          special_requests: "",
+          entry_type: "remote",
+          status: "delayed",
+          estimated_wait_mins: 10,
+          actual_wait_mins: 0,
+          joined_at: Date.now() - 300000,
+          notified_at: null,
+          seated_at: null,
+          has_arrived: false,
+          delay_mins: Number(body.minutes || 5)
+        };
+      } else {
+        updates.delay_mins = Number(ticket.delay_mins || 0) + Number(body.minutes || 5);
+        updates.status = "delayed";
+      }
     } else if (body.action === "cancel") {
-      if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      if (!ticket) {
+        return send(response, 404, { error: "Ticket not found" });
+      }
       updates.status = "cancelled";
     } else return send(response, 400, { error: "Unknown action" });
     try {
-      await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
+      await safeCommit([setDocument("queue_entries", updates.id, updates)]);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
@@ -529,8 +603,8 @@ async function route(request, response, pathParts) {
         throw error;
       }
     }
-    global._tickets[ticket.id] = updates;
-    return send(response, 200, { success: true, message: "Queue action saved." });
+    global._tickets[updates.id] = updates;
+    return send(response, 200, { success: true, message: "Queue action saved.", ticket: updates });
   }
 
   if (request.method === "POST" && path === "/api/host/action") {

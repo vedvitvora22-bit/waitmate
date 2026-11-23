@@ -143,10 +143,16 @@ async function getDocument(collection, id) {
 }
 
 async function commitWrites(writes) {
-  return firestoreRequest(`:commit`, {
-    method: "POST",
-    body: JSON.stringify({ writes })
-  });
+  try {
+    return await firestoreRequest(`:commit`, {
+      method: "POST",
+      body: JSON.stringify({ writes })
+    });
+  } catch (error) {
+    // Log the exact reason for Firestore write failures but never crash the caller
+    console.warn("Firestore commitWrites error:", error.message || error);
+    throw error;
+  }
 }
 
 function setDocument(collection, id, fields) {

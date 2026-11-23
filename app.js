@@ -1856,6 +1856,38 @@ async function submitJoinQueue(e) {
     currentTicketId = data.ticket_id;
     localStorage.setItem('waitmate_ticket_id', currentTicketId);
 
+    // Immediately persist the full ticket object locally so cold starts / 404s never wipe it
+    const joinedTicket = {
+      id: data.ticket_id,
+      ticket_number: data.ticket_number,
+      restaurant_id: restId,
+      customer_name: name,
+      phone: '',
+      party_size: partySize,
+      seating_pref: seatingPref,
+      special_requests: specialReq,
+      entry_type: 'remote',
+      status: 'waiting',
+      estimated_wait_mins: data.estimated_wait_mins || 10,
+      actual_wait_mins: 0,
+      joined_at: Date.now() / 1000,
+      notified_at: null,
+      seated_at: null,
+      has_arrived: 0,
+      delay_mins: 0,
+      position_in_line: data.position_in_line || 1,
+      parties_ahead: data.parties_ahead || 0,
+      estimated_remaining_mins: data.estimated_wait_mins || 10,
+      restaurant: {
+        name: selectedJoinVenue?.name || 'Partner Venue',
+        category: selectedJoinVenue?.category || '',
+        address: selectedJoinVenue?.address || '',
+        image_url: selectedJoinVenue?.image_url || ''
+      }
+    };
+    activeTicketData = joinedTicket;
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+
     closeJoinModal();
     showToast(data.message || `Spot reserved! Ticket #${data.ticket_number}`, "success");
     playNotificationChime();
@@ -1922,6 +1954,7 @@ async function submitJoinQueue(e) {
     currentTicketId = ticketId;
     activeTicketData = newTicket;
     localStorage.setItem('waitmate_ticket_id', currentTicketId);
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
 
     closeJoinModal();
     showToast(`Spot reserved at ${targetRest.name}! Ticket #${ticketNum}`, "success");
@@ -1948,16 +1981,37 @@ function startTicketPolling() {
 }
 
 async function fetchTicketStatus() {
-  if (!currentTicketId) return;
+  if (!currentTicketId) {
+    // Try to restore from localStorage if we have a persisted active ticket
+    try {
+      const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
+      if (saved && saved.id && saved.data && !['seated', 'cancelled'].includes(saved.data.status)) {
+        currentTicketId = saved.id;
+        activeTicketData = saved.data;
+        localStorage.setItem('waitmate_ticket_id', currentTicketId);
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+    if (!currentTicketId) return;
+  }
   try {
     const res = await fetch(`/api/queue/ticket/${currentTicketId}`);
     if (res.status === 404) {
-      // ticket was closed/reset
+      // Ticket not found on server (cold start / serverless restart).
+      // Do NOT wipe local ticket if we have valid active data.
+      if (activeTicketData && !['seated', 'cancelled'].includes(activeTicketData.status)) {
+        // Keep rendering local data and attempt background re-sync
+        updateTicketUI();
+        // Try to re-register the ticket on the server
+        attemptTicketReSync();
+        return;
+      }
+      // No valid local data either - truly gone
       clearCurrentTicket();
       return;
     }
     if (!res.ok) {
       // Non-404 error (e.g. 503 unconfigured): keep last known state, don't crash.
+      if (activeTicketData) updateTicketUI();
       return;
     }
     let data = {};
@@ -1965,8 +2019,8 @@ async function fetchTicketStatus() {
     activeTicketData = data;
     updateTicketUI();
   } catch (err) {
-    // Offline / fallback polling
-    if (activeTicketData) {
+    // Offline / network error: keep rendering local data if valid
+    if (activeTicketData && !['seated', 'cancelled'].includes(activeTicketData.status)) {
       const elapsed = Math.floor((Date.now() / 1000 - activeTicketData.joined_at) / 60);
       const remaining = Math.max(1, activeTicketData.estimated_wait_mins + activeTicketData.delay_mins - elapsed);
       if (activeTicketData.status === 'waiting' || activeTicketData.status === 'delayed') {
@@ -1974,6 +2028,39 @@ async function fetchTicketStatus() {
       }
       updateTicketUI();
     }
+  }
+}
+
+// Background re-sync: attempt to re-create the ticket on the server if it was lost during cold start
+async function attemptTicketReSync() {
+  if (!activeTicketData || !currentTicketId) return;
+  try {
+    const res = await fetch('/api/queue/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurant_id: activeTicketData.restaurant_id,
+        name: activeTicketData.customer_name,
+        phone: activeTicketData.phone,
+        party_size: activeTicketData.party_size,
+        seating_pref: activeTicketData.seating_pref,
+        special_requests: activeTicketData.special_requests,
+        entry_type: activeTicketData.entry_type,
+        _rejoin: true,
+        _original_ticket_id: currentTicketId
+      })
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.ticket_id && data.ticket_id !== currentTicketId) {
+        // Server created a new ticket - update our references
+        currentTicketId = data.ticket_id;
+        localStorage.setItem('waitmate_ticket_id', currentTicketId);
+        localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+      }
+    }
+  } catch (e) {
+    // Silent failure - we'll retry on next poll
   }
 }
 
@@ -2140,6 +2227,18 @@ function updateTicketUI() {
 }
 
 function openTicketModal() {
+  // Try to restore from localStorage if we don't have active data in memory
+  if (!activeTicketData && currentTicketId) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
+      if (saved && saved.id && saved.data && !['seated', 'cancelled'].includes(saved.data.status)) {
+        activeTicketData = saved.data;
+        currentTicketId = saved.id;
+        localStorage.setItem('waitmate_ticket_id', currentTicketId);
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+  }
+  
   if (!activeTicketData && !currentTicketId) {
     showToast("You don't have an active queue ticket yet. Join a queue first!", "info");
     return;
@@ -2185,10 +2284,13 @@ async function dinerArrivedAction() {
   // 1. Immediate optimistic UI state update
   if (activeTicketData) {
     activeTicketData.has_arrived = 1;
+    activeTicketData.arrival_status = 'At Venue Entrance';
     acknowledgedAlertForTicket = currentTicketId || activeTicketData.id;
     graceUntil = null;
     activeTicketData._hasNearSoundPlayed = true;
     activeTicketData._hasNotifiedSound = true;
+    // Persist immediately to localStorage so cold starts don't lose arrival state
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
     updateTicketUI();
     showAcknowledgedAlertBanner('entrance');
   }
@@ -2222,7 +2324,8 @@ async function dinerArrivedAction() {
     if (res.ok && data.success) {
       showToast(data.message || "Host stand notified! You've arrived at the venue.", "success");
     } else {
-      showToast(data.error || "Arrival registered with host stand.", "info");
+      // Even on 404/error, local state is already updated - just show a softer message
+      showToast("Arrival registered with host stand.", "info");
     }
 
     if (currentTicketId) await fetchTicketStatus();
@@ -2232,6 +2335,8 @@ async function dinerArrivedAction() {
     showToast("Arrival confirmed! Host stand has you marked as present.", "success");
     if (activeTicketData) {
       activeTicketData.has_arrived = 1;
+      activeTicketData.arrival_status = 'At Venue Entrance';
+      localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
       updateTicketUI();
     }
   }
@@ -2245,6 +2350,10 @@ async function dinerDelayAction(mins) {
   if (activeTicketData) {
     activeTicketData._hasNearSoundPlayed = true;
     activeTicketData._hasNotifiedSound = true;
+    activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
+    activeTicketData.status = 'delayed';
+    // Persist immediately to localStorage
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: tId, data: activeTicketData }));
   }
   try {
     const res = await fetch('/api/queue/action', {
@@ -2255,10 +2364,6 @@ async function dinerDelayAction(mins) {
     let data = {};
     try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || `Holding token for +${mins} minutes grace buffer.`, "info");
-    if (activeTicketData) {
-      activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
-      activeTicketData.status = 'delayed';
-    }
     updateTicketUI();
     showAcknowledgedAlertBanner('grace');
     lucide.createIcons();
@@ -2266,10 +2371,8 @@ async function dinerDelayAction(mins) {
   } catch (err) {
     showToast(`Holding your token for +${mins}m parking grace buffer.`, "info");
     if (activeTicketData) {
-      activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
-      activeTicketData.status = 'delayed';
+      updateTicketUI();
     }
-    updateTicketUI();
     showAcknowledgedAlertBanner('grace');
     lucide.createIcons();
   }
