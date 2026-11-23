@@ -233,6 +233,11 @@ let currentTicketId = localStorage.getItem('waitmate_ticket_id') || null;
 let activeTicketData = null;
 let pollTimer = null;
 
+let acknowledgedAlertForTicket = null;
+let graceUntil = null;
+let lastTicketStatus = null;
+let selectedRestaurantId = null;
+
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
@@ -1694,6 +1699,10 @@ async function submitJoinQueue(e) {
   const seatingPref = document.getElementById('joinSeatingPrefInput').value;
   const specialReq = document.getElementById('joinSpecialReq').value.trim();
 
+  selectedRestaurantId = restId;
+  acknowledgedAlertForTicket = null;
+  graceUntil = null;
+
   if (!name) {
     showToast("Please enter your name", "error");
     return;
@@ -1808,7 +1817,7 @@ async function submitJoinQueue(e) {
     localStorage.setItem('waitmate_ticket_id', currentTicketId);
 
     closeJoinModal();
-    showToast(`Spot reserved! Ticket #${ticketNum}`, "success");
+    showToast(`Spot reserved at ${targetRest.name}! Ticket #${ticketNum}`, "success");
     playNotificationChime();
     startTicketPolling();
     openTicketModal();
@@ -1867,30 +1876,49 @@ function updateTicketUI() {
 
   const d = activeTicketData;
   const pill = document.getElementById('activeTicketPill');
-  
+
+  const venueObj = d.restaurant?.name ? d.restaurant : (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId));
+  const venueName = venueObj ? venueObj.name : 'Partner Venue';
+
+  if (d.status === 'notified') {
+    acknowledgedAlertForTicket = null;
+    graceUntil = null;
+  }
+  if (graceUntil && Date.now() > graceUntil) graceUntil = null;
+  lastTicketStatus = d.status;
+
   if (['waiting', 'notified', 'delayed'].includes(d.status)) {
     pill.classList.remove('hidden');
     pill.classList.add('flex');
-    document.getElementById('activePillVenue').textContent = d.restaurant?.name || 'Partner Venue';
+    document.getElementById('activePillVenue').textContent = venueName;
     document.getElementById('activePillPos').textContent = `#${d.position_in_line}`;
   } else {
     pill.classList.add('hidden');
   }
 
-  // Update modal content if open
-  document.getElementById('ticketVenueName').textContent = d.restaurant?.name || 'Partner Venue';
+  const arrivalStatusEl = document.getElementById('ticketArrivalStatus');
+  if (graceUntil) {
+    arrivalStatusEl.textContent = "Grace (+5m)";
+    arrivalStatusEl.className = "font-bold text-amber-800";
+  } else if (d.has_arrived) {
+    arrivalStatusEl.textContent = "At Venue Entrance";
+    arrivalStatusEl.className = "font-bold text-emerald-600";
+  } else {
+    arrivalStatusEl.textContent = "En Route";
+    arrivalStatusEl.className = "font-bold text-slate-600";
+  }
+
+  document.getElementById('ticketVenueName').textContent = venueName;
   document.getElementById('ticketVenueCategory').textContent = d.restaurant?.category || '';
   document.getElementById('ticketNumber').textContent = d.ticket_number;
   document.getElementById('ticketPosition').textContent = `#${d.position_in_line}`;
   document.getElementById('ticketPartiesAhead').textContent = `${d.parties_ahead} ${d.parties_ahead === 1 ? 'party' : 'parties'} ahead`;
   document.getElementById('ticketPartySize').textContent = `${d.party_size} Guests`;
   document.getElementById('ticketSeating').textContent = d.seating_pref;
-  document.getElementById('ticketArrivalStatus').textContent = d.has_arrived ? "At Venue Entrance" : "En Route";
 
   // Check state transitions & "Table is Near" Alert System
-  const smsBanner = document.getElementById('simulatedSmsBanner');
-  const whatsAppCard = document.getElementById('simulatedWhatsAppCard');
   const tableNearAlert = document.getElementById('tableNearAlertBanner');
+  const livePassAlertCard = document.getElementById('livePassAlertCard');
   const arrivedBtn = document.getElementById('btnArrivedAction');
 
   const isTableNear = (d.position_in_line <= 2 || d.estimated_remaining_mins <= 7) && ['waiting', 'delayed'].includes(d.status);
@@ -1902,12 +1930,9 @@ function updateTicketUI() {
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600 animate-pulse";
     document.getElementById('ticketStatusMsg').textContent = "Please proceed directly to the host counter. Your table is waiting.";
     
-    // Show Ready notifications
-    smsBanner.classList.remove('hidden');
-    document.getElementById('simulatedSmsText').textContent = `Your table at ${d.restaurant?.name || 'Partner Venue'} is ready! Please proceed to the host counter. Token #${d.ticket_number}`;
-    
-    whatsAppCard.classList.remove('hidden');
-    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
+    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1 border border-emerald-200 bg-emerald-50";
+    livePassAlertCard.classList.remove('hidden');
+    document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
 
     tableNearAlert.classList.add('hidden');
 
@@ -1928,24 +1953,27 @@ function updateTicketUI() {
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-orange-600";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
-    tableNearAlert.classList.remove('hidden');
-    document.getElementById('nearPositionBadge').textContent = `#${d.position_in_line} in line`;
-    document.getElementById('nearDistanceNotice').textContent = `~${Math.max(2, Math.round(d.estimated_remaining_mins * 0.7))} mins walking distance`;
+    const alertAcknowledged = acknowledgedAlertForTicket === d.id;
 
-    // Show Digital Boarding Pass Alert Card
-    whatsAppCard.classList.remove('hidden');
-    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
+    if (!alertAcknowledged) {
+      tableNearAlert.classList.remove('hidden');
+      document.getElementById('nearPositionBadge').textContent = `#${d.position_in_line} in line`;
+      document.getElementById('nearDistanceNotice').textContent = 'Priority Boarding';
 
-    smsBanner.classList.add('hidden');
+      livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-orange-900 shadow-sm space-y-1 border border-orange-200 bg-orange-50";
+      livePassAlertCard.classList.remove('hidden');
+      document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
 
-    // Timeline step 2 highlight
-    document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold animate-pulse";
+      document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold animate-pulse";
 
-    // Play Table-Near Chime + push notification on initial trigger
-    if (!d._hasNearSoundPlayed) {
-      d._hasNearSoundPlayed = true;
-      playTableNearChime();
-      sendTableNearNotification(d);
+      if (!d._hasNearSoundPlayed) {
+        d._hasNearSoundPlayed = true;
+        playTableNearChime();
+        sendTableNearNotification(d);
+      }
+    } else {
+      tableNearAlert.classList.add('hidden');
+      livePassAlertCard.classList.add('hidden');
     }
 
   } else if (d.status === 'seated') {
@@ -1954,8 +1982,7 @@ function updateTicketUI() {
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-blue-600";
     document.getElementById('ticketStatusMsg').textContent = "Hope you enjoy your meal! Thank you for using WaitMate.";
     tableNearAlert.classList.add('hidden');
-    whatsAppCard.classList.add('hidden');
-    smsBanner.classList.add('hidden');
+    livePassAlertCard.classList.add('hidden');
 
     document.getElementById('step4Icon').className = "w-5 h-5 mx-auto rounded-full bg-blue-500 text-white flex items-center justify-center mb-1 font-bold";
     document.getElementById('step4Icon').textContent = "✓";
@@ -1968,13 +1995,12 @@ function updateTicketUI() {
     }
   } else {
     // Normal waiting
-    document.title = `(${d.position_in_line}) In Queue: ${d.restaurant?.name || 'Partner Venue'} • WaitMate India`;
+    document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
     document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
     tableNearAlert.classList.add('hidden');
-    whatsAppCard.classList.add('hidden');
-    smsBanner.classList.add('hidden');
+    livePassAlertCard.classList.add('hidden');
   }
 
   // Update Arrived button appearance if arrived
@@ -2016,10 +2042,21 @@ function closeTicketModal() {
 function clearCurrentTicket() {
   currentTicketId = null;
   activeTicketData = null;
+  acknowledgedAlertForTicket = null;
+  graceUntil = null;
   localStorage.removeItem('waitmate_ticket_id');
   if (pollTimer) clearInterval(pollTimer);
   document.getElementById('activeTicketPill').classList.add('hidden');
   closeTicketModal();
+}
+
+function showAcknowledgedAlertBanner(mode) {
+  const banner = document.getElementById('tableNearAlertBanner');
+  if (!banner) return;
+  const isGrace = mode === 'grace';
+  banner.className = "p-4 rounded-2xl bg-gradient-to-r from-emerald-50/15 via-emerald-50/15 to-emerald-50/15 border-2 border-emerald-400/80";
+  banner.innerHTML = `<div class="flex items-start gap-3"><div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md"><i data-lucide="check-circle-2" class="w-5 h-5"></i></div><div class="flex-1"><div class="flex items-center gap-1.5 mb-1"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 tracking-wider">${isGrace ? 'GRACE PERIOD ACTIVE' : 'HOST NOTIFIED'}</span></div><h4 class="font-heading font-extrabold text-sm text-slate-900 leading-tight">✓ ${isGrace ? '+5 Min Grace Period Active — Hold Confirmed' : 'Host Notified: You\'re at the Entrance'}</h4><p class="text-slate-700 text-[11px] mt-1 leading-snug">${isGrace ? 'Your token is held for 5 minutes. Your spot is secure — take your time.' : 'The host stand has been notified you are at the entrance. Your table is being prepared.'}</p></div></div>`;
+  lucide.createIcons();
 }
 
 // ==========================================
@@ -2034,7 +2071,12 @@ async function dinerArrivedAction() {
   // 1. Immediate optimistic UI state update
   if (activeTicketData) {
     activeTicketData.has_arrived = 1;
+    acknowledgedAlertForTicket = currentTicketId || activeTicketData.id;
+    graceUntil = null;
+    activeTicketData._hasNearSoundPlayed = true;
+    activeTicketData._hasNotifiedSound = true;
     updateTicketUI();
+    showAcknowledgedAlertBanner('entrance');
   }
 
   const btn = document.getElementById('btnArrivedAction');
@@ -2084,6 +2126,12 @@ async function dinerArrivedAction() {
 async function dinerDelayAction(mins) {
   if (!currentTicketId && !activeTicketData) return;
   const tId = currentTicketId || activeTicketData.id;
+  acknowledgedAlertForTicket = tId;
+  graceUntil = Date.now() + mins * 60 * 1000;
+  if (activeTicketData) {
+    activeTicketData._hasNearSoundPlayed = true;
+    activeTicketData._hasNotifiedSound = true;
+  }
   try {
     const res = await fetch('/api/queue/action', {
       method: 'POST',
@@ -2096,16 +2144,20 @@ async function dinerDelayAction(mins) {
     if (activeTicketData) {
       activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
       activeTicketData.status = 'delayed';
-      updateTicketUI();
     }
+    updateTicketUI();
+    showAcknowledgedAlertBanner('grace');
+    lucide.createIcons();
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
     showToast(`Holding your token for +${mins}m parking grace buffer.`, "info");
     if (activeTicketData) {
       activeTicketData.delay_mins = (activeTicketData.delay_mins || 0) + mins;
       activeTicketData.status = 'delayed';
-      updateTicketUI();
     }
+    updateTicketUI();
+    showAcknowledgedAlertBanner('grace');
+    lucide.createIcons();
   }
 }
 
@@ -2342,15 +2394,17 @@ function openVenueQrModal(venueId) {
   currentVenueQrId = venueId;
   const r = allRestaurants.find(x => x.id === venueId) || fallbackRestaurants.find(x => x.id === venueId);
   if (!r) return;
-  document.getElementById('venueQrModalTitle').textContent = r.name;
-  document.getElementById('venueQrModalAddress').textContent = r.address || '';
+  document.getElementById('qrModalVenueName').textContent = r.name;
+  document.getElementById('qrModalVenueAddress').textContent = r.address || '';
   const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(venueId)}`;
+  const directUrlEl = document.getElementById('qrModalDirectUrl');
+  if (directUrlEl) directUrlEl.textContent = qrUrl;
   const canvas = document.getElementById('venueQrCodeCanvas');
   canvas.innerHTML = '';
   new QRCode(canvas, {
     text: qrUrl,
-    width: 220,
-    height: 220,
+    width: 240,
+    height: 240,
     colorDark: '#000000',
     colorLight: '#ffffff',
     correctLevel: QRCode.CorrectLevel.H
@@ -2371,6 +2425,81 @@ function copyVenueQrLink() {
   }).catch(() => {
     showToast('Unable to copy link', 'error');
   });
+}
+
+function downloadVenueQrPng() {
+  const venueId = currentVenueQrId;
+  if (!venueId) return;
+  const r = allRestaurants.find(x => x.id === venueId) || fallbackRestaurants.find(x => x.id === venueId);
+  if (!r) return;
+  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(venueId)}`;
+  const name = r.name || 'Restaurant';
+  const address = r.address || 'Mumbai, India';
+
+  const card = document.createElement('canvas');
+  card.width = 600;
+  card.height = 760;
+  const ctx = card.getContext('2d');
+
+  // White printable poster card
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 600, 760);
+
+  // WaitMate India header band
+  ctx.fillStyle = '#ea580c';
+  ctx.fillRect(0, 0, 600, 80);
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('WaitMate India', 300, 52);
+  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#f97316';
+  ctx.fillText('Live Restaurant Queues • Mumbai', 300, 70);
+
+  // Restaurant name and Mumbai address
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 24px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(name, 300, 142);
+  ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#475569';
+  ctx.fillText(address, 300, 168);
+  ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#64748b';
+  ctx.fillText('Scan to join the live queue', 300, 196);
+
+  // Rendered QR code image from the live modal canvas
+  const qrBox = document.getElementById('venueQrCodeCanvas');
+  const qrImg = qrBox ? (qrBox.querySelector('img') || qrBox.querySelector('canvas')) : null;
+  if (qrImg) {
+    ctx.drawImage(qrImg, 180, 216, 240, 240);
+  } else {
+    const qrCanvas = document.createElement('canvas');
+    qrCanvas.width = 240;
+    qrCanvas.height = 240;
+    new QRCode(qrCanvas, {
+      text: qrUrl,
+      width: 240,
+      height: 240,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    ctx.drawImage(qrCanvas, 180, 216, 240, 240);
+  }
+
+  // Footer
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Scan with Phone Camera to Join Live Queue', 300, 498);
+  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#64748b';
+  ctx.fillText(qrUrl, 300, 522);
+  ctx.fillText('WaitMate India • Zero waiting, verified seating.', 300, 544);
+
+  const link = document.createElement('a');
+  link.download = `waitmate-${venueId}-qr.png`;
+  link.href = card.toDataURL('image/png');
+  link.click();
 }
 
 // ==========================================
