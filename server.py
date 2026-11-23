@@ -1060,7 +1060,10 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             c = conn.cursor()
             c.execute('SELECT * FROM restaurants ORDER BY created_at DESC')
             rows = c.fetchall()
+            c.execute("SELECT value FROM app_settings WHERE key = 'global_announcement'")
+            ga_row = c.fetchone()
             conn.close()
+            global_announcement = ga_row[0] if ga_row and ga_row[0] else ""
 
             result = []
             for r in rows:
@@ -1073,7 +1076,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     "reliability": reliability
                 })
                 result.append(r_dict)
-            self.send_json({"restaurants": result})
+            self.send_json({"restaurants": result, "global_announcement": global_announcement})
             return
 
         # API: Founder Analytics Dashboard (Live Platform Command Center)
@@ -1343,6 +1346,160 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 "restaurant": rest,
                 "live_stats": live_stats,
                 "reliability": reliability,
+                "queue": entries
+            })
+            return
+
+        # ------------------------------------------------------------------
+        # FOUNDER SUPER-ADMIN ("GOD MODE") GET ENDPOINTS (SQLite mirror)
+        # ------------------------------------------------------------------
+
+        # API: Founder full restaurant directory (for edit table)
+        if path == "/api/founder/restaurants":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM restaurants ORDER BY created_at DESC')
+            rows = c.fetchall()
+            c.execute("SELECT * FROM queue_entries")
+            entries = c.fetchall()
+            c.execute("SELECT value FROM app_settings WHERE key = 'global_announcement'")
+            ga_row = c.fetchone()
+            conn.close()
+            global_announcement = ga_row[0] if ga_row and ga_row[0] else ""
+            by_id = {r["id"]: dict(r) for r in rows}
+            result = []
+            for r in rows:
+                r_dict = dict(r)
+                r_dict.pop("password_hash", None)
+                active = [e for e in entries if e["restaurant_id"] == r["id"] and e["status"] in ("waiting", "notified", "delayed")]
+                r_dict["live_stats"] = get_restaurant_live_stats(r["id"])
+                r_dict["reliability"] = calculate_reliability(r["id"])
+                r_dict["announcement"] = r_dict.get("announcement") or ""
+                r_dict["active_parties"] = len(active)
+                result.append(r_dict)
+            self.send_json({"success": True, "restaurants": result, "global_announcement": global_announcement})
+            return
+
+        # API: Founder live cross-platform queue stream (all active parties)
+        if path == "/api/founder/queues":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT * FROM queue_entries")
+            entries = c.fetchall()
+            c.execute("SELECT id, name FROM restaurants")
+            rows = {r["id"]: dict(r) for r in c.fetchall()}
+            conn.close()
+            active = [dict(e) for e in entries if e["status"] in ("waiting", "notified", "delayed")]
+            for e in active:
+                r = rows.get(e["restaurant_id"], {})
+                e["restaurant_name"] = r.get("name") or e.get("restaurant_name") or "Unknown Venue"
+                e["phone"] = e.get("phone") or ""
+                e["channel"] = e.get("channel") or e.get("09_channel") or ("walk_in" if e.get("entry_type") in ("walk_in", "walkin", "walk-in") else "remote")
+                e["joined_time_ist"] = e.get("joined_time_ist") or format_ist(e.get("joined_at"))
+                e["notified_time_ist"] = e.get("notified_time_ist") or format_ist(e.get("notified_at"))
+                e["arrived_time_ist"] = e.get("arrived_time_ist") or format_ist(e.get("arrived_at"))
+                e["seated_time_ist"] = e.get("seated_time_ist") or format_ist(e.get("seated_at"))
+            active.sort(key=lambda e: e.get("joined_at") or 0, reverse=True)
+            self.send_json({"success": True, "queues": active})
+            return
+
+        # API: Founder full review feed (audit watchdog)
+        if path == "/api/founder/reviews":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM reviews ORDER BY created_at DESC')
+            reviews = [dict(r) for r in c.fetchall()]
+            c.execute("SELECT id, name FROM restaurants")
+            rows = {r["id"]: dict(r) for r in c.fetchall()}
+            conn.close()
+            for r in reviews:
+                r["restaurant_name"] = rows.get(r["restaurant_id"], {}).get("name") or r.get("restaurant_name") or "Unknown Venue"
+            self.send_json({"success": True, "reviews": reviews})
+            return
+
+        # API: Founder runtime settings
+        if path == "/api/founder/settings":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT key, value FROM app_settings")
+            settings = [{"id": row[0], "value": row[1]} for row in c.fetchall()]
+            conn.close()
+            self.send_json({"success": True, "settings": settings, "global_announcement": _founder_setting("global_announcement")})
+            return
+
+        # API: Founder export full network data (JSON)
+        if path == "/api/founder/export":
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM restaurants ORDER BY created_at DESC')
+            restaurants = [dict(r) for r in c.fetchall()]
+            for r in restaurants:
+                r.pop("password_hash", None)
+            c.execute("SELECT * FROM queue_entries")
+            queue_entries = [dict(r) for r in c.fetchall()]
+            c.execute("SELECT * FROM reviews ORDER BY created_at DESC")
+            reviews = [dict(r) for r in c.fetchall()]
+            c.execute("SELECT key, value FROM app_settings")
+            settings = [{"id": row[0], "value": row[1]} for row in c.fetchall()]
+            conn.close()
+            import datetime
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            ist_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+            self.send_json({
+                "success": True,
+                "exported_at": now_iso,
+                "exported_at_ist": ist_now.strftime("%d %b %Y, %I:%M %p IST"),
+                "restaurants": restaurants,
+                "queue_entries": queue_entries,
+                "reviews": reviews,
+                "settings": settings
+            })
+            return
+
+        # API: Founder impersonation — open any restaurant's Host Stand data
+        if path.startswith("/api/founder/host-stand/queue/"):
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            rest_id = path.rsplit("/", 1)[-1]
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT * FROM restaurants WHERE id = ?", (rest_id,))
+            rest_row = c.fetchone()
+            if not rest_row:
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            restaurant = dict(rest_row)
+            restaurant.pop("password_hash", None)
+            c.execute("SELECT * FROM queue_entries WHERE restaurant_id = ? ORDER BY joined_at ASC", (rest_id,))
+            entries = [dict(e) for e in c.fetchall()]
+            conn.close()
+            for idx, e in enumerate(entries):
+                e["phone"] = ""
+                e["position_rank"] = idx + 1
+                e["is_table_near"] = (idx < 2 and e["status"] in ("waiting", "delayed"))
+                e["channel"] = e.get("channel") or e.get("09_channel") or ("walk_in" if e.get("entry_type") in ("walk_in", "walkin", "walk-in") else "remote")
+            self.send_json({
+                "restaurant": restaurant,
+                "live_stats": get_restaurant_live_stats(rest_id),
+                "reliability": calculate_reliability(rest_id),
+                "announcement": restaurant.get("announcement") or "",
                 "queue": entries
             })
             return
