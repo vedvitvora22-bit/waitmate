@@ -1508,11 +1508,6 @@ function setCityFilter(city) {
     }
   });
 
-  const topHub = document.getElementById('topActiveCity');
-  if (topHub) {
-    topHub.textContent = city === 'all' ? 'All Mumbai (Bandra, Lower Parel, Colaba, Juhu)' : `${city}, India`;
-  }
-
   renderRestaurantsGrid();
 }
 
