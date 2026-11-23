@@ -131,6 +131,7 @@ async function getAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiry) return cachedAccessToken;
 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT ||
+              process.env.FIREBASE_SERVER_ACCOUNT ||
               process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
               process.env.FIREBASE_CREDENTIALS ||
               process.env.FIREBASE_CONFIG ||
