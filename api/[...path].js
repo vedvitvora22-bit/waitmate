@@ -308,6 +308,19 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "GET" && path === "/api/restaurants") {
+    // Temporary diagnostics: surface the sanitized Firestore error when it fails
+    // so the exact HTTP status/error from Google Firestore API is visible.
+    let storageDebug = null;
+    try {
+      await getAccessToken();
+      await listCollection("restaurants");
+    } catch (error) {
+      storageDebug = {
+        status: error.status || null,
+        code: error.code || null,
+        message: String(error.message || error || "Firestore request failed")
+      };
+    }
     const restaurants = await ensureRestaurants();
     let firestoreEntries = [];
     try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
@@ -320,7 +333,9 @@ async function route(request, response, pathParts) {
       const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
       result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
     }
-    return send(response, 200, { restaurants: result });
+    const body = { restaurants: result };
+    if (storageDebug) body._storage_debug = storageDebug;
+    return send(response, 200, body);
   }
 
   if (request.method === "GET" && path.startsWith("/api/restaurants/")) {

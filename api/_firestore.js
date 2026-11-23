@@ -17,7 +17,7 @@ function toFirestoreValue(value) {
 }
 
 function fromFirestoreValue(value) {
-  if (!value) return null;
+  if (value === null || value === undefined) return null;
   if (Object.prototype.hasOwnProperty.call(value, "nullValue")) return null;
   if (Object.prototype.hasOwnProperty.call(value, "booleanValue")) return value.booleanValue;
   if (Object.prototype.hasOwnProperty.call(value, "integerValue")) return Number(value.integerValue);
