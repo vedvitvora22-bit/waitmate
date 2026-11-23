@@ -222,6 +222,7 @@ async function ensureHostAccess(venueId) {
 let allRestaurants = [];
 let currentCategory = 'all';
 let currentCity = 'all';
+let currentArea = 'all';
 let currentSort = 'reliability';
 let currentSearch = '';
 let openOnly = true;
@@ -233,6 +234,7 @@ let activeTicketData = null;
 let pollTimer = null;
 
 let currentHostVenueId = 'rest-1';
+let currentVenueQrId = null;
 let hostData = null;
 
 // Audio context for chime notifications (Synthesized Web Audio API)
@@ -459,6 +461,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initPushNotifications();
   updateNotifBadge();
   await loadRestaurants();
+
+  // Deep link: ?venue=<id> auto-opens the join queue modal for that venue
+  const venueParam = new URLSearchParams(window.location.search).get('venue');
+  if (venueParam) {
+    openJoinModal(venueParam);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   if (currentTicketId) {
     startTicketPolling();
   }
@@ -1210,11 +1220,14 @@ function renderFounderData(data) {
             <div class="text-[10px] text-slate-400">± ${rel.avg_variance_mins || 1.5}m variance</div>
           </td>
           <td class="py-3 px-4 text-right">
-            <div class="flex items-center justify-end gap-1.5">
-              <button onclick="founderToggleQueue('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
-                ${isOpen ? 'Pause Queue' : 'Open Queue'}
-              </button>
-              <button onclick="openFounderResetPasswordModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="founderToggleQueue('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
+                  ${isOpen ? 'Pause Queue' : 'Open Queue'}
+                </button>
+                <button onclick="openVenueQrModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="qr-code" class="w-3 h-3"></i> QR
+                </button>
+                <button onclick="openFounderResetPasswordModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
                 <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
               </button>
             </div>
@@ -1353,6 +1366,28 @@ function setCityFilter(city) {
   renderRestaurantsGrid();
 }
 
+// Mumbai Neighborhood Filter Pills
+function setAreaFilter(area) {
+  currentArea = area;
+  document.querySelectorAll('.area-pill').forEach(btn => {
+    if (btn.dataset.area === area) {
+      btn.className = "area-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs";
+    } else {
+      btn.className = "area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
+    }
+  });
+  renderRestaurantsGrid();
+}
+
+function areaMatches(r, area) {
+  if (area === 'all') return true;
+  const addr = ((r.address || '') + ' ' + (r.city || '') + ' ' + (r.name || '')).toLowerCase();
+  if (area === 'south') return ['colaba', 'fort', 'ballard estate', 'marine lines', 'dhobi talao'].some(k => addr.includes(k));
+  if (area === 'west') return ['bandra', 'juhu', 'linking road'].some(k => addr.includes(k));
+  if (area === 'central') return ['lower parel', 'tardeo', 'mumbai central', 'palladium', 'mill compound'].some(k => addr.includes(k));
+  return true;
+}
+
 // Render Discovery Cards
 function renderRestaurantsGrid() {
   const container = document.getElementById('restaurantsGrid');
@@ -1365,6 +1400,7 @@ function renderRestaurantsGrid() {
 
   let filtered = allRestaurants.filter(r => {
     if (currentCity !== 'all' && (r.city || 'Bengaluru') !== currentCity) return false;
+    if (!areaMatches(r, currentArea)) return false;
     if (currentCategory !== 'all' && r.type !== currentCategory) return false;
     if (openOnly && r.live_stats && !r.live_stats.is_queue_open) return false;
     if (currentSearch) {
@@ -1406,6 +1442,21 @@ function renderRestaurantsGrid() {
     const rel = r.reliability || { score: 95, grade: 'A+', avg_variance_mins: 1.5 };
     const stats = r.live_stats || { estimated_wait_mins: 10, queue_count: 0, total_waiting_people: 0, is_queue_open: true };
 
+    // Live Peak Rush Crowd Indicator
+    const loadRatio = stats.queue_count / Math.max(1, r.total_tables || 0);
+    let rushBadgeClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+    let rushIcon = "🟢";
+    let rushLabel = "Walk right in";
+    if (loadRatio > 0.15 && loadRatio <= 0.45) {
+      rushBadgeClass = "text-amber-700 bg-amber-50 border border-amber-100";
+      rushIcon = "🟠";
+      rushLabel = "Filling fast";
+    } else if (loadRatio > 0.45) {
+      rushBadgeClass = "text-rose-700 bg-rose-50 border border-rose-100";
+      rushIcon = "🔴";
+      rushLabel = "Peak Rush";
+    }
+
     // Reliability Badge styling
     let scoreBadgeClass = "score-emerald";
     let scoreIcon = "award";
@@ -1439,12 +1490,6 @@ function renderRestaurantsGrid() {
             </span>
             <span class="badge-tag bg-orange-500/90 text-white text-[10px] font-bold">
               📍 ${r.city || 'Bengaluru'}
-            </span>
-          </div>
-
-          <div class="absolute top-3 right-3">
-            <span class="badge-tag bg-slate-900/80 backdrop-blur text-slate-200 text-[10px]">
-              <i data-lucide="map-pin" class="w-3 h-3 text-orange-400"></i> ${r.distance_km} km
             </span>
           </div>
 
@@ -1497,6 +1542,23 @@ function renderRestaurantsGrid() {
             </div>
 
           </div>
+
+          <!-- Live Peak Rush Crowd Badge -->
+          <div class="pt-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 px-2 py-1 rounded border ${rushBadgeClass}">
+              <span>${rushIcon}</span> ${rushLabel}
+            </span>
+          </div>
+
+          <!-- Live Host Announcement / Specials Banner -->
+          ${r.announcement ? `
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-2">
+            <span class="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1 mb-1">
+              <i data-lucide="megaphone" class="w-3 h-3"></i> Live Special
+            </span>
+            <p class="text-xs text-amber-700 font-medium leading-snug">${r.announcement}</p>
+          </div>
+          ` : ''}
 
           <!-- Bottom Action Buttons -->
           <div class="space-y-2 pt-1">
@@ -1574,6 +1636,16 @@ function openJoinModal(venueId) {
   document.getElementById('joinVenueId').value = r.id;
   document.getElementById('joinModalVenueName').textContent = r.name;
   document.getElementById('joinModalAddress').textContent = `${r.address}`;
+  const joinAnnEl = document.getElementById('joinModalAnnouncement');
+  if (joinAnnEl) {
+    if (r.announcement) {
+      joinAnnEl.textContent = r.announcement;
+      joinAnnEl.classList.remove('hidden');
+      joinAnnEl.classList.add('inline-flex');
+    } else {
+      joinAnnEl.classList.add('hidden');
+    }
+  }
   document.getElementById('joinPreviewWait').textContent = `~${r.live_stats ? r.live_stats.estimated_wait_mins : 15} mins wait`;
   document.getElementById('joinPreviewAhead').textContent = `${r.live_stats ? r.live_stats.queue_count : 2} parties ahead of you`;
   document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Accurate`;
@@ -2261,6 +2333,73 @@ async function loadHostStand() {
     return;
   }
   await renderUnlockedHostStand(currentHostVenueId, savedPwd);
+}
+
+// ==========================================
+// Venue QR Poster + Deep Link Helpers
+// ==========================================
+function openVenueQrModal(venueId) {
+  currentVenueQrId = venueId;
+  const r = allRestaurants.find(x => x.id === venueId) || fallbackRestaurants.find(x => x.id === venueId);
+  if (!r) return;
+  document.getElementById('venueQrModalTitle').textContent = r.name;
+  document.getElementById('venueQrModalAddress').textContent = r.address || '';
+  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(venueId)}`;
+  const canvas = document.getElementById('venueQrCodeCanvas');
+  canvas.innerHTML = '';
+  new QRCode(canvas, {
+    text: qrUrl,
+    width: 220,
+    height: 220,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+  document.getElementById('venueQrModal').classList.remove('hidden');
+}
+
+function closeVenueQrModal() {
+  document.getElementById('venueQrModal').classList.add('hidden');
+  currentVenueQrId = null;
+}
+
+function copyVenueQrLink() {
+  if (!currentVenueQrId) return;
+  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(currentVenueQrId)}`;
+  navigator.clipboard.writeText(qrUrl).then(() => {
+    showToast('Venue QR link copied to clipboard', 'success');
+  }).catch(() => {
+    showToast('Unable to copy link', 'error');
+  });
+}
+
+// ==========================================
+// Live Host Announcement / Specials
+// ==========================================
+async function updateHostAnnouncement(announcement = null) {
+  const input = document.getElementById('hostAnnouncementInput');
+  const announcementText = announcement !== null ? announcement : (input ? input.value.trim() : '');
+  if (!currentHostVenueId) return;
+  try {
+    const res = await fetch('/api/host/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
+      body: JSON.stringify({
+        restaurant_id: currentHostVenueId,
+        action: 'update_announcement',
+        announcement: announcementText
+      })
+    });
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || "Error publishing announcement", "error"); return; }
+    showToast(data.message || "Announcement published", "success");
+    if (input) input.value = announcementText;
+    await loadHostStand();
+    await loadRestaurants();
+  } catch (err) {
+    showToast("Error publishing announcement", "error");
+  }
 }
 
 function renderHostDashboard() {
