@@ -455,8 +455,10 @@ async function route(request, response, pathParts) {
       estimated_wait_mins: estWait,
       actual_wait_mins: 0,
       joined_at: joinedAt,
+      joined_time_ist: new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
       notified_at: null,
       seated_at: null,
+      seated_time_ist: null,
       has_arrived: false,
       delay_mins: 0,
       parties_ahead: partiesAhead
@@ -717,8 +719,8 @@ async function route(request, response, pathParts) {
       } else {
         updates.status = "seated";
         updates.seated_at = Date.now();
+        updates.seated_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
         updates.has_arrived = true;
-        const joined = Number(ticket.joined_at || Date.now());
         updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - joined) / 60000));
       }
     } else if (body.action === "rate") {
@@ -767,7 +769,7 @@ async function route(request, response, pathParts) {
       }
       const updates = { ...ticket };
       if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now();
-      if (body.action === "seat") updates.status = "seated", updates.seated_at = Date.now();
+      if (body.action === "seat") { updates.status = "seated"; updates.seated_at = Date.now(); updates.seated_time_ist = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000)); }
       if (body.action === "remove") updates.status = "no_show";
       try {
         await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
@@ -1080,55 +1082,45 @@ async function route(request, response, pathParts) {
 
     const ticketId = body.ticket_id;
     const delta = {5:2,4:0.5,3:-0.5,2:-2,1:-3}[Number(rating)] || 0;
-    // mark ticket rated
-    if (ticketId) {
-      try {
-        const t = await getDocument("queue_entries", ticketId);
-        if (t) await safeCommit([setDocument("queue_entries", ticketId, { ...t, rated: true })]);
-      } catch (e) {}
-      if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId].rated = true;
-    }
+    const now = Date.now();
     const review = {
-      id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: ticketId || `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       restaurant_id: restaurantId,
       restaurant_name: restaurantName,
       rating: Number(rating),
       stars: Number(rating),
+      review_comment: String(comment || '').trim(),
       comment: String(comment || '').trim(),
       guest_name: String(body.guest_name || body.name || 'Guest').trim(),
       ticket_id: ticketId || null,
-      created_at: Date.now()
+      accuracy_tag: body.accuracy_tag || null,
+      rated: true,
+      rated_at: now,
+      rated_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
+      created_at: now
     };
-    // recalc restaurant reliability
+    if (ticketId) {
+      try {
+        const t = await getDocument("queue_entries", ticketId);
+        if (t) await safeCommit([setDocument("queue_entries", ticketId, { ...t, ...review })]);
+      } catch (e) { console.warn("ticket rating update failed:", e?.message || e); }
+      if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId] = { ...global._tickets[ticketId], ...review };
+    }
     try {
       const rest = await findRestaurantById(restaurantId);
       if (rest) {
+        let entries = [];
+        try { entries = await listCollection("queue_entries"); } catch (e) {}
+        const rated = entries.filter(e => e.restaurant_id === restaurantId && e.rated);
+        const ratingCount = rated.length;
+        const avgRating = ratingCount ? rated.reduce((s, e) => s + Number(e.rating || e.stars || 0), 0) / ratingCount : 0;
+        const recentCheckins = rated.slice(-10).reverse();
         let score = Number(rest.reliability_score || 90) + delta;
         score = Math.max(50, Math.min(99, score));
         const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
-        // compute rating aggregates + recent checkins from persisted reviews
-        let reviews = [];
-        try {
-          const docs = await listCollection("reviews");
-          reviews = docs.filter(r => r.restaurant_id === restaurantId);
-        } catch (e) {}
-        reviews.push(review);
-        const ratingCount = reviews.length;
-        const avgRating = ratingCount ? reviews.reduce((s, r) => s + Number(r.rating || r.stars || 0), 0) / ratingCount : 0;
-        const recentCheckins = reviews.slice(-10).reverse();
         await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade, rating_count: ratingCount, average_rating: avgRating, recent_checkins: recentCheckins, recent_reviews: recentCheckins })]);
       }
     } catch (e) { console.warn("restaurant update failed:", e?.message || e); }
-    try {
-      await safeCommit([setDocument("reviews", review.id, review)]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        global._reviews = global._reviews || [];
-        global._reviews.push(review);
-      } else {
-        throw error;
-      }
-    }
     global._reviews = global._reviews || [];
     global._reviews.push(review);
     return send(response, 200, { success: true, message: "Review submitted successfully!", review });
