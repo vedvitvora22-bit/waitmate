@@ -52,7 +52,9 @@ const fallbackRestaurants = [
   { id: "rest-7", name: "Britannia & Co. Restaurant", category: "Parsi & Irani Heritage", type: "restaurant", city: "Mumbai", address: "Wakefield House, Ballard Estate, Fort, Mumbai", distance_km: 1.5, price_range: "₹₹", image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80", description: "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.", base_prep_time: 18, available_tables: 3, total_tables: 14, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("britannia123"), created_at: now - 604800000 },
   { id: "rest-8", name: "Kyani & Co. Bakery & Cafe", category: "Irani Cafe & Bakery", type: "restaurant", city: "Mumbai", address: "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai", distance_km: 0.6, price_range: "₹", image_url: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80", description: "Iconic South Mumbai Irani bakery serving fresh Bun Maska, Keema Pav, Mawa Cake, and Irani Chai.", base_prep_time: 10, available_tables: 4, total_tables: 18, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("kyani123"), created_at: now - 691200000 },
   { id: "rest-9", name: "Prithvi Cafe", category: "Cafe & Outdoor Bistro", type: "restaurant", city: "Mumbai", address: "Janki Kutir, Juhu Church Road, Juhu, Mumbai", distance_km: 2.1, price_range: "₹₹", image_url: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: "Bamboo-shaded theatre courtyard cafe in Juhu known for Irish Coffee, Suleimani Chai, and Amritsari Paratha.", base_prep_time: 15, available_tables: 2, total_tables: 16, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("prithvi123"), created_at: now - 777600000 },
-  { id: "rest-10", name: "Sardar Pav Bhaji Express Truck", category: "Mumbai Street Food & Pav Bhaji", type: "food_truck", city: "Mumbai", address: "Tardeo Road Junction, Mumbai Central, Mumbai", distance_km: 2.8, price_range: "₹", image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80", description: "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.", base_prep_time: 8, available_tables: 5, total_tables: 20, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("sardar123"), created_at: now - 864000000 }
+  { id: "rest-10", name: "Sardar Pav Bhaji Express Truck", category: "Mumbai Street Food & Pav Bhaji", type: "food_truck", city: "Mumbai", address: "Tardeo Road Junction, Mumbai Central, Mumbai", distance_km: 2.8, price_range: "₹", image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80", description: "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.", base_prep_time: 8, available_tables: 5, total_tables: 20, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("sardar123"), created_at: now - 864000000 },
+  { id: "rest-11", name: "Juhu Tawa Junction", category: "Pav Bhaji & Tawa Pulao", type: "food_truck", city: "Mumbai", address: "Juhu Chowpatty, Juhu, Mumbai", distance_km: 3.5, price_range: "₹", image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80", description: "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.", base_prep_time: 6, available_tables: 0, total_tables: 8, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("juhutawa789"), created_at: now - 950400000 },
+  { id: "rest-12", name: "Bandra Woodfire Truck", category: "Wood-Fired Pizza & Artisanal Sandwiches", type: "food_truck", city: "Mumbai", address: "Chapel Road, Bandra West, Mumbai", distance_km: 1.0, price_range: "₹₹", image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80", description: "Gourmet wood-fired Neapolitan pizzas with fresh mozzarella, basil, and spicy fermented hot honey drizzle.", base_prep_time: 12, available_tables: 0, total_tables: 6, is_queue_open: true, manual_override_wait: null, password_hash: hashPassword("bandrapizza456"), created_at: now - 1036800000 }
 ];
 
 function sanitizeRestaurant(restaurant) {
@@ -161,7 +163,9 @@ async function getRawRestaurant(id) {
   }
   const fb = fallbackRestaurants.find(r => r.id === id);
   if (fb) return { ...fb };
-  return (global._customRestaurants || []).find(r => r.id === id) || null;
+  const custom = (global._customRestaurants || []).find(r => r.id === id);
+  if (custom) return { ...custom, ...(global._pwdMap?.[id] || {}) };
+  return null;
 }
 
 function publicRestaurant(r) {
@@ -205,7 +209,9 @@ const PROTO_PROFILES = {
   "rest-7": { rush: [[12,15.5]], peakP: [6,9], peakW: [32,45], offP: [1,2], offW: [8,12] },
   "rest-8": { rush: [[8,11.5],[16,19]], peakP: [3,5], peakW: [12,20], offP: [0,0], offW: [0,0] },
   "rest-9": { rush: [[17,22]], peakP: [5,8], peakW: [25,38], offP: [2,2], offW: [10,10] },
-  "rest-10": { rush: [[18,24]], peakP: [5,8], peakW: [16,26], offP: [0,0], offW: [0,0] }
+  "rest-10": { rush: [[18,24]], peakP: [5,8], peakW: [16,26], offP: [0,0], offW: [0,0] },
+  "rest-11": { rush: [[17,22]], peakP: [4,7], peakW: [12,20], offP: [0,1], offW: [3,8] },
+  "rest-12": { rush: [[18,23]], peakP: [3,6], peakW: [18,30], offP: [1,2], offW: [8,14] }
 };
 
 function hashProfile(id) {
@@ -635,6 +641,11 @@ async function route(request, response, pathParts) {
         }
       }
       if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      const restaurant = await findRestaurantById(ticket.restaurant_id);
+      if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
+        return send(response, 401, { error: "Invalid restaurant password." });
+      }
       const updates = { ...ticket };
       if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now();
       if (body.action === "seat") updates.status = "seated", updates.seated_at = Date.now();
@@ -663,6 +674,9 @@ async function route(request, response, pathParts) {
         }
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
+        return send(response, 401, { error: "Invalid restaurant password." });
+      }
       const newState = Boolean(body.is_open);
       try {
         await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
@@ -694,6 +708,9 @@ async function route(request, response, pathParts) {
         restaurant = null;
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
+        return send(response, 401, { error: "Invalid restaurant password." });
+      }
       const announcement = String(body.announcement || '');
       try {
         await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, announcement })]);
@@ -725,6 +742,9 @@ async function route(request, response, pathParts) {
         restaurant = null;
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
+        return send(response, 401, { error: "Invalid restaurant password." });
+      }
       try {
         await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
       } catch (error) {
@@ -845,6 +865,8 @@ async function route(request, response, pathParts) {
     await safeCommit([setDocument("restaurants", id, restaurant)]);
 
     global._customRestaurants = global._customRestaurants || [];
+    global._pwdMap = global._pwdMap || {};
+    global._pwdMap[id] = { password_hash: restaurant.password_hash };
     const publicCopy = { ...restaurant };
     delete publicCopy.password_hash;
     global._customRestaurants.push(publicCopy);
@@ -891,6 +913,8 @@ async function route(request, response, pathParts) {
     await safeCommit([setDocument("restaurants", id, restaurant)]);
 
     global._customRestaurants = global._customRestaurants || [];
+    global._pwdMap = global._pwdMap || {};
+    global._pwdMap[id] = { password_hash: restaurant.password_hash };
     global._customRestaurants.push(sanitizeRestaurant(restaurant));
 
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
@@ -920,6 +944,62 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && (path === "/api/feedback" || path === "/api/reliability/feedback")) {
     return send(response, 200, { success: true, message: "Thank you! Your check-in feedback updated the Reliability Score." });
+  }
+
+  // POST /api/reviews - Submit a new review
+  if (request.method === "POST" && path === "/api/reviews") {
+    const { restaurantId, restaurantName, rating, comment } = body;
+    if (!restaurantId || !restaurantName || !rating || rating < 1 || rating > 5) {
+      return send(response, 400, { error: "Missing required fields: restaurantId, restaurantName, rating (1-5)" });
+    }
+
+    const review = {
+      id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      restaurant_id: restaurantId,
+      restaurant_name: restaurantName,
+      rating: Number(rating),
+      comment: String(comment || '').trim(),
+      created_at: Date.now()
+    };
+
+    try {
+      await safeCommit([setDocument("reviews", review.id, review)]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        global._reviews = global._reviews || [];
+        global._reviews.push(review);
+      } else {
+        throw error;
+      }
+    }
+    global._reviews = global._reviews || [];
+    global._reviews.push(review);
+
+    return send(response, 200, { success: true, message: "Review submitted successfully!", review });
+  }
+
+  // GET /api/reviews?restaurantId=... - Fetch reviews for a restaurant
+  if (request.method === "GET" && path === "/api/reviews") {
+    const restaurantId = request.query?.restaurantId;
+    if (!restaurantId) {
+      return send(response, 400, { error: "restaurantId query parameter is required" });
+    }
+
+    let firestoreReviews = [];
+    try {
+      const docs = await listCollection("reviews");
+      firestoreReviews = docs.filter(r => r.restaurant_id === restaurantId);
+    } catch (error) {
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
+
+    const memoryReviews = (global._reviews || []).filter(r => r.restaurant_id === restaurantId);
+    const allReviews = [...firestoreReviews, ...memoryReviews];
+    const uniqueReviews = Object.values(allReviews.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+
+    uniqueReviews.sort((a, b) => Number(b.created_at) - Number(a.created_at));
+
+    return send(response, 200, { reviews: uniqueReviews });
   }
 
   return send(response, 404, { error: "Endpoint not found" });

@@ -194,7 +194,12 @@ function renderOwnerDirectory() {
 
 async function openProtectedHostStand(venueId) {
   currentHostVenueId = venueId;
-  await loadHostStand();
+  const savedPwd = getSavedHostPassword(venueId);
+  if (savedPwd) {
+    await renderUnlockedHostStand(venueId, savedPwd);
+  } else {
+    openOwnerPasswordModal(venueId);
+  }
 }
 
 // Per-restaurant owner password storage & verification
@@ -355,7 +360,6 @@ function playTableNearChime() {
 // PUSH NOTIFICATION SYSTEM (Real OS Alerts)
 // ==========================================
 let swRegistration = null;
-let notificationPermission = Notification.permission; // 'default' | 'granted' | 'denied'
 
 async function initPushNotifications() {
   if (!('serviceWorker' in navigator) || !('Notification' in window)) {
@@ -388,7 +392,6 @@ async function requestNotificationPermission() {
   if (Notification.permission === 'denied') return false;
 
   const result = await Notification.requestPermission();
-  notificationPermission = result;
   return result === 'granted';
 }
 
@@ -464,50 +467,9 @@ async function sendTableReadyNotification(ticketData) {
   });
 }
 
-// Update notification permission UI badge in header
-function updateNotifBadge() {
-  const badge = document.getElementById('notifPermBadge');
-  if (!badge) return;
-  if (Notification.permission === 'granted') {
-    badge.innerHTML = `<i data-lucide="bell-ring" class="w-3 h-3 text-emerald-400"></i><span class="text-emerald-400 font-bold">Alerts ON</span>`;
-    badge.className = "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 cursor-default";
-  } else if (Notification.permission === 'denied') {
-    badge.innerHTML = `<i data-lucide="bell-off" class="w-3 h-3 text-rose-400"></i><span class="text-rose-400 font-bold">Alerts BLOCKED</span>`;
-    badge.className = "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 cursor-pointer";
-    badge.onclick = () => showToast("Notifications are blocked. Please enable them in your browser settings (🔒 Lock icon → Notifications → Allow).", "error");
-  } else {
-    badge.innerHTML = `<i data-lucide="bell" class="w-3 h-3 text-orange-400 animate-bounce"></i><span class="text-orange-400 font-bold">Enable Alerts</span>`;
-    badge.className = "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 cursor-pointer hover:bg-orange-500/20 transition";
-    badge.onclick = async () => {
-      if (!('Notification' in window)) {
-        showToast('In-app audio & visual alerts are active!', 'success');
-        return;
-      }
-      const granted = await requestNotificationPermission();
-      if (granted) {
-        updateNotifBadge();
-        lucide.createIcons();
-        showToast("🔔 Push alerts enabled! You'll get notified when your table is near — even if this tab is in the background.", "success");
-        // Send a welcome test notification
-        await sendPushNotification({
-          title: "✅ WaitMate Alerts Active!",
-          body: "You'll now get notified when your table is #1-#2 in line or ready — even with the browser minimized.",
-          tag: 'waitmate-welcome'
-        });
-      } else {
-        updateNotifBadge();
-        lucide.createIcons();
-        showToast("Notifications blocked. Please allow in browser settings to get real alerts.", "error");
-      }
-    };
-  }
-  lucide.createIcons();
-}
-
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
   await initPushNotifications();
-  updateNotifBadge();
   await loadRestaurants();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking
@@ -898,6 +860,78 @@ const fallbackRestaurants = [
         { promised: 8, actual: 10, rating: "slight_delay", note: "Lunch rush pav bhaji took 2 extra minutes, worth the wait.", time_ago: "15m ago" }
       ]
     }
+  },
+  {
+    id: "rest-11",
+    name: "Juhu Tawa Junction",
+    category: "Pav Bhaji & Tawa Pulao",
+    type: "food_truck",
+    city: "Mumbai",
+    address: "Juhu Chowpatty, Juhu, Mumbai",
+    distance_km: 3.5,
+    price_range: "₹",
+    image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+    description: "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
+    live_stats: {
+      queue_count: 3,
+      total_waiting_people: 8,
+      estimated_wait_mins: 9,
+      algorithmic_wait_mins: 9,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 94,
+      grade: "A",
+      verdict: "Reliable Beachside Turnover",
+      badge_color: "emerald",
+      avg_variance_mins: 1.8,
+      total_verified_checkins: 26,
+      on_time_pct: 77,
+      early_pct: 15,
+      slight_late_pct: 8,
+      severe_late_pct: 0,
+      recent_reviews: [
+        { promised: 9, actual: 8, rating: "spot_on", note: "Pav bhaji arrived right on time, butter was fresh!", time_ago: "5m ago" },
+        { promised: 12, actual: 10, rating: "faster", note: "Tawa pulao ready quicker than quoted. Great beach snack.", time_ago: "1h ago" }
+      ]
+    }
+  },
+  {
+    id: "rest-12",
+    name: "Bandra Woodfire Truck",
+    category: "Wood-Fired Pizza & Artisanal Sandwiches",
+    type: "food_truck",
+    city: "Mumbai",
+    address: "Chapel Road, Bandra West, Mumbai",
+    distance_km: 1.0,
+    price_range: "₹₹",
+    image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+    description: "Gourmet wood-fired Neapolitan pizzas with fresh mozzarella, basil, and spicy fermented hot honey drizzle.",
+    live_stats: {
+      queue_count: 2,
+      total_waiting_people: 6,
+      estimated_wait_mins: 18,
+      algorithmic_wait_mins: 18,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 88,
+      grade: "B",
+      verdict: "Artisan Quality With Some Variance",
+      badge_color: "amber",
+      avg_variance_mins: 4.5,
+      total_verified_checkins: 20,
+      on_time_pct: 55,
+      early_pct: 18,
+      slight_late_pct: 22,
+      severe_late_pct: 5,
+      recent_reviews: [
+        { promised: 18, actual: 22, rating: "slight_delay", note: "Pizza needed extra wood-fire time for perfect crust char.", time_ago: "25m ago" },
+        { promised: 15, actual: 12, rating: "faster", note: "Margherita came out early! Hot honey drizzle is a game changer.", time_ago: "2h ago" }
+      ]
+    }
   }
 ];
 
@@ -923,7 +957,15 @@ let localMockQueues = {
   'rest-7': [],
   'rest-8': [],
   'rest-9': [],
-  'rest-10': []
+  'rest-10': [],
+  'rest-11': [
+    { id: "q-111", ticket_number: "WM-111", restaurant_id: "rest-11", customer_name: "Pooja Nair", phone: "+91 98330 44556", party_size: 3, seating_pref: "Beachside Counter", special_requests: "Extra cheese on pav bhaji", entry_type: "remote", status: "waiting", estimated_wait_mins: 9, actual_wait_mins: 0, joined_at: Date.now()/1000 - 350, has_arrived: 1, delay_mins: 0 },
+    { id: "q-112", ticket_number: "WM-112", restaurant_id: "rest-11", customer_name: "Kunal Mehta", phone: "+91 98201 66778", party_size: 2, seating_pref: "First Available", special_requests: "", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 7, actual_wait_mins: 0, joined_at: Date.now()/1000 - 180, has_arrived: 1, delay_mins: 0 },
+  ],
+  'rest-12': [
+    { id: "q-121", ticket_number: "WM-121", restaurant_id: "rest-12", customer_name: "Sarah D'Souza", phone: "+91 98670 11223", party_size: 2, seating_pref: "Standing Counter", special_requests: "Gluten-free crust if available", entry_type: "remote", status: "waiting", estimated_wait_mins: 18, actual_wait_mins: 0, joined_at: Date.now()/1000 - 500, has_arrived: 1, delay_mins: 0 },
+    { id: "q-122", ticket_number: "WM-122", restaurant_id: "rest-12", customer_name: "Rahul Kapoor", phone: "+91 98110 33445", party_size: 4, seating_pref: "First Available", special_requests: "Extra hot honey drizzle", entry_type: "remote", status: "notified", estimated_wait_mins: 20, actual_wait_mins: 0, joined_at: Date.now()/1000 - 700, has_arrived: 1, delay_mins: 0 },
+  ]
 };
 
 // ==========================================
@@ -2418,6 +2460,9 @@ async function dinerCancelAction() {
 // ==========================================
 // 7. RELIABILITY SCORE AUDIT MODAL
 // ==========================================
+let currentReviewVenueId = null;
+let currentReviewVenueName = null;
+
 async function openReliabilityModal(venueId) {
   let r = null;
   try {
@@ -2473,31 +2518,15 @@ async function openReliabilityModal(venueId) {
   // Hourly patterns chart
   renderHourlyPatternChart(r.hourly_patterns);
 
-  // Recent reviews
-  const revContainer = document.getElementById('relRecentReviews');
-  if (rel.recent_reviews && rel.recent_reviews.length > 0) {
-    revContainer.innerHTML = rel.recent_reviews.map(rev => {
-      let tag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Spot On</span>`;
-      if (rev.rating === 'faster') tag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Faster</span>`;
-      if (rev.rating === 'slight_delay') tag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Slight Delay</span>`;
-      if (rev.rating === 'severe_delay') tag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Delayed</span>`;
+  // Store current venue for review submission
+  currentReviewVenueId = venueId;
+  currentReviewVenueName = r.name;
 
-      return `
-        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-          <div class="flex items-center justify-between mb-1">
-            <div class="flex items-center gap-2">
-              ${tag}
-              <span class="text-slate-500 font-medium">Promised ${rev.promised}m • Waited ${rev.actual}m</span>
-            </div>
-            <span class="text-slate-400 text-[10px]">${rev.time_ago}</span>
-          </div>
-          <p class="text-slate-700 font-medium italic">"${rev.note || 'Verified diner check-in.'}"</p>
-        </div>
-      `;
-    }).join('');
-  } else {
-    revContainer.innerHTML = `<p class="text-slate-400 text-xs italic">No reviews yet.</p>`;
-  }
+  // Initialize star rating widget
+  initStarRatingWidget();
+
+  // Fetch and display live reviews
+  await fetchAndRenderReviews(venueId);
 
   document.getElementById('reliabilityModal').classList.remove('hidden');
   lucide.createIcons();
@@ -2505,6 +2534,173 @@ async function openReliabilityModal(venueId) {
 
 function closeReliabilityModal() {
   document.getElementById('reliabilityModal').classList.add('hidden');
+  // Reset review widget
+  resetReviewWidget();
+}
+
+function initStarRatingWidget() {
+  const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
+  const ratingInput = document.getElementById('reviewRatingInput');
+  const ratingDisplay = document.getElementById('starRatingDisplay');
+  const submitBtn = document.getElementById('submitReviewBtn');
+
+  starBtns.forEach(btn => {
+    btn.onclick = () => {
+      const star = parseInt(btn.dataset.star);
+      ratingInput.value = star;
+      updateStarDisplay(star);
+      submitBtn.disabled = false;
+    };
+  });
+}
+
+function updateStarDisplay(rating) {
+  const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
+  const ratingDisplay = document.getElementById('starRatingDisplay');
+
+  starBtns.forEach(btn => {
+    const star = parseInt(btn.dataset.star);
+    if (star <= rating) {
+      btn.classList.remove('text-slate-300');
+      btn.classList.add('text-amber-400');
+    } else {
+      btn.classList.remove('text-amber-400');
+      btn.classList.add('text-slate-300');
+    }
+  });
+
+  if (rating > 0) {
+    ratingDisplay.textContent = `${rating} / 5`;
+  } else {
+    ratingDisplay.textContent = '';
+  }
+}
+
+function resetReviewWidget() {
+  const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
+  const ratingInput = document.getElementById('reviewRatingInput');
+  const ratingDisplay = document.getElementById('starRatingDisplay');
+  const commentInput = document.getElementById('reviewCommentInput');
+  const submitBtn = document.getElementById('submitReviewBtn');
+
+  starBtns.forEach(btn => {
+    btn.classList.remove('text-amber-400');
+    btn.classList.add('text-slate-300');
+  });
+  ratingInput.value = '0';
+  ratingDisplay.textContent = '';
+  commentInput.value = '';
+  submitBtn.disabled = true;
+}
+
+async function fetchAndRenderReviews(venueId) {
+  const container = document.getElementById('relRecentReviews');
+  container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">Loading reviews...</p>`;
+
+  try {
+    const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(venueId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      renderReviews(data.reviews || []);
+    } else {
+      container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">No reviews yet.</p>`;
+    }
+  } catch (err) {
+    console.warn("Failed to fetch reviews:", err);
+    container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">No reviews yet.</p>`;
+  }
+}
+
+function renderReviews(reviews) {
+  const container = document.getElementById('relRecentReviews');
+
+  if (!reviews || reviews.length === 0) {
+    container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">No reviews yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = reviews.map(review => {
+    const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+    const timeAgo = formatTimeAgo(review.created_at);
+
+    return `
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400 text-sm font-medium">${stars}</span>
+            <span class="text-slate-600 font-medium">${review.rating} / 5</span>
+          </div>
+          <span class="text-slate-400 text-[10px]">${timeAgo}</span>
+        </div>
+        ${review.comment ? `<p class="text-slate-700 font-medium italic">"${review.comment}"</p>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function formatTimeAgo(timestamp) {
+  const now = Date.now();
+  const diff = now - Number(timestamp);
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
+async function submitReview() {
+  const rating = parseInt(document.getElementById('reviewRatingInput').value);
+  const comment = document.getElementById('reviewCommentInput').value.trim();
+  const submitBtn = document.getElementById('submitReviewBtn');
+
+  if (!rating || rating < 1 || rating > 5) {
+    showToast("Please select a star rating", "error");
+    return;
+  }
+
+  if (!currentReviewVenueId || !currentReviewVenueName) {
+    showToast("Venue context lost. Please reopen the modal.", "error");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting...';
+
+  try {
+    const res = await fetch('/api/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurantId: currentReviewVenueId,
+        restaurantName: currentReviewVenueName,
+        rating: rating,
+        comment: comment
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Failed to submit review');
+
+    showToast("Thanks! Your verified check-in is live.", "success");
+
+    // Reset widget
+    resetReviewWidget();
+
+    // Immediately refresh reviews
+    await fetchAndRenderReviews(currentReviewVenueId);
+
+  } catch (err) {
+    console.error("Review submit error:", err);
+    showToast(err.message || "Failed to submit review. Please try again.", "error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Review';
+  }
 }
 
 function renderHourlyPatternChart(patterns) {
@@ -2617,7 +2813,7 @@ async function switchHostVenue(venueId) {
 async function loadHostStand() {
   const savedPwd = getSavedHostPassword(currentHostVenueId);
   if (!savedPwd) {
-    openOwnerPasswordModal(currentHostVenueId);
+    showOwnerDirectory();
     return;
   }
   await renderUnlockedHostStand(currentHostVenueId, savedPwd);

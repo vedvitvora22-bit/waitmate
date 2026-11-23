@@ -3,3 +3,4 @@ waitmate.db
 __pycache__/
 .env
 .env.*
+server.log

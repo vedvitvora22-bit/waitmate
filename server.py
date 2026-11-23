@@ -123,6 +123,18 @@ def init_db():
     )
     ''')
 
+    # Reviews / Verified Check-ins table (for public star ratings and comments)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS reviews (
+        id TEXT PRIMARY KEY,
+        restaurant_id TEXT NOT NULL,
+        restaurant_name TEXT NOT NULL,
+        rating INTEGER NOT NULL, -- 1-5 stars
+        comment TEXT,
+        created_at REAL NOT NULL
+    )
+    ''')
+
     conn.commit()
 
     # Migrate: add password_hash column to existing databases
@@ -154,6 +166,8 @@ def init_db():
         "rest-8": "kyani123",
         "rest-9": "prithvi123",
         "rest-10": "sardar123",
+        "rest-11": "juhutawa789",
+        "rest-12": "bandrapizza456",
     }
     for rest_id, default_pwd in password_defaults.items():
         c.execute("UPDATE restaurants SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')", (hash_password(default_pwd), rest_id))
@@ -170,6 +184,8 @@ def init_db():
         "rest-8": "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
         "rest-9": "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
         "rest-10": "Tardeo Road Junction, Mumbai Central, Mumbai",
+        "rest-11": "Juhu Chowpatty, Juhu, Mumbai",
+        "rest-12": "Chapel Road, Bandra West, Mumbai",
     }
     for rest_id, address in mumbai_addresses.items():
         c.execute('UPDATE restaurants SET city = ? WHERE id = ?', ("Mumbai", rest_id))
@@ -188,11 +204,14 @@ def init_db():
         "rest-8": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
         "rest-9": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
         "rest-10": "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+        "rest-11": "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+        "rest-12": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
     }
     for rest_id, cover in mumbai_covers.items():
         c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
 
     # Startup migration: INSERT OR IGNORE new Mumbai venues so existing local SQLite databases pick them up automatically
+    now = time.time()
     new_venue_rows = [
         (
             "rest-7",
@@ -277,6 +296,48 @@ def init_db():
             1,
             now - 86400 * 4,
             hash_password("sardar123"),
+        ),
+        (
+            "rest-11",
+            "Juhu Tawa Junction",
+            "Pav Bhaji & Tawa Pulao",
+            "food_truck",
+            "Mumbai",
+            "Juhu Chowpatty, Juhu, Mumbai",
+            3.5,
+            "₹",
+            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
+            "Mahesh Patil",
+            "+91 98330 22446",
+            6,
+            0,
+            8,
+            None,
+            1,
+            now - 86400 * 2,
+            hash_password("juhutawa789"),
+        ),
+        (
+            "rest-12",
+            "Bandra Woodfire Truck",
+            "Wood-Fired Pizza & Artisanal Sandwiches",
+            "food_truck",
+            "Mumbai",
+            "Chapel Road, Bandra West, Mumbai",
+            1.0,
+            "₹₹",
+            "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+            "Gourmet wood-fired Neapolitan pizzas with fresh mozzarella, basil, and spicy fermented hot honey drizzle.",
+            "Arjun Kapoor",
+            "+91 98201 88776",
+            12,
+            0,
+            6,
+            None,
+            1,
+            now - 86400 * 1,
+            hash_password("bandrapizza456"),
         ),
     ]
     for row in new_venue_rows:
@@ -500,6 +561,48 @@ def seed_data(c):
             1,
             now - 86400 * 4,
             hash_password("sardar123")
+        ),
+        (
+            "rest-11",
+            "Juhu Tawa Junction",
+            "Pav Bhaji & Tawa Pulao",
+            "food_truck",
+            "Mumbai",
+            "Juhu Chowpatty, Juhu, Mumbai",
+            3.5,
+            "₹",
+            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
+            "Mahesh Patil",
+            "+91 98330 22446",
+            6,
+            0,
+            8,
+            None,
+            1,
+            now - 86400 * 2,
+            hash_password("juhutawa789")
+        ),
+        (
+            "rest-12",
+            "Bandra Woodfire Truck",
+            "Wood-Fired Pizza & Artisanal Sandwiches",
+            "food_truck",
+            "Mumbai",
+            "Chapel Road, Bandra West, Mumbai",
+            1.0,
+            "₹₹",
+            "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+            "Gourmet wood-fired Neapolitan pizzas with fresh mozzarella, basil, and spicy fermented hot honey drizzle.",
+            "Arjun Kapoor",
+            "+91 98201 88776",
+            12,
+            0,
+            6,
+            None,
+            1,
+            now - 86400 * 1,
+            hash_password("bandrapizza456")
         )
     ]
 
@@ -540,6 +643,8 @@ def seed_data(c):
         ("rest-4", 84, 32, 5.2, [("spot_on", 14), ("faster", 3), ("slight_delay", 7), ("severe_delay", 3)]),
         ("rest-5", 97, 8, 1.2, [("spot_on", 26), ("faster", 3), ("slight_delay", 1), ("severe_delay", 0)]),
         ("rest-6", 72, 35, 12.0, [("spot_on", 10), ("faster", 2), ("slight_delay", 9), ("severe_delay", 8)]),
+        ("rest-11", 94, 9, 1.8, [("spot_on", 20), ("faster", 4), ("slight_delay", 2), ("severe_delay", 0)]),
+        ("rest-12", 88, 18, 4.5, [("spot_on", 15), ("faster", 5), ("slight_delay", 4), ("severe_delay", 1)]),
     ]
 
     import random
@@ -695,6 +800,8 @@ def compute_prototype_restaurant_metrics(restaurant, real_waiting_parties, real_
         "rest-8": {"rush": [(8,11.5),(16,19)], "peakP": (3,5), "peakW": (12,20), "offP": (0,0), "offW": (0,0)},
         "rest-9": {"rush": [(17,22)], "peakP": (5,8), "peakW": (25,38), "offP": (2,2), "offW": (10,10)},
         "rest-10": {"rush": [(18,24)], "peakP": (5,8), "peakW": (16,26), "offP": (0,0), "offW": (0,0)},
+        "rest-11": {"rush": [(17,22)], "peakP": (4,7), "peakW": (12,20), "offP": (0,1), "offW": (3,8)},
+        "rest-12": {"rush": [(18,23)], "peakP": (3,6), "peakW": (18,30), "offP": (1,2), "offW": (8,14)},
     }
     p = profiles.get(rid)
     if not p:
@@ -1018,6 +1125,29 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 "hourly_patterns": hourly_patterns
             })
             self.send_json(r_dict)
+            return
+
+        # API: Get Reviews for a Restaurant
+        if path == "/api/reviews":
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
+            restaurant_id = query.get("restaurantId", [None])[0]
+
+            if not restaurant_id:
+                self.send_json({"error": "restaurantId query parameter is required"}, 400)
+                return
+
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''
+                SELECT * FROM reviews 
+                WHERE restaurant_id = ? 
+                ORDER BY created_at DESC
+            ''', (restaurant_id,))
+            reviews = [dict(row) for row in c.fetchall()]
+            conn.close()
+
+            self.send_json({"reviews": reviews})
             return
 
         # API: Check Ticket Status
@@ -1701,6 +1831,47 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 "success": True, 
                 "message": "Dhanyavaad! Your verified check-in directly updated the restaurant's Reliability Score.",
                 "updated_reliability": updated_rel
+            })
+            return
+
+        # API: Submit a Review (Star Rating + Comment)
+        if path == "/api/reviews":
+            data = self.read_json_body()
+            restaurant_id = data.get("restaurantId")
+            restaurant_name = data.get("restaurantName")
+            rating = data.get("rating")
+            comment = data.get("comment", "").strip()
+
+            if not restaurant_id or not restaurant_name or not rating:
+                self.send_json({"error": "Missing required fields: restaurantId, restaurantName, rating (1-5)"}, 400)
+                return
+
+            rating_int = int(rating)
+            if rating_int < 1 or rating_int > 5:
+                self.send_json({"error": "Rating must be between 1 and 5"}, 400)
+                return
+
+            review_id = f"rev-{int(time.time() * 1000)}"
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (review_id, restaurant_id, restaurant_name, rating_int, comment, time.time()))
+            conn.commit()
+            conn.close()
+
+            self.send_json({
+                "success": True, 
+                "message": "Thanks! Your verified check-in is live.",
+                "review": {
+                    "id": review_id,
+                    "restaurant_id": restaurant_id,
+                    "restaurant_name": restaurant_name,
+                    "rating": rating_int,
+                    "comment": comment,
+                    "created_at": time.time()
+                }
             })
             return
 

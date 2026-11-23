@@ -1,6 +1,6 @@
-// cache-bust-20261123-unfreeze
+// cache-bust-20261123-reviews
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-unfreeze';
+const CACHE_NAME = 'waitmate-v20261123-reviews';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
