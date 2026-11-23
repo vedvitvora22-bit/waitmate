@@ -467,6 +467,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateNotifBadge();
   await loadRestaurants();
 
+  // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking
+  try {
+    const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
+    if (saved && saved.id) {
+      currentTicketId = saved.id;
+      activeTicketData = saved.data || null;
+      localStorage.setItem('waitmate_ticket_id', currentTicketId);
+      if (activeTicketData) {
+        const pill = document.getElementById('activeTicketPill');
+        if (pill) {
+          pill.classList.remove('hidden');
+          pill.classList.add('flex');
+        }
+      }
+    }
+  } catch (e) { /* ignore corrupt storage */ }
+
   // Deep link: ?venue=<id> auto-opens the join queue modal for that venue
   const venueParam = new URLSearchParams(window.location.search).get('venue');
   if (venueParam) {
@@ -1917,8 +1934,13 @@ function updateTicketUI() {
     pill.classList.add('flex');
     document.getElementById('activePillVenue').textContent = venueName;
     document.getElementById('activePillPos').textContent = `#${d.position_in_line}`;
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
   } else {
     pill.classList.add('hidden');
+  }
+
+  if (d.status === 'seated' || d.status === 'cancelled') {
+    localStorage.removeItem('waitmate_active_ticket');
   }
 
   const arrivalStatusEl = document.getElementById('ticketArrivalStatus');
