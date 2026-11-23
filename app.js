@@ -1775,10 +1775,16 @@ function renderRestaurantsGrid() {
                 <span>You're in Queue! View Live Pass</span>
               </button>
             ` : stats.is_queue_open ? `
-              <button onclick="openJoinModal('${r.id}')" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm group-hover:bg-orange-500">
-                <i data-lucide="user-plus" class="w-4 h-4"></i>
-                <span>Join Remote Queue</span>
-              </button>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="openJoinModal('${r.id}', 'remote')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5">
+                  <i data-lucide="smartphone" class="w-3 h-3"></i>
+                  <span>Remote Join</span>
+                </button>
+                <button onclick="openJoinModal('${r.id}', 'walk_in')" class="py-2.5 px-3 rounded-xl text-xs font-bold border border-slate-900 text-slate-900 bg-white hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
+                  <i data-lucide="map-pin" class="w-3 h-3"></i>
+                  <span>Walk-In</span>
+                </button>
+              </div>
             ` : `
               <button disabled class="w-full py-2.5 px-4 bg-slate-100 text-slate-400 rounded-xl text-xs font-semibold cursor-not-allowed">
                 Queue Currently Paused
@@ -1877,20 +1883,21 @@ function closeJoinModal() {
 function setJoinChannel(channel) {
   joinChannel = channel;
   const input = document.getElementById('joinChannelInput');
-  const remoteBtn = document.getElementById('joinChannelRemote');
-  const walkinBtn = document.getElementById('joinChannelWalkin');
+  const badge = document.getElementById('joinChannelBadge');
   if (input) input.value = channel;
-  const active = "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition border-2 border-orange-500 bg-orange-50 text-orange-950 flex items-center justify-center gap-2";
-  const inactive = "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition border-2 border-slate-200 bg-white text-slate-700 hover:border-orange-400 hover:bg-orange-50 flex items-center justify-center gap-2";
-  if (remoteBtn && walkinBtn) {
+  if (badge) {
     if (channel === 'walk_in') {
-      remoteBtn.className = inactive;
-      walkinBtn.className = active;
+      badge.textContent = 'Walk-In (I\'m at the restaurant)';
+      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-emerald-700 border-emerald-200 bg-emerald-50";
     } else {
-      remoteBtn.className = active;
-      walkinBtn.className = inactive;
+      badge.textContent = 'Remote Join (On my way)';
+      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-700 border-slate-200 bg-slate-200/50";
     }
   }
+}
+
+function toggleJoinChannel() {
+  setJoinChannel(joinChannel === 'walk_in' ? 'remote' : 'walk_in');
 }
 
 function setPartySize(size) {

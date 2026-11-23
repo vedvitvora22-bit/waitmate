@@ -1,6 +1,6 @@
-// cache-bust-20261124-universal-host-password-v12
+// cache-bust-20261124-walkin-card-choice-v13
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-universal-host-password-v12';
+const CACHE_NAME = 'waitmate-v20261124-walkin-card-choice-v13';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
