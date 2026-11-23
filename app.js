@@ -1419,11 +1419,37 @@ async function loadRestaurants() {
     if (!res.ok) throw new Error('API response not ok');
     const data = await res.json();
     allRestaurants = data.restaurants || [];
+    
+    // Merge Founder-added custom venues
+    const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
+    if (customVenues.length > 0) {
+      allRestaurants = [...allRestaurants, ...customVenues];
+    }
+    
+    // Filter out Founder-deleted venues
+    const deletedVenues = JSON.parse(localStorage.getItem('waitmate_deleted_venues') || '[]');
+    if (deletedVenues.length > 0) {
+      allRestaurants = allRestaurants.filter(r => !deletedVenues.includes(r.id));
+    }
+    
     renderRestaurantsGrid();
     populateHostDropdown();
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
+    
+    // Merge custom venues even in fallback mode
+    const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
+    if (customVenues.length > 0) {
+      allRestaurants = [...allRestaurants, ...customVenues];
+    }
+    
+    // Filter deleted venues even in fallback mode
+    const deletedVenues = JSON.parse(localStorage.getItem('waitmate_deleted_venues') || '[]');
+    if (deletedVenues.length > 0) {
+      allRestaurants = allRestaurants.filter(r => !deletedVenues.includes(r.id));
+    }
+    
     renderRestaurantsGrid();
     populateHostDropdown();
   }
