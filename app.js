@@ -1448,18 +1448,19 @@ function renderRestaurantsGrid() {
     const stats = r.live_stats || { estimated_wait_mins: 10, queue_count: 0, total_waiting_people: 0, is_queue_open: true };
 
     // Live Peak Rush Crowd Indicator
-    const loadRatio = stats.queue_count / Math.max(1, r.total_tables || 0);
+    const parties = stats.active_parties != null ? stats.active_parties : stats.queue_count;
+    const wait = stats.estimated_wait_mins || 0;
     let rushBadgeClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
     let rushIcon = "🟢";
     let rushLabel = "Walk right in";
-    if (loadRatio > 0.15 && loadRatio <= 0.45) {
-      rushBadgeClass = "text-amber-700 bg-amber-50 border border-amber-100";
-      rushIcon = "🟠";
-      rushLabel = "Filling fast";
-    } else if (loadRatio > 0.45) {
+    if (parties >= 4 || wait >= 20) {
       rushBadgeClass = "text-rose-700 bg-rose-50 border border-rose-100";
       rushIcon = "🔴";
       rushLabel = "Peak Rush";
+    } else if (parties >= 1 || (wait > 0 && wait < 20)) {
+      rushBadgeClass = "text-amber-700 bg-amber-50 border border-amber-100";
+      rushIcon = "🟠";
+      rushLabel = "Filling fast";
     }
 
     // Reliability Badge styling

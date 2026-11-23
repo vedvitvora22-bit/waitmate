@@ -682,7 +682,78 @@ def format_time_ago(ts):
     else:
         return f"{diff // 86400}d ago"
 
+def compute_prototype_restaurant_metrics(restaurant, real_waiting_parties, real_waiting_guests):
+    rid = restaurant['id']
+    profiles = {
+        "rest-1": {"rush": [(8,11),(18,22)], "peakP": (4,7), "peakW": (22,34), "offP": (2,3), "offW": (12,18)},
+        "rest-2": {"rush": [(12,15),(19,23)], "peakP": (5,8), "peakW": (28,42), "offP": (2,2), "offW": (14,14)},
+        "rest-3": {"rush": [(19,25)], "peakP": (6,9), "peakW": (20,32), "offP": (0,1), "offW": (0,6)},
+        "rest-4": {"rush": [(17,24)], "peakP": (4,7), "peakW": (30,48), "offP": (0,0), "offW": (0,0)},
+        "rest-5": {"rush": [(9,11),(16,20)], "peakP": (3,6), "peakW": (10,18), "offP": (1,1), "offW": (5,5)},
+        "rest-6": {"rush": [(13,15),(20,22.5)], "peakP": (3,5), "peakW": (24,36), "offP": (0,0), "offW": (0,0)},
+        "rest-7": {"rush": [(12,15.5)], "peakP": (6,9), "peakW": (32,45), "offP": (1,2), "offW": (8,12)},
+        "rest-8": {"rush": [(8,11.5),(16,19)], "peakP": (3,5), "peakW": (12,20), "offP": (0,0), "offW": (0,0)},
+        "rest-9": {"rush": [(17,22)], "peakP": (5,8), "peakW": (25,38), "offP": (2,2), "offW": (10,10)},
+        "rest-10": {"rush": [(18,24)], "peakP": (5,8), "peakW": (16,26), "offP": (0,0), "offW": (0,0)},
+    }
+    p = profiles.get(rid)
+    if not p:
+        h = sum(ord(c) for c in str(rid))
+        p = {"rush": [(8,11),(18,22)], "peakP": (3,6), "peakW": (18,30), "offP": (1,2), "offW": (6,12)}
+    import datetime
+    ist = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+    hour = ist.hour + ist.minute/60.0
+    in_rush = False
+    for s,e in p['rush']:
+        if s <= e:
+            if hour >= s and hour < e: in_rush = True
+        else:
+            if hour >= s or hour < e: in_rush = True
+    bucket = int(time.time()//300)
+    seed = (bucket + sum(ord(c) for c in str(rid))) % 1000
+    def rnd(mn,mx): return mn + (seed % (mx-mn+1))
+    if in_rush:
+        sim_p = rnd(*p['peakP']); sim_w = rnd(*p['peakW'])
+    else:
+        sim_p = rnd(*p['offP']); sim_w = rnd(*p['offW'])
+    is_open = bool(restaurant.get('is_queue_open', True))
+    rp = int(real_waiting_parties or 0)
+    rg = int(real_waiting_guests or 0)
+    total = (sim_p + rp) if is_open else 0
+    manual = restaurant.get('manual_override_wait')
+    if not is_open:
+        est = 0
+    elif manual is not None:
+        est = int(manual)
+    else:
+        base_prep = int(restaurant.get('base_prep_time') or 10)
+        osc = (bucket % 3) - 1
+        est = max(0, int(total * base_prep * 0.6 + sim_w * 0.4 + osc*2))
+        if total == 0: est = 0
+    return {
+        "queue_count": total,
+        "total_waiting_people": total*2 + rg,
+        "estimated_wait_mins": est,
+        "algorithmic_wait_mins": est,
+        "has_manual_override": manual is not None,
+        "is_queue_open": is_open,
+        "active_parties": total,
+        "active_guests": total*2 + rg
+    }
+
 def get_restaurant_live_stats(restaurant_id):
+    import sqlite3
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) as queue_count, SUM(party_size) as total_people FROM queue_entries WHERE restaurant_id = ? AND status IN ('waiting','notified','delayed')", (restaurant_id,))
+    q = c.fetchone()
+    c.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,))
+    rest = c.fetchone()
+    conn.close()
+    if not rest:
+        return {"queue_count":0,"total_waiting_people":0,"estimated_wait_mins":0,"algorithmic_wait_mins":0,"has_manual_override":False,"is_queue_open":False,"active_parties":0,"active_guests":0}
+    rest = dict(rest)
+    return compute_prototype_restaurant_metrics(rest, q['queue_count'] or 0, q['total_people'] or 0)
     conn = get_db()
     c = conn.cursor()
     

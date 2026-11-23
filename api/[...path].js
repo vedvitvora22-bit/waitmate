@@ -154,6 +154,64 @@ async function ensureRestaurants() {
   }
 }
 
+const PROTO_PROFILES = {
+  "rest-1": { rush: [[8,11],[18,22]], peakP: [4,7], peakW: [22,34], offP: [2,3], offW: [12,18] },
+  "rest-2": { rush: [[12,15],[19,23]], peakP: [5,8], peakW: [28,42], offP: [2,2], offW: [14,14] },
+  "rest-3": { rush: [[19,25]], peakP: [6,9], peakW: [20,32], offP: [0,1], offW: [0,6] },
+  "rest-4": { rush: [[17,24]], peakP: [4,7], peakW: [30,48], offP: [0,0], offW: [0,0] },
+  "rest-5": { rush: [[9,11],[16,20]], peakP: [3,6], peakW: [10,18], offP: [1,1], offW: [5,5] },
+  "rest-6": { rush: [[13,15],[20,22.5]], peakP: [3,5], peakW: [24,36], offP: [0,0], offW: [0,0] },
+  "rest-7": { rush: [[12,15.5]], peakP: [6,9], peakW: [32,45], offP: [1,2], offW: [8,12] },
+  "rest-8": { rush: [[8,11.5],[16,19]], peakP: [3,5], peakW: [12,20], offP: [0,0], offW: [0,0] },
+  "rest-9": { rush: [[17,22]], peakP: [5,8], peakW: [25,38], offP: [2,2], offW: [10,10] },
+  "rest-10": { rush: [[18,24]], peakP: [5,8], peakW: [16,26], offP: [0,0], offW: [0,0] }
+};
+
+function hashProfile(id) {
+  let h = 0; for (let i = 0; i < String(id).length; i++) h = (h * 31 + String(id).charCodeAt(i)) >>> 0;
+  const windows = [[[8,11],[18,22]],[[12,15],[19,23]],[[19,25]],[[17,24]],[[9,11],[16,20]]];
+  return { rush: windows[h % windows.length], peakP: [3,6], peakW: [18,30], offP: [1,2], offW: [6,12] };
+}
+
+function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realWaitingGuests) {
+  const id = restaurant.id;
+  const profile = PROTO_PROFILES[id] || hashProfile(id);
+  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const hour = istNow.getHours() + istNow.getMinutes() / 60;
+  const inRush = profile.rush.some(([s, e]) => (s <= e ? (hour >= s && hour < e) : (hour >= s || hour < e)));
+  const bucket = Math.floor(Date.now() / 300000);
+  const seed = (bucket + (id.split('').reduce((a,c)=>a+c.charCodeAt(0),0))) % 1000;
+  const rand = (min, max) => min + (seed % (max - min + 1));
+  const simulatedParties = inRush ? rand(profile.peakP[0], profile.peakP[1]) : rand(profile.offP[0], profile.offP[1]);
+  const simulatedWait = inRush ? rand(profile.peakW[0], profile.peakW[1]) : rand(profile.offW[0], profile.offW[1]);
+  const isOpen = Boolean(restaurant.is_queue_open);
+  const realP = Number(realWaitingParties || 0);
+  const realG = Number(realWaitingGuests || 0);
+  const totalActiveParties = isOpen ? (simulatedParties + realP) : 0;
+  const osc = (bucket % 3) - 1;
+  let estimated = 0;
+  if (isOpen) {
+    if (restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined) {
+      estimated = Number(restaurant.manual_override_wait);
+    } else {
+      const basePrep = Number(restaurant.base_prep_time || 10);
+      const tables = Number(restaurant.total_tables || 1);
+      estimated = Math.max(0, Math.round((totalActiveParties * basePrep * 0.6) + simulatedWait * 0.4 + osc * 2));
+      if (totalActiveParties === 0) estimated = 0;
+    }
+  }
+  return {
+    queue_count: totalActiveParties,
+    total_waiting_people: totalActiveParties * 2 + realG,
+    estimated_wait_mins: estimated,
+    algorithmic_wait_mins: estimated,
+    has_manual_override: restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined,
+    is_queue_open: isOpen,
+    active_parties: totalActiveParties,
+    active_guests: totalActiveParties * 2 + realG
+  };
+}
+
 async function getLiveStats(restaurant, queueEntries) {
   const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting", "notified", "delayed"].includes(entry.status));
   const queueCount = active.length;
@@ -185,7 +243,10 @@ async function route(request, response, pathParts) {
     try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const result = [];
     for (const restaurant of restaurants) {
-      const liveStats = await getLiveStats(restaurant, queueEntries);
+      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
+      const realParties = realActive.length;
+      const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
+      const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
       result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
     }
     return send(response, 200, { restaurants: result });
@@ -324,7 +385,11 @@ async function route(request, response, pathParts) {
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
     const enriched = [];
-    for (const restaurant of restaurants) enriched.push({ ...restaurant, live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback() });
+    for (const restaurant of restaurants) {
+      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
+      const liveStats = computePrototypeRestaurantMetrics(restaurant, realActive.length, realActive.reduce((s,e)=>s+Number(e.party_size||0),0));
+      enriched.push({ ...restaurant, live_stats: liveStats, reliability: reliabilityFallback() });
+    }
     return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });
   }
 
