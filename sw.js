@@ -1,6 +1,6 @@
-// cache-bust-20261124-host-queue-join-time-channel-v18
+// cache-bust-20261124-favorites-share-pass-v19
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-host-queue-join-time-channel-v18';
+const CACHE_NAME = 'waitmate-v20261124-favorites-share-pass-v19';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

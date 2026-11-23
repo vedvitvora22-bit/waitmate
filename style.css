@@ -205,3 +205,18 @@ body {
 .modal-content {
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out;
 }
+
+/* Favorite Heart Pop Animation */
+@keyframes heartPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.5) rotate(-15deg); }
+  100% { transform: scale(1); }
+}
+
+.favorite-btn.liking {
+  animation: heartPop 0.22s ease-out;
+}
+
+.favorite-btn.liking .heart-fill {
+  color: #f97316 !important;
+}

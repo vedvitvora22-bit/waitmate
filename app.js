@@ -333,6 +333,52 @@ let hostData = null;
 let ratedTickets = new Set();
 const RATED_STORAGE_KEY = 'waitmate_rated_tickets';
 
+// Favorites / Bookmarked Spots — persisted in localStorage (wm_favorites)
+let favorites = new Set();
+const FAVORITES_STORAGE_KEY = 'wm_favorites';
+
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) favorites = new Set(parsed);
+    }
+  } catch (e) { /* ignore corrupt storage */ }
+}
+
+function persistFavorites() {
+  try { localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favorites])); } catch (e) { /* ignore storage errors */ }
+}
+
+function isFavorite(restId) {
+  return favorites.has(restId);
+}
+
+function toggleFavorite(restId, btn) {
+  const wasFav = favorites.has(restId);
+  if (wasFav) {
+    favorites.delete(restId);
+    showToast("Removed from Favorites", "info");
+  } else {
+    favorites.add(restId);
+    showToast("Saved to Favorites", "success");
+    // Crisp pop animation on the heart button
+    if (btn) {
+      btn.classList.add('liking');
+      const icon = btn.querySelector('[id^="heart-icon-"]');
+      if (icon) icon.classList.add('heart-fill');
+      setTimeout(() => {
+        btn.classList.remove('liking');
+        if (icon) icon.classList.remove('heart-fill');
+      }, 260);
+    }
+  }
+  persistFavorites();
+  renderRestaurantsGrid();
+  lucide.createIcons();
+}
+
 // Host Stand new-customer join alert tracking
 let seenHostTicketIds = new Set();
 let hostQueueInitializedFor = null;
@@ -523,6 +569,7 @@ async function sendTableReadyNotification(ticketData) {
 document.addEventListener('DOMContentLoaded', async () => {
   await initPushNotifications();
   await loadRestaurants();
+  loadFavorites();
   startRestaurantsRefresh();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking
@@ -555,6 +602,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // QR-link walk-in: arrive at the restaurant door → auto-select Walk-In channel
     openJoinModal(venueParam, 'walk_in');
     window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  // Deep link: ?ticket=<id> opens a read-only Live Friend Pass Tracker for the shared ticket
+  const ticketParam = new URLSearchParams(window.location.search).get('ticket');
+  if (ticketParam) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    openFriendPassTracker(ticketParam);
   }
 
   if (currentTicketId) {
@@ -1317,46 +1371,75 @@ async function submitNewRestaurant(e) {
 // ==========================================
 // 2. FOUNDER OVERVIEW & PLATFORM COMMAND CENTER
 // ==========================================
+let founderRestaurantsCache = [];
+let founderQueuesCache = [];
+let founderReviewsCache = [];
+let globalAnnouncementText = '';
+
 async function loadFounderDashboard() {
   if (!isFounderUnlocked()) { openFounderLoginModal(); return; }
+  const headers = founderHeaders();
+  let data = null;
+  let analytics401 = false;
   try {
-    const res = await fetch('/api/founder/analytics', { headers: founderHeaders(), cache: 'no-store' });
-    if (res.status === 401) {
+    const [analyticsRes, restaurantsRes, queuesRes, reviewsRes, settingsRes] = await Promise.allSettled([
+      fetch('/api/founder/analytics', { headers, cache: 'no-store' }),
+      fetch('/api/founder/restaurants', { headers, cache: 'no-store' }),
+      fetch('/api/founder/queues', { headers, cache: 'no-store' }),
+      fetch('/api/founder/reviews', { headers, cache: 'no-store' }),
+      fetch('/api/founder/settings', { headers, cache: 'no-store' })
+    ]);
+
+    if (analyticsRes.status === 'fulfilled') {
+      if (analyticsRes.value.status === 401) {
+        analytics401 = true;
+      } else if (analyticsRes.value.ok) {
+        data = await analyticsRes.value.json();
+      }
+    }
+    if (analytics401) {
       sessionStorage.removeItem(FOUNDER_PWD_KEY);
       openFounderLoginModal();
       showToast('Founder session expired. Re-enter password.', 'error');
       return;
     }
-    if (!res.ok) throw new Error('Founder API unavailable');
-    const data = await res.json();
-    renderFounderData(data);
+
+    if (restaurantsRes.status === 'fulfilled' && restaurantsRes.value.ok) {
+      const r = await restaurantsRes.value.json();
+      founderRestaurantsCache = r.restaurants || [];
+    }
+    if (queuesRes.status === 'fulfilled' && queuesRes.value.ok) {
+      const q = await queuesRes.value.json();
+      founderQueuesCache = q.queues || [];
+    }
+    if (reviewsRes.status === 'fulfilled' && reviewsRes.value.ok) {
+      const rv = await reviewsRes.value.json();
+      founderReviewsCache = rv.reviews || [];
+    }
+    if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
+      const s = await settingsRes.value.json();
+      globalAnnouncementText = s.global_announcement || '';
+      const statusEl = document.getElementById('fndGlobalBannerStatus');
+      if (statusEl) statusEl.textContent = globalAnnouncementText ? `Active: "${globalAnnouncementText}"` : 'None active';
+    }
   } catch (err) {
-    console.warn("Founder data fallback:", err);
-    // Render using in-memory / local state
-    const totalVenues = allRestaurants.length;
-    const cities = [...new Set(allRestaurants.map(r => r.city || 'Mumbai'))];
-    let waitingDiners = 0;
-    let waitingParties = 0;
-    allRestaurants.forEach(r => {
-      waitingDiners += (r.live_stats ? r.live_stats.total_waiting_people : 0);
-      waitingParties += (r.live_stats ? r.live_stats.queue_count : 0);
-    });
-    renderFounderData({
-      summary: {
-        total_restaurants: totalVenues,
-        total_cities: cities.length,
-        cities_list: cities,
-        active_parties_in_queue: waitingParties,
-        active_diners_in_queue: waitingDiners,
-        total_seated_parties: 24,
-        total_seated_diners: 68,
-        platform_avg_reliability: 93.4
-      },
-      restaurants: allRestaurants,
-      recent_queues: [],
-      recent_reviews: []
-    });
+    console.warn("Founder dashboard load failed:", err);
   }
+  renderFounderData(data || {
+    summary: {
+      total_restaurants: founderRestaurantsCache.length,
+      total_cities: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))].length,
+      cities_list: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))],
+      active_parties_in_queue: founderQueuesCache.length,
+      active_diners_in_queue: founderQueuesCache.reduce((s, q) => s + Number(q.party_size || 0), 0),
+      total_seated_parties: 0,
+      total_seated_diners: 0,
+      platform_avg_reliability: 92
+    },
+    restaurants: founderRestaurantsCache,
+    recent_queues: founderQueuesCache,
+    recent_reviews: founderReviewsCache
+  });
 }
 
 function renderFounderData(data) {
@@ -1609,6 +1692,7 @@ function renderRestaurantsGrid() {
     if (!areaMatches(r, currentArea)) return false;
     if (currentCategory !== 'all' && r.type !== currentCategory) return false;
     if (openOnly && r.live_stats && !r.live_stats.is_queue_open) return false;
+    if (currentCategory === 'saved' && !favorites.has(r.id)) return false;
     if (currentSearch) {
       const q = currentSearch.toLowerCase();
       const matchName = (r.name || '').toLowerCase().includes(q);
@@ -1620,8 +1704,14 @@ function renderRestaurantsGrid() {
     return true;
   });
 
-  // Sorting
+  // Sorting — favorited spots are pinned to the top of the default discovery grid
+  const isDefaultGrid = currentCategory === 'all' && !currentSearch && currentCity === 'all' && currentArea === 'all';
   filtered.sort((a, b) => {
+    if (isDefaultGrid && favorites.size > 0) {
+      const aFav = favorites.has(a.id);
+      const bFav = favorites.has(b.id);
+      if (aFav !== bFav) return bFav ? 1 : -1;
+    }
     if (currentSort === 'reliability') {
       return (b.reliability?.score || 0) - (a.reliability?.score || 0);
     } else if (currentSort === 'wait_asc') {
@@ -1688,7 +1778,7 @@ function renderRestaurantsGrid() {
           <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20"></div>
 
           <!-- Top Pills -->
-          <div class="absolute top-3 left-3 flex items-center gap-1.5">
+          <div class="absolute top-3 right-3 flex items-center gap-1.5 z-10">
             <span class="badge-tag bg-slate-900/80 backdrop-blur text-white text-[10px] font-bold uppercase tracking-wider">
               ${isTruck ? '🚚 Food Truck' : '🍽️ Dine-in'}
             </span>
@@ -1699,6 +1789,11 @@ function renderRestaurantsGrid() {
               📍 ${r.city || 'Mumbai'}
             </span>
           </div>
+
+          <!-- Favorite / Bookmark Heart (top-left of cover image, opposite Reliability Score pill) -->
+          <button onclick="toggleFavorite('${r.id}', this)" class="favorite-btn absolute top-3 left-3 w-9 h-9 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center text-slate-900 shadow-md border border-white/70 transition-transform active:scale-90 hover:bg-white z-20" aria-label="${isFavorite(r.id) ? 'Remove from Favorites' : 'Add to Favorites'}" title="${isFavorite(r.id) ? 'Saved ♥' : 'Save to Favorites'}" id="fav-btn-${r.id}">
+            <span id="heart-icon-${r.id}" class="text-2xl leading-none ${isFavorite(r.id) ? 'text-orange-500' : 'text-slate-600'}">${isFavorite(r.id) ? '♥' : '♡'}</span>
+          </button>
 
           <!-- Bottom Venue Title inside Image -->
           <div class="absolute bottom-3 left-3 right-3">
@@ -2470,6 +2565,121 @@ function clearCurrentTicket() {
   if (pollTimer) clearInterval(pollTimer);
   document.getElementById('activeTicketPill').classList.add('hidden');
   closeTicketModal();
+}
+
+// ==========================================
+// 2B. SHAREABLE LIVE PASS & FRIEND TRACKER
+// ==========================================
+
+let friendTicketId = null;
+let friendPollTimer = null;
+
+function buildShareLink(ticketId) {
+  return `${window.location.origin}?ticket=${encodeURIComponent(ticketId)}`;
+}
+
+function buildShareMessage(ticketData) {
+  const venueName = (ticketData.restaurant && ticketData.restaurant.name) || (ticketData.restaurant_name) || 'this restaurant';
+  const rank = ticketData.position_in_line ?? '?';
+  const eta = ticketData.estimated_remaining_mins ?? ticketData.estimated_wait_mins ?? '?';
+  const link = buildShareLink(currentTicketId || (ticketData.id || ''));
+  return `I'm #${rank} in line at ${venueName} (~${eta} mins wait) on WaitMate! Track our live table status: ${link}`;
+}
+
+async function sharePass() {
+  if (!currentTicketId && !activeTicketData) {
+    showToast("No active pass to share yet. Join a queue first!", "info");
+    return;
+  }
+  const ticketId = currentTicketId || activeTicketData.id;
+  const link = buildShareLink(ticketId);
+  const message = buildShareMessage(activeTicketData || {});
+  const shareData = { title: 'My WaitMate Live Pass', text: message, url: link };
+
+  // Mobile native share first, clean clipboard fallback on desktop
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      showToast("Pass shared!", "success");
+      return;
+    } catch (err) {
+      // User cancelled or share failed — fall through to clipboard
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${message}\n${link}`);
+    showToast("Live pass link copied to clipboard", "success");
+  } catch (err) {
+    window.prompt("Copy this link to share your live pass:", link);
+  }
+}
+
+async function sharePassWhatsApp() {
+  if (!currentTicketId && !activeTicketData) {
+    showToast("No active pass to share yet. Join a queue first!", "info");
+    return;
+  }
+  const ticketId = currentTicketId || activeTicketData.id;
+  const link = buildShareLink(ticketId);
+  const message = buildShareMessage(activeTicketData || {});
+  try { await navigator.clipboard.writeText(message); } catch (e) { /* clipboard optional */ }
+  window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+  showToast("Opening WhatsApp…", "success");
+}
+
+// Update the share link preview when the pass modal opens
+const _origOpenTicketModal = openTicketModal;
+function openTicketModal() {
+  _origOpenTicketModal();
+  const preview = document.getElementById('sharePassLinkPreview');
+  if (preview) preview.textContent = buildShareLink(currentTicketId || (activeTicketData && activeTicketData.id || ''));
+}
+
+// Read-only Live Friend Pass Tracker — opened via ?ticket=<id> deep link.
+// Friends can view rank/ETA/venue/status but cannot cancel or modify the ticket.
+async function openFriendPassTracker(ticketId) {
+  friendTicketId = ticketId;
+  const modal = document.getElementById('friendPassModal');
+  if (modal) modal.classList.remove('hidden');
+  await fetchFriendTicketStatus();
+  if (friendPollTimer) clearInterval(friendPollTimer);
+  friendPollTimer = setInterval(fetchFriendTicketStatus, 5000);
+}
+
+async function fetchFriendTicketStatus() {
+  if (!friendTicketId) return;
+  try {
+    const res = await fetch(`/api/queue/ticket/${encodeURIComponent(friendTicketId)}`, { cache: 'no-store' });
+    if (res.status === 404) {
+      const rankEl = document.getElementById('friendPassRank');
+      const etaEl = document.getElementById('friendPassEta');
+      const statusEl = document.getElementById('friendPassStatus');
+      if (rankEl) rankEl.textContent = '#–';
+      if (etaEl) etaEl.textContent = '– mins';
+      if (statusEl) statusEl.textContent = 'Not Found';
+      return;
+    }
+    const data = await res.json();
+    document.getElementById('friendPassRank').textContent = `#${data.position_in_line ?? '–'}`;
+    const eta = data.estimated_remaining_mins ?? data.estimated_wait_mins ?? '–';
+    document.getElementById('friendPassEta').textContent = eta === '–' ? '– mins' : `~${eta} mins`;
+    document.getElementById('friendPassVenueName').textContent = (data.restaurant && data.restaurant.name) || data.restaurant_name || 'Partner Venue';
+    document.getElementById('friendPassVenueAddress').textContent = (data.restaurant && data.restaurant.address) || '';
+    const statusMap = { waiting: 'Waiting', notified: 'Table Ready', delayed: 'Delayed', seated: 'Seated', cancelled: 'Cancelled' };
+    const statusText = statusMap[data.status] || data.status || 'Waiting';
+    const statusEl = document.getElementById('friendPassStatus');
+    statusEl.textContent = statusText;
+    statusEl.className = "font-bold " + (data.status === 'notified' ? 'text-emerald-700' : data.status === 'seated' ? 'text-blue-600' : data.status === 'cancelled' ? 'text-rose-600' : data.status === 'delayed' ? 'text-amber-700' : 'text-emerald-700');
+  } catch (err) {
+    console.warn('Friend pass tracker fetch failed:', err);
+  }
+}
+
+function closeFriendPassModal() {
+  const modal = document.getElementById('friendPassModal');
+  if (modal) modal.classList.add('hidden');
+  if (friendPollTimer) { clearInterval(friendPollTimer); friendPollTimer = null; }
+  friendTicketId = null;
 }
 
 // Seated-rating gate helpers

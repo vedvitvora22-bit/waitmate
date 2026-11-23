@@ -2183,6 +2183,318 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             })
             return
 
+        # ------------------------------------------------------------------
+        # FOUNDER SUPER-ADMIN ("GOD MODE") POST ENDPOINTS (SQLite mirror)
+        # ------------------------------------------------------------------
+
+        def _require_founders():
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return False
+            return True
+
+        # API: Founder update any restaurant
+        if path == "/api/founder/restaurant/update":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            allowed = ["name", "category", "type", "city", "address", "price_range", "image_url", "description", "total_tables", "base_prep_time", "is_queue_open"]
+            sets = []
+            vals = []
+            for field in allowed:
+                if field in data:
+                    val = data[field]
+                    if field == "is_queue_open":
+                        val = 1 if bool(val) else 0
+                    sets.append(f"{field} = ?")
+                    vals.append(val)
+            if not sets:
+                conn.close()
+                self.send_json({"error": "No updatable fields provided"}, 400)
+                return
+            if "total_tables" in data:
+                sets.append("available_tables = ?")
+                vals.append(max(1, int(data.get("total_tables", 16)) // 4))
+            vals.append(rest_id)
+            c.execute(f"UPDATE restaurants SET {', '.join(sets)} WHERE id = ?", vals)
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Restaurant updated."})
+            return
+
+        # API: Founder override Reliability Score & Grade
+        if path == "/api/founder/restaurant/reliability":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            try:
+                score = max(0, min(100, int(data.get("score", 0))))
+            except (TypeError, ValueError):
+                self.send_json({"error": "Invalid reliability score"}, 400)
+                return
+            grade = "A+" if score >= 95 else "A" if score >= 90 else "B" if score >= 80 else "C"
+            verdicts = {"A+": "Exceptionally Accurate", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits"}
+            badge_colors = {"A+": "emerald", "A": "emerald", "B": "amber", "C": "rose"}
+            override = {
+                "score": score,
+                "grade": grade,
+                "verdict": data.get("verdict") or verdicts[grade],
+                "badge_color": data.get("badge_color") or badge_colors[grade],
+                "avg_variance_mins": float(data.get("avg_variance_mins", 2.5)),
+                "total_verified_checkins": int(data.get("total_verified_checkins", 0)),
+                "on_time_pct": int(data.get("on_time_pct", 90)),
+                "early_pct": int(data.get("early_pct", 5)),
+                "slight_late_pct": int(data.get("slight_late_pct", 5)),
+                "severe_late_pct": int(data.get("severe_late_pct", 0)),
+                "recent_reviews": data.get("recent_reviews", [])
+            }
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT id FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            c.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (f"fnd_override_{rest_id}", json.dumps(override))
+            )
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": f"Reliability Score overridden to {score}% (Grade {grade}).", "score": score, "grade": grade})
+            return
+
+        # API: Founder publish / edit / clear venue announcement
+        if path == "/api/founder/restaurant/announcement":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            announcement = str(data.get("announcement", ""))
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT id FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            c.execute('UPDATE restaurants SET announcement = ? WHERE id = ?', (announcement, rest_id))
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Announcement published." if announcement else "Announcement cleared.", "announcement": announcement})
+            return
+
+        # API: Founder manual wait-time override
+        if path == "/api/founder/restaurant/manual-wait":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            manual = data.get("manual_wait_mins")
+            if manual is None or manual == "":
+                manual = None
+            else:
+                try:
+                    manual = int(manual)
+                    if manual < 0 or manual > 180:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    self.send_json({"error": "Manual wait must be between 0 and 180 minutes"}, 400)
+                    return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT id FROM restaurants WHERE id = ?', (rest_id,))
+            if not c.fetchone():
+                conn.close()
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+            c.execute('UPDATE restaurants SET manual_override_wait = ? WHERE id = ?', (manual, rest_id))
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Wait estimate reset to algorithmic." if manual is None else f"Wait estimate overridden to {manual} mins.", "manual_override_wait": manual})
+            return
+
+        # API: Founder global network banner
+        if path == "/api/founder/announcement/global":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            value = str(data.get("announcement", ""))
+            conn = get_db()
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                ("global_announcement", value)
+            )
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Global network banner published." if value else "Global network banner cleared.", "announcement": value})
+            return
+
+        # API: Founder queue action on any ticket (notify/seat/remove/edit_party_size)
+        if path == "/api/founder/queue/action":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            ticket_id = data.get("ticket_id")
+            action = data.get("action")
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT * FROM queue_entries WHERE id = ? OR ticket_number = ?', (ticket_id, ticket_id))
+            q = c.fetchone()
+            if not q:
+                conn.close()
+                self.send_json({"error": "Ticket not found"}, 404)
+                return
+            qid = q["id"]
+            now = time.time()
+            if action == "notify":
+                c.execute('UPDATE queue_entries SET status = "notified", notified_at = ? WHERE id = ?', (now, qid))
+            elif action == "seat":
+                joined = q["joined_at"]
+                actual_wait = max(1, int((now - joined) / 60))
+                c.execute('UPDATE queue_entries SET status = "seated", seated_at = ?, actual_wait_mins = ?, has_arrived = 1 WHERE id = ?', (now, actual_wait, qid))
+                c.execute('''
+                    INSERT INTO reliability_logs VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (f"log-fnd-seat-{int(now)}", q["restaurant_id"], qid, q["estimated_wait_mins"], actual_wait, "spot_on" if abs(actual_wait - q["estimated_wait_mins"]) <= 3 else ("faster" if actual_wait < q["estimated_wait_mins"] - 3 else ("slight_delay" if actual_wait <= q["estimated_wait_mins"] + 7 else "severe_delay")), "Founder seated the party", now))
+            elif action == "remove":
+                c.execute('UPDATE queue_entries SET status = "no_show" WHERE id = ?', (qid,))
+            elif action == "edit_party_size":
+                try:
+                    size = int(data.get("party_size", 0))
+                    if size < 1 or size > 20:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    conn.close()
+                    self.send_json({"error": "Party size must be between 1 and 20"}, 400)
+                    return
+                c.execute('UPDATE queue_entries SET party_size = ? WHERE id = ?', (size, qid))
+            else:
+                conn.close()
+                self.send_json({"error": "Unknown queue action"}, 400)
+                return
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": "Queue action updated."})
+            return
+
+        # API: Founder clear a venue's active queue
+        if path == "/api/founder/queue/clear-venue":
+            if not _require_founders():
+                return
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "Missing restaurant_id"}, 400)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ? AND status IN ("waiting", "notified", "delayed")', (rest_id,))
+            count = c.fetchone()[0]
+            c.execute('DELETE FROM queue_entries WHERE restaurant_id = ? AND status IN ("waiting", "notified", "delayed")', (rest_id,))
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": f"Cleared {count} active ticket(s) from the venue queue.", "cleared": count})
+            return
+
+        # API: Founder purge test / stale entries
+        if path == "/api/founder/queue/purge":
+            if not _require_founders():
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM queue_entries WHERE status NOT IN ('waiting', 'notified', 'delayed')")
+            count = c.fetchone()[0]
+            c.execute("DELETE FROM queue_entries WHERE status NOT IN ('waiting', 'notified', 'delayed')")
+            conn.commit()
+            conn.close()
+            self.send_json({"success": True, "message": f"Purged {count} stale/test queue entry(ies).", "purged": count})
+            return
+
+        self.send_json({"error": "Endpoint not found"}, 404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # API: Founder delete / hide a review (audit watchdog) + recalc score
+        if path.startswith("/api/founder/reviews/"):
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Invalid Founder Master Password."}, 401)
+                return
+            review_id = path.rsplit("/", 1)[-1]
+            if not review_id:
+                self.send_json({"error": "Missing review id"}, 400)
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT restaurant_id FROM reviews WHERE id = ?", (review_id,))
+            row = c.fetchone()
+            restaurant_id = row["restaurant_id"] if row else None
+            c.execute("DELETE FROM reviews WHERE id = ?", (review_id,))
+            conn.commit()
+            conn.close()
+            # Recalculate Reliability Score from remaining reviews
+            if restaurant_id:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("SELECT rating FROM reviews WHERE restaurant_id = ?", (restaurant_id,))
+                rated = c.fetchall()
+                conn.close()
+                if rated:
+                    ratings = [r["rating"] for r in rated]
+                    avg = sum(ratings) / len(ratings)
+                    score = max(50, min(99, round(55 + (avg - 1) * 11)))
+                    grade = "A+" if score >= 95 else "A" if score >= 90 else "B" if score >= 80 else "C"
+                    badge = "emerald" if score >= 85 else ("amber" if score >= 75 else "rose")
+                    override = {
+                        "score": score,
+                        "grade": grade,
+                        "verdict": "Recalculated after review moderation",
+                        "badge_color": badge,
+                        "avg_variance_mins": 2.5,
+                        "total_verified_checkins": len(ratings),
+                        "on_time_pct": 90,
+                        "early_pct": 5,
+                        "slight_late_pct": 5,
+                        "severe_late_pct": 0,
+                        "recent_reviews": []
+                    }
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (f"fnd_override_{restaurant_id}", json.dumps(override))
+                    )
+                    conn.commit()
+                    conn.close()
+            self.send_json({"success": True, "message": "Review deleted and Reliability Score recalculated."})
+            return
+
         self.send_json({"error": "Endpoint not found"}, 404)
 
     def serve_static_file(self, filepath, content_type):

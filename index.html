@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏳</text></svg>">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -69,19 +71,23 @@
     </div>
   </div>
 
+  <!-- Global Network Banner (pushed by the Founder across all venues) -->
+  <div id="globalNetworkBanner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2 text-[11px] font-medium text-amber-800 flex items-center justify-between shrink-0">
+    <span class="flex items-center gap-1.5"><i data-lucide="megaphone" class="w-3.5 h-3.5"></i> <span id="globalBannerText"></span></span>
+    <button onclick="document.getElementById('globalNetworkBanner').classList.add('hidden')" class="text-amber-600 hover:text-amber-800 underline">Dismiss</button>
+  </div>
+
   <!-- Primary Header & Tri-Interface Navigation -->
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       
       <!-- Brand Logo -->
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
-          <i data-lucide="timer" class="w-5 h-5"></i>
-        </div>
+        <img src="/logo.svg" alt="WaitMate" class="w-9 h-9 shrink-0" width="36" height="36">
         <div>
           <div class="flex items-center gap-1.5">
-            <span class="font-heading font-extrabold text-xl tracking-tight text-slate-900">Wait<span class="text-orange-500">Mate</span></span>
-            <span class="bg-orange-100 text-orange-900 text-[10px] font-black px-1.5 py-0.5 rounded border border-orange-300">INDIA</span>
+            <span class="font-heading font-extrabold text-xl tracking-tight text-slate-900">Wait<span class="text-emerald-500">Mate</span></span>
+            <span class="bg-emerald-100 text-emerald-900 text-[10px] font-black px-1.5 py-0.5 rounded border border-emerald-200">INDIA</span>
           </div>
           <p class="text-[11px] text-slate-500 font-medium hidden sm:block">Zero waiting, verified seating.</p>
         </div>
@@ -210,6 +216,9 @@
         <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
           <button onclick="setCategoryFilter('all')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white" data-cat="all">
             All Spots
+          </button>
+          <button onclick="setCategoryFilter('saved')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="saved">
+            Saved ♥
           </button>
           <button onclick="setCategoryFilter('restaurant')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="restaurant">
             🍽️ Restaurants
@@ -506,6 +515,14 @@
               <i data-lucide="plus" class="w-3.5 h-3.5"></i>
               <span>+ Add Restaurant</span>
             </button>
+            <button onclick="founderPurgeStaleEntries()" class="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Purge Stale Entries</span>
+            </button>
+            <button onclick="founderExportNetworkData()" class="px-3 py-2 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-slate-700">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export Network Data</span>
+            </button>
           </div>
         </div>
 
@@ -535,6 +552,24 @@
             <span class="text-[10px] text-emerald-400 font-bold" id="fndWalkawaySaved">--% Walkaway Saved</span>
           </div>
         </div>
+
+        <!-- Global Network Banner Control -->
+        <div class="bg-amber-50/60 backdrop-blur-sm rounded-xl p-4 mt-6 border border-amber-200/60 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="megaphone" class="w-3.5 h-3.5"></i> Global Network Banner
+            </span>
+            <span class="text-[10px] text-slate-500" id="fndGlobalBannerStatus">None active</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" id="fndGlobalAnnouncementInput" placeholder="Banner shown on every venue (leave empty to clear)" class="w-64 sm:w-96 px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none">
+            <button onclick="founderPublishGlobalAnnouncement()" class="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5">
+              <i data-lucide="megaphone" class="w-3.5 h-3.5"></i>
+              <span>Push to All Venues</span>
+            </button>
+          </div>
+        </div>
+      </div>
       </div>
 
       <!-- Founder 2-Column Grid: Live Queue Stream & Reliability Audit -->
@@ -562,8 +597,7 @@
                     <th class="py-3 px-4">Reliability</th>
                     <th class="py-3 px-4 text-right">Founder Controls</th>
                   </tr>
-                </thead>
-                <tbody id="fndRestaurantsTable" class="divide-y divide-slate-100">
+                </thead>                <tbody id="fndRestaurantsTable" class="divide-y divide-slate-100">
                   <!-- Populated via JS -->
                   <tr>
                     <td colspan="5" class="py-8 text-center text-slate-400">Loading restaurants...</td>
@@ -589,9 +623,12 @@
                   <tr>
                     <th class="py-3 px-4">Ticket</th>
                     <th class="py-3 px-4">Venue</th>
-                    <th class="py-3 px-4">Diner Name & Contact</th>
-                    <th class="py-3 px-4">Status & Wait</th>
-                    <th class="py-3 px-4 text-right">Channel</th>
+                    <th class="py-3 px-4">Diner &amp; Contact</th>
+                    <th class="py-3 px-4">Party &amp; Wait</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4 text-center">Channel</th>
+                    <th class="py-3 px-4 text-center">IST Times (Joined / Notified)</th>
+                    <th class="py-3 px-4 text-right">Founder Actions</th>
                   </tr>
                 </thead>
                 <tbody id="fndLiveQueuesTable" class="divide-y divide-slate-100">
@@ -757,9 +794,12 @@
           </div>
 
           <div class="flex items-center justify-between">
-            <div>
-              <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
-              <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian & Filter Coffee</p>
+            <div class="flex items-center gap-2">
+              <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+              <div>
+                <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
+                <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian & Filter Coffee</p>
+              </div>
             </div>
             <div class="text-right">
               <span class="text-[10px] text-slate-400 uppercase font-mono block">Ticket Number</span>
@@ -883,6 +923,27 @@
             </p>
           </div>
 
+          <!-- Share Your Live Pass Section -->
+          <div class="space-y-2 pt-3 border-t border-slate-100">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Share Your Pass</span>
+              <span class="text-[10px] text-slate-400">Friends can track live — read-only</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="sharePass()" id="btnSharePass" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-800">
+                <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+                <span>Share Pass with Friends</span>
+              </button>
+              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-green-500 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-green-600">
+                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+                <span>WhatsApp</span>
+              </button>
+            </div>
+            <p class="text-[10px] text-center text-slate-400">
+              Link: <span id="sharePassLinkPreview" class="font-mono text-orange-600 break-all truncate block">https://waitmate-weld.vercel.app/?ticket=...</span>
+            </p>
+          </div>
+
           <!-- Diner Action Buttons -->
           <div class="space-y-2">
             <button onclick="dinerArrivedAction()" id="btnArrivedAction" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
@@ -904,6 +965,61 @@
 
         </div>
 
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2B: LIVE FRIEND PASS TRACKER (Read-only shared pass view)           -->
+  <!-- ========================================================================= -->
+  <div id="friendPassModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeFriendPassModal()"></div>
+    <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+      
+      <!-- Modal Header -->
+      <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
+        <div>
+          <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Live Friend Pass Tracker</span>
+          <h3 id="friendPassVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
+          <p id="friendPassVenueAddress" class="text-xs text-slate-400">Linking Road, Bandra West, Mumbai</p>
+        </div>
+        <button onclick="closeFriendPassModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Read-only Ticket Status -->
+      <div class="p-6 space-y-5">
+        <div class="grid grid-cols-2 gap-4 text-center">
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-[10px] text-slate-500 block uppercase">Queue Rank</span>
+            <span id="friendPassRank" class="text-2xl font-black text-slate-900">#–</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-[10px] text-slate-500 block uppercase">Remaining Wait</span>
+            <span id="friendPassEta" class="text-2xl font-black text-slate-900">– mins</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+          <span class="text-xs font-bold text-slate-700">Live Status</span>
+          <span id="friendPassStatus" class="font-bold text-emerald-700">Waiting</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-500 uppercase">Shared By</span>
+            <span id="friendPassSharedBy" class="text-xs font-medium text-slate-700">A friend</span>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Read-only live view of your friend's queue. You cannot cancel or modify this ticket — only the ticket holder can act on it.
+          </p>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+          <button onclick="closeFriendPassModal()" class="px-5 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl transition hover:bg-slate-800">Close Tracker</button>
+        </div>
       </div>
 
     </div>
@@ -1469,6 +1585,97 @@
         <div class="flex items-center justify-end gap-2 pt-2">
           <button type="button" onclick="closeFounderAddRestaurantModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Cancel</button>
           <button type="submit" id="fndAddRestaurantSubmitBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Add Restaurant to Network</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Founder Edit Restaurant Modal (Edit any venue's details) -->
+  <div id="founderEditRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Action</span>
+          <h3 id="fndEditModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Edit Restaurant</h3>
+        </div>
+        <button type="button" onclick="closeFounderEditRestaurantModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">Update any venue detail. Changes persist to the network and reflect live across customer discovery and Host Stands.</p>
+      <form id="founderEditRestaurantForm" onsubmit="submitFounderEditRestaurant(event)" class="space-y-3">
+        <input type="hidden" id="fndEditRestaurantId">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant / Brand Name *</label>
+          <input type="text" id="fndEditName" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Cuisine / Category *</label>
+          <input type="text" id="fndEditCategory" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Venue Type *</label>
+            <select id="fndEditType" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="restaurant">🍽️ Dine-in Restaurant</option>
+              <option value="food_truck">🚚 Food Truck / Street Kiosk</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">City *</label>
+            <select id="fndEditCity" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="Mumbai" selected>Mumbai, India</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Full Street Address & Landmark *</label>
+          <input type="text" id="fndEditAddress" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Price Tier *</label>
+            <select id="fndEditPrice" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="₹">₹ (Budget / Street / Quick-Service)</option>
+              <option value="₹₹">₹₹ (Casual Dining / Popular Dine-in)</option>
+              <option value="₹₹₹">₹₹₹ (Premium / Fine Dining)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Owner Dashboard Password (new)</label>
+            <div class="relative">
+              <input type="password" id="fndEditPassword" minlength="4" placeholder="Leave blank to keep current" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
+              <button type="button" onclick="togglePasswordVisibility('fndEditPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1" aria-label="Toggle password visibility">
+                <i data-lucide="eye" class="w-5 h-5"></i>
+              </button>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-1">Only fill this to force-reset the owner dashboard password.</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Total Table Capacity</label>
+            <input type="number" id="fndEditTables" min="1" max="150" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Average Dining Pace (mins per party)</label>
+            <input type="number" id="fndEditPace" min="3" max="90" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Cover Photo URL</label>
+          <input type="url" id="fndEditPhoto" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-600 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Bio & Specialties</label>
+          <textarea id="fndEditBio" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+        </div>
+        <div class="border-t border-slate-200 pt-4 space-y-2">
+          <button type="button" onclick="founderDeleteRestaurantFromModal(document.getElementById('fndEditRestaurantId').value)" class="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition border border-rose-200">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span>Delete Venue Permanently</span>
+          </button>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="closeFounderEditRestaurantModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Cancel</button>
+          <button type="submit" id="fndEditRestaurantSubmitBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Save Venue Changes</button>
         </div>
       </form>
     </div>
