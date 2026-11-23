@@ -2379,8 +2379,16 @@ function updateTicketUI() {
     document.getElementById('step4Icon').className = "w-5 h-5 mx-auto rounded-full bg-blue-500 text-white flex items-center justify-center mb-1 font-bold";
     document.getElementById('step4Icon').textContent = "✓";
 
-    // Open post-seating feedback dialog once (only if this visit hasn't been rated yet)
-    if (!d.rated && !d._hasPromptedFeedback) {
+    // Open post-seating feedback dialog ONLY on the Customer view, for this
+    // customer's own remote ticket (never for host-added walk-ins or on the
+    // Restaurant Owner / Founder dashboards).
+    if (
+      currentInterface === 'customer' &&
+      d.entry_type === 'remote' &&
+      d.status === 'seated' &&
+      !d.rated &&
+      !d._hasPromptedFeedback
+    ) {
       d._hasPromptedFeedback = true;
       closeTicketModal();
       openFeedbackModal(d);

@@ -1,6 +1,6 @@
-// cache-bust-20261124-walkin-card-choice-v13
+// cache-bust-20261124-seated-modal-owner-fix-v14
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-walkin-card-choice-v13';
+const CACHE_NAME = 'waitmate-v20261124-seated-modal-owner-fix-v14';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
