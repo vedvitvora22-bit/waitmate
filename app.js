@@ -1024,7 +1024,7 @@ async function loadFounderDashboard() {
 function renderFounderData(data) {
   const sum = data.summary;
   document.getElementById('fndTotalVenues').textContent = sum.total_restaurants;
-  document.getElementById('fndCitiesSummary').textContent = `Across ${sum.total_cities} major hubs (${sum.cities_list.slice(0, 3).join(', ')}${sum.cities_list.length > 3 ? '...' : ''})`;
+  document.getElementById('fndCitiesSummary').textContent = 'Across Mumbai dining hubs';
   document.getElementById('fndWaitingDiners').textContent = sum.active_diners_in_queue;
   document.getElementById('fndWaitingParties').textContent = `${sum.active_parties_in_queue} parties in queues`;
   document.getElementById('fndSeatedDiners').textContent = `${sum.total_seated_diners}`;
