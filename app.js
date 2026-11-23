@@ -2192,7 +2192,6 @@ function renderHostDashboard() {
 
         <td class="py-3 px-4">
           <div class="font-bold text-slate-900">${q.customer_name}</div>
-          <div class="text-[10px] text-slate-400 font-mono">${q.phone}</div>
           ${q.special_requests ? `<div class="text-[10px] text-amber-700 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
@@ -2402,7 +2401,6 @@ async function submitWalkin(e) {
   const name = document.getElementById('walkinName').value.trim();
   const partySize = parseInt(document.getElementById('walkinPartySize').value);
   const seatingPref = document.getElementById('walkinSeatingPref').value;
-  const phone = document.getElementById('walkinPhone').value.trim() || '+91 99999 00000';
 
   try {
     const res = await fetch('/api/host/action', {
@@ -2412,7 +2410,6 @@ async function submitWalkin(e) {
         restaurant_id: currentHostVenueId,
         action: 'add_walkin',
         name: name,
-        phone: phone,
         party_size: partySize,
         seating_pref: seatingPref
       })

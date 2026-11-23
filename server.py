@@ -816,6 +816,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             rest.pop("password_hash", None)
 
             for idx, e in enumerate(entries):
+                e.pop("phone", None)
                 e["position_rank"] = idx + 1
                 e["is_table_near"] = (idx < 2 and e["status"] in ("waiting", "delayed"))
 
