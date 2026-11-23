@@ -680,6 +680,148 @@ const fallbackRestaurants = [
         { promised: 35, actual: 52, rating: "severe_delay", note: "Quoted 35 mins, took nearly an hour during Saturday 9 PM rush.", time_ago: "2h ago" }
       ]
     }
+  },
+  {
+    id: "rest-7",
+    name: "Britannia & Co. Restaurant",
+    category: "Parsi & Irani Heritage",
+    type: "restaurant",
+    city: "Mumbai",
+    address: "Wakefield House, Ballard Estate, Fort, Mumbai",
+    distance_km: 1.5,
+    price_range: "₹₹",
+    image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+    description: "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
+    live_stats: {
+      queue_count: 3,
+      total_waiting_people: 8,
+      estimated_wait_mins: 18,
+      algorithmic_wait_mins: 18,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 95,
+      grade: "A+",
+      verdict: "Exceptionally Accurate",
+      badge_color: "emerald",
+      avg_variance_mins: 1.1,
+      total_verified_checkins: 42,
+      on_time_pct: 81,
+      early_pct: 12,
+      slight_late_pct: 7,
+      severe_late_pct: 0,
+      recent_reviews: [
+        { promised: 18, actual: 17, rating: "spot_on", note: "Mutton Berry Pulao arrived right on token time.", time_ago: "30m ago" },
+        { promised: 22, actual: 20, rating: "faster", note: "Sali Boti table ready earlier than quoted.", time_ago: "2h ago" }
+      ]
+    }
+  },
+  {
+    id: "rest-8",
+    name: "Kyani & Co. Bakery & Cafe",
+    category: "Irani Cafe & Bakery",
+    type: "restaurant",
+    city: "Mumbai",
+    address: "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
+    distance_km: 0.6,
+    price_range: "₹",
+    image_url: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
+    description: "Iconic South Mumbai Irani bakery serving fresh Bun Maska, Keema Pav, Mawa Cake, and Irani Chai.",
+    live_stats: {
+      queue_count: 4,
+      total_waiting_people: 9,
+      estimated_wait_mins: 12,
+      algorithmic_wait_mins: 12,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 94,
+      grade: "A",
+      verdict: "Reliable Irani Turnover",
+      badge_color: "emerald",
+      avg_variance_mins: 1.4,
+      total_verified_checkins: 38,
+      on_time_pct: 79,
+      early_pct: 11,
+      slight_late_pct: 9,
+      severe_late_pct: 1,
+      recent_reviews: [
+        { promised: 12, actual: 11, rating: "spot_on", note: "Bun maska and Irani chai served piping hot on cue.", time_ago: "20m ago" }
+      ]
+    }
+  },
+  {
+    id: "rest-9",
+    name: "Prithvi Cafe",
+    category: "Cafe & Outdoor Bistro",
+    type: "restaurant",
+    city: "Mumbai",
+    address: "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
+    distance_km: 2.1,
+    price_range: "₹₹",
+    image_url: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
+    description: "Bamboo-shaded theatre courtyard cafe in Juhu known for Irish Coffee, Suleimani Chai, and Amritsari Paratha.",
+    live_stats: {
+      queue_count: 2,
+      total_waiting_people: 5,
+      estimated_wait_mins: 15,
+      algorithmic_wait_mins: 15,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 91,
+      grade: "A",
+      verdict: "Highly Reliable",
+      badge_color: "green",
+      avg_variance_mins: 2.3,
+      total_verified_checkins: 33,
+      on_time_pct: 73,
+      early_pct: 15,
+      slight_late_pct: 9,
+      severe_late_pct: 3,
+      recent_reviews: [
+        { promised: 15, actual: 16, rating: "spot_on", note: "Irish Coffee and paratha arrived right when promised.", time_ago: "55m ago" },
+        { promised: 18, actual: 21, rating: "slight_delay", note: "Weekend brunch crowd ran about 3 minutes late.", time_ago: "4h ago" }
+      ]
+    }
+  },
+  {
+    id: "rest-10",
+    name: "Sardar Pav Bhaji Express Truck",
+    category: "Mumbai Street Food & Pav Bhaji",
+    type: "food_truck",
+    city: "Mumbai",
+    address: "Tardeo Road Junction, Mumbai Central, Mumbai",
+    distance_km: 2.8,
+    price_range: "₹",
+    image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+    description: "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.",
+    live_stats: {
+      queue_count: 5,
+      total_waiting_people: 11,
+      estimated_wait_mins: 8,
+      algorithmic_wait_mins: 8,
+      has_manual_override: false,
+      is_queue_open: true
+    },
+    reliability: {
+      score: 89,
+      grade: "B",
+      verdict: "Moderate Variance",
+      badge_color: "amber",
+      avg_variance_mins: 4.0,
+      total_verified_checkins: 51,
+      on_time_pct: 62,
+      early_pct: 8,
+      slight_late_pct: 22,
+      severe_late_pct: 8,
+      recent_reviews: [
+        { promised: 8, actual: 10, rating: "slight_delay", note: "Lunch rush pav bhaji took 2 extra minutes, worth the wait.", time_ago: "15m ago" }
+      ]
+    }
   }
 ];
 
@@ -701,7 +843,11 @@ let localMockQueues = {
     { id: "q-401", ticket_number: "WM-401", restaurant_id: "rest-4", customer_name: "Aditya Roy", phone: "+91 98860 33445", party_size: 4, seating_pref: "Brewery Floor", special_requests: "Celebrating promotion", entry_type: "remote", status: "waiting", estimated_wait_mins: 30, actual_wait_mins: 0, joined_at: Date.now()/1000 - 600, has_arrived: 1, delay_mins: 0 },
   ],
   'rest-5': [],
-  'rest-6': []
+  'rest-6': [],
+  'rest-7': [],
+  'rest-8': [],
+  'rest-9': [],
+  'rest-10': []
 };
 
 // ==========================================

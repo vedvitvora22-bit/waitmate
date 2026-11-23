@@ -56,13 +56,17 @@ WaitMate is built with three live, dedicated interfaces accessible right from th
 
 ---
 
-## 🍽️ Featured Indian Partner Venues
-1. **The Rameshwaram Cafe** (100ft Road, Indiranagar, Bengaluru) — *Iconic Ghee Podi Dosa & Filter Coffee, 96% Reliability (Grade A+), ₹*
-2. **Meghana Foods** (Koramangala 5th Block, Bengaluru) — *Famous Spicy Andhra Biryani & Thalis, 92% Reliability (Grade A), ₹₹*
-3. **Bademiya Street Kebab Truck & Rolls** (Colaba, Mumbai) — *Late-Night Charcoal Kebabs & Baida Roti, 94% Reliability (Grade A), ₹₹*
-4. **Toit Brewpub & Kitchen** (Indiranagar, Bengaluru) — *Craft Microbrewery & Woodfired Pizza, 84% Reliability (Grade B), ₹₹₹*
-5. **Chai Sutta Bar & Bun Maska Express** (FC Road, Pune) — *Kulhad Chai, Bun Maska & Hot Samosas, 97% Reliability (Grade A+), ₹*
-6. **Punjab Grill & Royal Tandoor** (Connaught Place, New Delhi) — *North Indian, Dal Makhani & Kebabs, 72% Reliability (Grade C), ₹₹₹*
+## 🍽️ Featured Mumbai Partner Venues
+1. **The Rameshwaram Cafe** (Linking Road, Bandra West, Mumbai) — *Iconic Ghee Podi Dosa & Filter Coffee, 96% Reliability (Grade A+), ₹*
+2. **Meghana Foods** (Senapati Bapat Marg, Lower Parel, Mumbai) — *Spicy Andhra Biryani & Thalis, 92% Reliability (Grade A), ₹₹*
+3. **Bademiya Street Kebab Truck & Rolls** (Tulloch Road, Colaba, Mumbai) — *Late-Night Charcoal Kebabs & Baida Roti, 94% Reliability (Grade A), ₹₹*
+4. **Toit Brewpub & Kitchen** (Mathuradas Mill Compound, Lower Parel, Mumbai) — *Craft Microbrewery & Woodfired Pizza, 84% Reliability (Grade B), ₹₹₹*
+5. **Chai Sutta Bar & Bun Maska Express** (Juhu Tara Road, Juhu, Mumbai) — *Kulhad Chai, Bun Maska & Hot Samosas, 97% Reliability (Grade A+), ₹*
+6. **Punjab Grill & Royal Tandoor** (Palladium Mall, Lower Parel, Mumbai) — *North Indian, Dal Makhani & Kebabs, 72% Reliability (Grade C), ₹₹₹*
+7. **Britannia & Co. Restaurant** (Wakefield House, Ballard Estate, Fort, Mumbai) — *Legendary 1923 Parsi cafe: Mutton Berry Pulao, Sali Boti & Caramel Custard, 95% Reliability (Grade A+), ₹₹*
+8. **Kyani & Co. Bakery & Cafe** (Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai) — *Iconic Irani bakery: Bun Maska, Keema Pav, Mawa Cake & Irani Chai, 94% Reliability (Grade A), ₹*
+9. **Prithvi Cafe** (Janki Kutir, Juhu Church Road, Juhu, Mumbai) — *Bamboo-shaded theatre courtyard cafe: Irish Coffee, Suleimani Chai & Amritsari Paratha, 91% Reliability (Grade A), ₹₹*
+10. **Sardar Pav Bhaji Express Truck** (Tardeo Road Junction, Mumbai Central, Mumbai) — *Extra-butter Pav Bhaji & Masala Tawa Pulao, 89% Reliability (Grade B), ₹*
 
 ---
 

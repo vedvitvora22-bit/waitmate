@@ -143,6 +143,10 @@ def init_db():
         "rest-4": "toit123",
         "rest-5": "chaisutta123",
         "rest-6": "punjab123",
+        "rest-7": "britannia123",
+        "rest-8": "kyani123",
+        "rest-9": "prithvi123",
+        "rest-10": "sardar123",
     }
     for rest_id, default_pwd in password_defaults.items():
         c.execute("UPDATE restaurants SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')", (hash_password(default_pwd), rest_id))
@@ -155,13 +159,17 @@ def init_db():
         "rest-4": "Mathuradas Mill Compound, Lower Parel, Mumbai",
         "rest-5": "Juhu Tara Road, Juhu, Mumbai",
         "rest-6": "Palladium Mall, Lower Parel, Mumbai",
+        "rest-7": "Wakefield House, Ballard Estate, Fort, Mumbai",
+        "rest-8": "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
+        "rest-9": "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
+        "rest-10": "Tardeo Road Junction, Mumbai Central, Mumbai",
     }
     for rest_id, address in mumbai_addresses.items():
         c.execute('UPDATE restaurants SET city = ? WHERE id = ?', ("Mumbai", rest_id))
         c.execute('UPDATE restaurants SET address = ? WHERE id = ?', (address, rest_id))
     c.execute("UPDATE restaurants SET city = 'Mumbai' WHERE city != 'Mumbai'")
 
-    # Backfill missing cover photos for the 6 Mumbai venues
+    # Backfill missing cover photos for the 10 Mumbai venues
     mumbai_covers = {
         "rest-1": "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
         "rest-2": "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
@@ -169,9 +177,106 @@ def init_db():
         "rest-4": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
         "rest-5": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
         "rest-6": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+        "rest-7": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+        "rest-8": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
+        "rest-9": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
+        "rest-10": "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
     }
     for rest_id, cover in mumbai_covers.items():
         c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
+
+    # Startup migration: INSERT OR IGNORE new Mumbai venues so existing local SQLite databases pick them up automatically
+    new_venue_rows = [
+        (
+            "rest-7",
+            "Britannia & Co. Restaurant",
+            "Parsi & Irani Heritage",
+            "restaurant",
+            "Mumbai",
+            "Wakefield House, Ballard Estate, Fort, Mumbai",
+            1.5,
+            "₹₹",
+            "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+            "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
+            "Boman Kohinoor",
+            "+91 98200 11223",
+            18,
+            3,
+            14,
+            None,
+            1,
+            now - 86400 * 10,
+            hash_password("britannia123"),
+        ),
+        (
+            "rest-8",
+            "Kyani & Co. Bakery & Cafe",
+            "Irani Cafe & Bakery",
+            "restaurant",
+            "Mumbai",
+            "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
+            0.6,
+            "₹",
+            "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
+            "Iconic South Mumbai Irani bakery serving fresh Bun Maska, Keema Pav, Mawa Cake, and Irani Chai.",
+            "Farokh Irani",
+            "+91 98201 44556",
+            10,
+            4,
+            18,
+            None,
+            1,
+            now - 86400 * 8,
+            hash_password("kyani123"),
+        ),
+        (
+            "rest-9",
+            "Prithvi Cafe",
+            "Cafe & Outdoor Bistro",
+            "restaurant",
+            "Mumbai",
+            "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
+            2.1,
+            "₹₹",
+            "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
+            "Bamboo-shaded theatre courtyard cafe in Juhu known for Irish Coffee, Suleimani Chai, and Amritsari Paratha.",
+            "Priya Jhaveri",
+            "+91 98330 77889",
+            15,
+            2,
+            16,
+            None,
+            1,
+            now - 86400 * 6,
+            hash_password("prithvi123"),
+        ),
+        (
+            "rest-10",
+            "Sardar Pav Bhaji Express Truck",
+            "Mumbai Street Food & Pav Bhaji",
+            "food_truck",
+            "Mumbai",
+            "Tardeo Road Junction, Mumbai Central, Mumbai",
+            2.8,
+            "₹",
+            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.",
+            "Sardar Singh",
+            "+91 98670 55443",
+            8,
+            5,
+            20,
+            None,
+            1,
+            now - 86400 * 4,
+            hash_password("sardar123"),
+        ),
+    ]
+    for row in new_venue_rows:
+        c.execute(
+            "INSERT OR IGNORE INTO restaurants (id, name, category, type, city, address, distance_km, price_range, image_url, description, owner_name, owner_phone, base_prep_time, available_tables, total_tables, manual_override_wait, is_queue_open, created_at, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            row,
+        )
 
     conn.commit()
     conn.close()
@@ -304,6 +409,90 @@ def seed_data(c):
             1,
             now - 86400 * 12,
             hash_password("punjab123")
+        ),
+        (
+            "rest-7",
+            "Britannia & Co. Restaurant",
+            "Parsi & Irani Heritage",
+            "restaurant",
+            "Mumbai",
+            "Wakefield House, Ballard Estate, Fort, Mumbai",
+            1.5,
+            "₹₹",
+            "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+            "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
+            "Boman Kohinoor",
+            "+91 98200 11223",
+            18,
+            3,
+            14,
+            None,
+            1,
+            now - 86400 * 10,
+            hash_password("britannia123")
+        ),
+        (
+            "rest-8",
+            "Kyani & Co. Bakery & Cafe",
+            "Irani Cafe & Bakery",
+            "restaurant",
+            "Mumbai",
+            "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
+            0.6,
+            "₹",
+            "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
+            "Iconic South Mumbai Irani bakery serving fresh Bun Maska, Keema Pav, Mawa Cake, and Irani Chai.",
+            "Farokh Irani",
+            "+91 98201 44556",
+            10,
+            4,
+            18,
+            None,
+            1,
+            now - 86400 * 8,
+            hash_password("kyani123")
+        ),
+        (
+            "rest-9",
+            "Prithvi Cafe",
+            "Cafe & Outdoor Bistro",
+            "restaurant",
+            "Mumbai",
+            "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
+            2.1,
+            "₹₹",
+            "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
+            "Bamboo-shaded theatre courtyard cafe in Juhu known for Irish Coffee, Suleimani Chai, and Amritsari Paratha.",
+            "Priya Jhaveri",
+            "+91 98330 77889",
+            15,
+            2,
+            16,
+            None,
+            1,
+            now - 86400 * 6,
+            hash_password("prithvi123")
+        ),
+        (
+            "rest-10",
+            "Sardar Pav Bhaji Express Truck",
+            "Mumbai Street Food & Pav Bhaji",
+            "food_truck",
+            "Mumbai",
+            "Tardeo Road Junction, Mumbai Central, Mumbai",
+            2.8,
+            "₹",
+            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.",
+            "Sardar Singh",
+            "+91 98670 55443",
+            8,
+            5,
+            20,
+            None,
+            1,
+            now - 86400 * 4,
+            hash_password("sardar123")
         )
     ]
 
