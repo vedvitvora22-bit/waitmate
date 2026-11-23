@@ -1118,8 +1118,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # API: RESTAURANT OWNER ONBOARDING (Add New Restaurant to WaitMate)
-        if path == "/api/owner/restaurants/create":
+        # API: RESTAURANT CREATION (Founder-only)
+        if path in ("/api/restaurants", "/api/owner/restaurants/create"):
+            if not is_founder_authorized(self):
+                self.send_json({"error": "Unauthorized. Only the Founder can add new restaurants."}, 401)
+                return
             data = self.read_json_body()
             name = data.get("name", "").strip()
             category = data.get("category", "").strip()

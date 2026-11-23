@@ -393,7 +393,7 @@ async function sendPushNotification({ title, body, tag = 'waitmate', actions = [
   }
 }
 
-// "Table is Near" notification — fires when rank <= 2 or ETA <= 7 mins
+// "Table is Near" notification — fires when ETA < 4 mins
 async function sendTableNearNotification(ticketData) {
   const venueName = ticketData.restaurant ? ticketData.restaurant.name : 'your restaurant';
   const rank = ticketData.position_in_line;
@@ -1053,29 +1053,18 @@ function switchInterface(role) {
 }
 
 // Switch Owner sub-tabs between Host Stand and New Restaurant Registration
-function switchOwnerTab(tab) {
-  const hostSub = document.getElementById('ownerSubTabHost');
-  const regSub = document.getElementById('ownerSubTabRegister');
-  const tabHost = document.getElementById('ownerTabHost');
-  const tabReg = document.getElementById('ownerTabRegister');
-
-  if (tab === 'host') {
-    hostSub.classList.remove('hidden');
-    regSub.classList.add('hidden');
-    tabHost.className = "px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2";
-    tabReg.className = "px-4 py-2 font-semibold text-sm text-slate-500 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2";
-    showOwnerDirectory();
-  } else {
-    if (!isFounderUnlocked()) {
-      openFounderLoginModal();
-      showToast("Only the Founder can onboard new restaurants.", "error");
-      return;
-    }
-    hostSub.classList.add('hidden');
-    regSub.classList.remove('hidden');
-    tabReg.className = "px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2";
-    tabHost.className = "px-4 py-2 font-semibold text-sm text-slate-500 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2";
+ function switchOwnerTab(tab) {
+  // Restaurant creation is restricted to the Founder. Public calls to 'register' are blocked.
+  if (tab === 'register') {
+    showToast('Only the Founder can add new restaurants.', 'error');
+    tab = 'host';
   }
+  const hostSub = document.getElementById('ownerSubTabHost');
+  const tabHost = document.getElementById('ownerTabHost');
+
+  if (hostSub) hostSub.classList.remove('hidden');
+  if (tabHost) tabHost.className = "px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2";
+  showOwnerDirectory();
   lucide.createIcons();
 }
 
@@ -1968,7 +1957,7 @@ function updateTicketUI() {
   const livePassAlertCard = document.getElementById('livePassAlertCard');
   const arrivedBtn = document.getElementById('btnArrivedAction');
 
-  const isTableNear = (d.position_in_line <= 2 || d.estimated_remaining_mins <= 7) && ['waiting', 'delayed'].includes(d.status);
+  const isTableNear = Number(d.estimated_remaining_mins) < 4 && ['waiting', 'delayed'].includes(d.status);
   const isTableReady = d.status === 'notified';
 
   if (isTableReady) {
@@ -2009,7 +1998,7 @@ function updateTicketUI() {
 
       livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-orange-900 shadow-sm space-y-1 border border-orange-200 bg-orange-50";
       livePassAlertCard.classList.remove('hidden');
-      document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
+      document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is less than 4 mins away. Please make your way to the host desk. Table held for 5 mins."`;
 
       document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold animate-pulse";
 

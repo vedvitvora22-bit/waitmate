@@ -267,10 +267,6 @@
             <i data-lucide="clipboard-list" class="w-4 h-4 text-orange-500"></i>
             <span>Live Host Stand & Queue Manager</span>
           </button>
-          <button onclick="switchOwnerTab('register')" id="ownerTabRegister" class="px-4 py-2 font-semibold text-sm text-slate-500 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2">
-            <i data-lucide="plus-circle" class="w-4 h-4"></i>
-            <span>Add New Restaurant to WaitMate</span>
-          </button>
         </div>
         <span class="text-xs text-slate-400 font-medium hidden sm:inline">Owner Management Portal</span>
       </div>
@@ -478,128 +474,6 @@
 
       <!-- SUB-TAB 2: ADD NEW RESTAURANT ONBOARDING FORM -->
       
-      </div>
-    <div id="ownerSubTabRegister" class="hidden">
-        
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 max-w-3xl mx-auto">
-          
-          <div class="border-b border-slate-200 pb-5 mb-6">
-            <span class="badge-tag bg-orange-100 text-orange-900 font-bold uppercase text-[10px] mb-1">Owner Self-Serve Onboarding</span>
-            <h2 class="text-2xl font-heading font-extrabold text-slate-900">List Your Restaurant on WaitMate India</h2>
-            <p class="text-xs text-slate-500 mt-1">
-              Start managing transparent queues, eliminating sidewalk bottlenecks, and protecting your diner retention with zero commission fees.
-            </p>
-          </div>
-
-          <form id="ownerAddRestaurantForm" onsubmit="submitNewRestaurant(event)" class="space-y-5">
-            
-            <!-- Row 1: Restaurant Name & Cuisine -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant / Brand Name *</label>
-                <input type="text" id="regName" required placeholder="e.g. Vidyarthi Bhavan, Nagarjuna, Chai Point" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Cuisine / Category *</label>
-                <input type="text" id="regCategory" required placeholder="e.g. South Indian Tiffin, Dum Biryani, Kebab Rolls" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-              </div>
-            </div>
-
-            <!-- Row 2: Venue Type & City -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Venue Type *</label>
-                <select id="regType" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
-                  <option value="restaurant">🍽️ Dine-in Restaurant</option>
-                  <option value="food_truck">🚚 Food Truck / Street Kiosk</option>
-                </select>
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">City *</label>
-                <select id="regCity" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
-                  <option value="Mumbai" selected>Mumbai</option>
-                </select>
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Price Tier *</label>
-                <select id="regPriceRange" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
-                  <option value="₹">₹ (Budget / Street / Quick-Service)</option>
-                  <option value="₹₹" selected>₹₹ (Casual Dining / Popular Dine-in)</option>
-                  <option value="₹₹₹">₹₹₹ (Premium / Microbrewery / Fine Dining)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Row 3: Street Address & Landmark -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Full Street Address & Landmark *</label>
-              <input type="text" id="regAddress" required placeholder="e.g. Linking Road, Bandra West, Mumbai, Maharashtra 400050" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-            </div>
-
-            <!-- Row 4: Owner Details -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Manager / Owner Name *</label>
-                <input type="text" id="regOwnerName" required placeholder="e.g. Suresh Kumar" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-              </div>
-            </div>
-
-            <!-- Row 4b: Owner Access Password -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant Dashboard Password *</label>
-              <input type="password" id="regOwnerPassword" required minlength="4" placeholder="Create a password to protect this restaurant's dashboard" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-              <p class="text-[11px] text-slate-500 mt-1">Owners must enter this password before viewing or managing this restaurant's queue data.</p>
-            </div>
-
-            <!-- Row 5: Table Capacity & Turnover Pace -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Total Table Capacity (or Service Counters)</label>
-                <input type="number" id="regTables" min="1" max="150" value="16" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-orange-500 focus:outline-none">
-                <span class="text-[10px] text-slate-400">Used by algorithm to calculate wait times</span>
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Average Dining Pace (mins per party)</label>
-                <input type="number" id="regPrepTime" min="3" max="90" value="15" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-orange-500 focus:outline-none">
-                <span class="text-[10px] text-slate-400">e.g. 8m for Dosa/Chai, 20m for Biryani, 40m for Brewery</span>
-              </div>
-            </div>
-
-            <!-- Row 6: Cover Image URL & Quick Presets -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Food / Venue Cover Photo URL</label>
-              <input type="url" id="regImageUrl" placeholder="https://images.unsplash.com/..." value="https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none text-slate-600">
-              <div class="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
-                <span>Quick Photo Presets:</span>
-                <button type="button" onclick="setPresetPhoto('dosa')" class="text-orange-600 hover:underline">South Indian Dosa</button> •
-                <button type="button" onclick="setPresetPhoto('biryani')" class="text-orange-600 hover:underline">Hyderabadi Biryani</button> •
-                <button type="button" onclick="setPresetPhoto('kebab')" class="text-orange-600 hover:underline">Tandoori / Kebab</button> •
-                <button type="button" onclick="setPresetPhoto('cafe')" class="text-orange-600 hover:underline">Cafe & Bakery</button>
-              </div>
-            </div>
-
-            <!-- Row 7: Description -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant Bio & Specialties</label>
-              <textarea id="regDescription" rows="2" placeholder="Tell diners about your signature dishes, history, and dining atmosphere..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"></textarea>
-            </div>
-
-            <!-- Submit Button -->
-            <button type="submit" id="regSubmitBtn" class="w-full py-3 bg-slate-900 hover:bg-orange-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center gap-2">
-              <i data-lucide="store" class="w-4 h-4 text-orange-400"></i>
-              <span>Launch Restaurant on WaitMate Live Network</span>
-            </button>
-
-            <p class="text-[11px] text-center text-slate-400">
-              Zero commission platform. Instant live activation on WaitMate India.
-            </p>
-
-          </form>
-
-        </div>
-
       </div>
 
     </div>
@@ -999,7 +873,7 @@
               <span class="text-slate-400 font-normal">Just now</span>
             </div>
             <p class="text-slate-800 font-medium text-[11px]" id="livePassAlertText">
-              "Namaste Aarav! 🍽️ Your table at The Rameshwaram Cafe is almost ready (#1 in line, ~4 mins). Please make your way to the host desk. Table held for 5 mins."
+              "Namaste Aarav! 🍽️ Your table at The Rameshwaram Cafe is less than 4 mins away. Please make your way to the host desk. Table held for 5 mins."
             </p>
           </div>
 

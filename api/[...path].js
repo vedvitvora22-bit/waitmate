@@ -704,7 +704,8 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, message: "Restaurant removed from WaitMate Mumbai network." });
   }
 
-  if (request.method === "POST" && path === "/api/owner/restaurants/create") {
+  if (request.method === "POST" && (path === "/api/restaurants" || path === "/api/owner/restaurants/create")) {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Unauthorized. Only the Founder can add new restaurants." });
     if (!body.name || !body.category || !body.address) return send(response, 400, { error: "Please provide Restaurant Name, Cuisine Category, and Address." });
     const id = `rest-${Date.now().toString().slice(-6)}`;
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
