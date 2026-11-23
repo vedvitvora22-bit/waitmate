@@ -608,6 +608,7 @@ async function route(request, response, pathParts) {
     if (body.action === "seat_self") {
       if (!ticket) {
         const restId = body.restaurant_id || "rest-1";
+        const now = Date.now();
         updates = {
           id: body.ticket_id,
           ticket_number: `WM-${Date.now().toString().slice(-3)}`,
@@ -621,16 +622,22 @@ async function route(request, response, pathParts) {
           status: "seated",
           estimated_wait_mins: 8,
           actual_wait_mins: 0,
-          joined_at: Date.now() - 300000,
+          joined_at: now - 300000,
           notified_at: null,
-          seated_at: Date.now(),
+          arrived_at: now,
+          arrived_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
+          seated_at: now,
+          seated_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
           has_arrived: true,
           delay_mins: 0,
           rated: false
         };
       } else {
         updates.status = "seated";
+        updates.arrived_at = Date.now();
+        updates.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
         updates.seated_at = Date.now();
+        updates.seated_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
         updates.has_arrived = true;
       }
     } else if (body.action === "arrived") {
@@ -638,6 +645,7 @@ async function route(request, response, pathParts) {
         // Cold start: ticket not in memory but diner says they arrived.
         // Return 200 OK with a reconstructed ticket so the frontend never sees "no active ticket".
         const restId = body.restaurant_id || "rest-1";
+        const now = Date.now();
         updates = {
           id: body.ticket_id,
           ticket_number: `WM-${Date.now().toString().slice(-3)}`,
@@ -651,14 +659,19 @@ async function route(request, response, pathParts) {
           status: "waiting",
           estimated_wait_mins: 8,
           actual_wait_mins: 0,
-          joined_at: Date.now() - 300000,
+          joined_at: now - 300000,
           notified_at: null,
+          arrived_at: now,
+          arrived_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
           seated_at: null,
+          seated_time_ist: null,
           has_arrived: true,
           delay_mins: 0
         };
       } else {
         updates.has_arrived = true;
+        updates.arrived_at = Date.now();
+        updates.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
       }
     } else if (body.action === "delay") {
       if (!ticket) {
@@ -713,16 +726,22 @@ async function route(request, response, pathParts) {
           actual_wait_mins: 10,
           joined_at: now - 600000,
           notified_at: null,
+          arrived_at: now,
+          arrived_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
           seated_at: now,
+          seated_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
           has_arrived: true,
           delay_mins: 0
         };
       } else {
+        const now = Date.now();
         updates.status = "seated";
-        updates.seated_at = Date.now();
-        updates.seated_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+        updates.arrived_at = now;
+        updates.arrived_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+        updates.seated_at = now;
+        updates.seated_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
         updates.has_arrived = true;
-        updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - joined) / 60000));
+        updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
       }
     } else if (body.action === "rate") {
       // Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
@@ -770,7 +789,16 @@ async function route(request, response, pathParts) {
       }
       const updates = { ...ticket };
       if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now();
-      if (body.action === "seat") { updates.status = "seated"; updates.seated_at = Date.now(); updates.seated_time_ist = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000)); }
+      if (body.action === "seat") { 
+        const now = Date.now();
+        updates.status = "seated"; 
+        updates.has_arrived = true; 
+        updates.arrived_at = now; 
+        updates.arrived_time_ist = new Date(now).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; 
+        updates.seated_at = now; 
+        updates.seated_time_ist = new Date(now).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; 
+        updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000)); 
+      }
       if (body.action === "remove") updates.status = "no_show";
       try {
         await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
@@ -900,7 +928,8 @@ async function route(request, response, pathParts) {
       const ticketNumber = `WM-${entries.length + 101}`;
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", channel: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), joined_time_ist: formatIST(Date.now()), notified_at: null, seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+    const now = Date.now();
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", channel: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, ticket)]);
       } catch (error) {

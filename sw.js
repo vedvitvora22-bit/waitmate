@@ -1,6 +1,6 @@
-// cache-bust-20261123-reviews-revts-v7
+// cache-bust-20261123-hasarrived-fix-v8
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-reviews-revts-v7';
+const CACHE_NAME = 'waitmate-v20261123-hasarrived-fix-v8';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
