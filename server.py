@@ -161,6 +161,18 @@ def init_db():
         c.execute('UPDATE restaurants SET address = ? WHERE id = ?', (address, rest_id))
     c.execute("UPDATE restaurants SET city = 'Mumbai' WHERE city != 'Mumbai'")
 
+    # Backfill missing cover photos for the 6 Mumbai venues
+    mumbai_covers = {
+        "rest-1": "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
+        "rest-2": "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
+        "rest-3": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
+        "rest-4": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+        "rest-5": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
+        "rest-6": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+    }
+    for rest_id, cover in mumbai_covers.items():
+        c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
+
     conn.commit()
     conn.close()
 

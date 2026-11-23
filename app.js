@@ -853,7 +853,8 @@ function switchInterface(role) {
   tabCust.className = inactiveTabClass;
   tabOwner.className = inactiveTabClass;
   // Founder tab stays hidden from the public navbar at all times.
-  tabFounder.className = inactiveTabClass + ' hidden';
+  tabFounder.className = inactiveTabClass.replace(/\bflex\b/, '') + ' hidden';
+  tabFounder.style.display = 'none';
 
   if (role === 'customer') {
     custDiv.classList.remove('hidden');
@@ -866,7 +867,8 @@ function switchInterface(role) {
   } else if (role === 'founder') {
     ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
     founderDiv.classList.remove('hidden');
-    tabFounder.className = activeTabClass + ' hidden';
+    tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
+    tabFounder.style.display = 'none';
     loadFounderDashboard();
   }
   lucide.createIcons();
@@ -1276,7 +1278,7 @@ function renderRestaurantsGrid() {
         
         <!-- Image Header -->
         <div class="relative h-44 overflow-hidden bg-slate-100">
-          <img src="${r.image_url}" alt="${r.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+          <img src="${r.image_url}" alt="${r.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80'">
           
           <!-- Gradient overlay -->
           <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20"></div>
