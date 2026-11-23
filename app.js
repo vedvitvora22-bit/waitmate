@@ -2235,6 +2235,7 @@ function updateTicketUI() {
 
   const isTableNear = Number(d.estimated_remaining_mins) < 4 && ['waiting', 'delayed'].includes(d.status);
   const isTableReady = d.status === 'notified';
+  const isArrivedWaiting = d.has_arrived && d.status === 'waiting';
 
   if (isTableReady) {
     document.title = "🔔 TABLE READY NOW! • WaitMate India";
@@ -2258,6 +2259,24 @@ function updateTicketUI() {
       playNotificationChime();
       sendTableReadyNotification(d);
     }
+
+  } else if (isArrivedWaiting) {
+    // Arrived at Venue — Waiting for Host screen
+    document.title = "✓ Checked In at Entrance • WaitMate India";
+    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600";
+    document.getElementById('ticketStatusMsg').textContent = "You're checked in at the entrance. The host will notify you when your table is ready.";
+
+    tableNearAlert.classList.add('hidden');
+    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1 border border-emerald-200 bg-emerald-50";
+    livePassAlertCard.classList.remove('hidden');
+    document.getElementById('livePassAlertText').textContent = `"✓ Checked In at Entrance — Host Notified. You'll receive a sound chime as soon as the restaurant calls your table. Current wait: ~${d.estimated_remaining_mins} mins."`;
+
+    // Timeline steps - step 2 (In Queue) is complete, step 3 (Table Ready) pending
+    document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center mb-1 font-bold";
+    document.getElementById('step2Icon').textContent = "✓";
+    document.getElementById('step3Icon').className = "w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1";
+    document.getElementById('step3Icon').textContent = "3";
 
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
@@ -2315,13 +2334,22 @@ function updateTicketUI() {
     livePassAlertCard.classList.add('hidden');
   }
 
-  // Update Arrived button appearance if arrived
-  if (d.has_arrived && arrivedBtn) {
+  // Update Arrived button appearance based on state
+  if (isArrivedWaiting && arrivedBtn) {
+    arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
+    arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
+  } else if (isTableReady && arrivedBtn) {
+    // Show "Confirm Seated" button when notified
+    arrivedBtn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i> <span>Confirm Seated</span>`;
+    arrivedBtn.className = "w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm";
+    arrivedBtn.onclick = dinerConfirmSeatedAction;
+  } else if (d.has_arrived && arrivedBtn) {
     arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
     arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
   } else if (arrivedBtn) {
     arrivedBtn.innerHTML = `<i data-lucide="map-pin-check" class="w-4 h-4"></i> <span>I've Arrived at the Venue</span>`;
     arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm";
+    arrivedBtn.onclick = dinerArrivedAction;
   }
 
   // Update SVG Progress ring
@@ -2405,7 +2433,7 @@ function showAcknowledgedAlertBanner(mode) {
 }
 
 // ==========================================
-// 6. DINER ARRIVAL STATUS ACTION (BUG FIX)
+// 6. DINER ARRIVAL STATUS ACTION
 // ==========================================
 async function dinerArrivedAction() {
   if (!currentTicketId && !activeTicketData) {
@@ -2413,18 +2441,18 @@ async function dinerArrivedAction() {
     return;
   }
 
-  // 1. Immediate optimistic UI state update — "I'm at the Venue" confirms seating
+  // 1. Immediate optimistic UI state update — "I'm at the Venue" marks arrival
   if (activeTicketData) {
     activeTicketData.has_arrived = 1;
-    activeTicketData.arrival_status = 'Seated';
-    activeTicketData.status = 'seated';
-    activeTicketData.seated_at = Date.now();
-    activeTicketData.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(activeTicketData.joined_at || Date.now())) / 60000));
+    activeTicketData.arrival_status = 'At Venue Entrance';
+    activeTicketData.status = 'waiting'; // Keep as waiting - not seated yet
+    activeTicketData.arrived_at = Date.now();
+    activeTicketData.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
     acknowledgedAlertForTicket = currentTicketId || activeTicketData.id;
     graceUntil = null;
     activeTicketData._hasNearSoundPlayed = true;
     activeTicketData._hasNotifiedSound = true;
-    // Persist immediately to localStorage so cold starts don't lose seating state
+    // Persist immediately to localStorage so cold starts don't lose arrival state
     localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
     updateTicketUI();
     showAcknowledgedAlertBanner('entrance');
@@ -2432,12 +2460,80 @@ async function dinerArrivedAction() {
 
   const btn = document.getElementById('btnArrivedAction');
   if (btn) {
-    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Seated at the Venue</span>`;
+    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
     btn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
     lucide.createIcons();
   }
 
   // 2. Transmit to backend with robust fallback parameters
+  try {
+    const payload = {
+      ticket_id: currentTicketId || (activeTicketData ? (activeTicketData.id || activeTicketData.ticket_number) : "WM-101"),
+      action: 'arrived',
+      restaurant_id: activeTicketData ? activeTicketData.restaurant_id : 'rest-1',
+      customer_name: activeTicketData ? activeTicketData.customer_name : 'Arrived Guest',
+      phone: ''
+    };
+
+    const res = await fetch('/api/queue/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
+    if (res.ok && data.success) {
+      showToast("Arrival confirmed! Host has been notified.", "success");
+    } else {
+      // Even on 404/error, local state is already updated - just show a softer message
+      showToast("Arrival confirmed with host stand.", "info");
+    }
+
+    if (currentTicketId) await fetchTicketStatus();
+  } catch (err) {
+    console.warn("Arrival sync warning:", err);
+    // Optimistic fallback: diner arrival confirmed locally
+    showToast("Arrival confirmed! Host has been notified.", "success");
+    if (activeTicketData) {
+      activeTicketData.has_arrived = 1;
+      activeTicketData.arrival_status = 'At Venue Entrance';
+      activeTicketData.status = 'waiting';
+      activeTicketData.arrived_at = Date.now();
+      activeTicketData.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+      localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
+      updateTicketUI();
+    }
+  }
+}
+
+// ==========================================
+// 6b. DINER CONFIRM SEATED ACTION (After being notified)
+// ==========================================
+async function dinerConfirmSeatedAction() {
+  if (!currentTicketId && !activeTicketData) {
+    showToast("No active ticket found. Please join a queue first.", "info");
+    return;
+  }
+
+  // 1. Immediate optimistic UI state update — "Confirm Seated" marks seating
+  if (activeTicketData) {
+    activeTicketData.status = 'seated';
+    activeTicketData.seated_at = Date.now();
+    activeTicketData.seated_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+    activeTicketData.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(activeTicketData.joined_at || Date.now())) / 60000));
+    activeTicketData.has_arrived = 1;
+    acknowledgedAlertForTicket = currentTicketId || activeTicketData.id;
+    graceUntil = null;
+    activeTicketData._hasNearSoundPlayed = true;
+    activeTicketData._hasNotifiedSound = true;
+    // Persist immediately to localStorage
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
+    updateTicketUI();
+  }
+
+  // 2. Transmit to backend
   try {
     const payload = {
       ticket_id: currentTicketId || (activeTicketData ? (activeTicketData.id || activeTicketData.ticket_number) : "WM-101"),
@@ -2457,22 +2553,20 @@ async function dinerArrivedAction() {
     let data = {};
     try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
     if (res.ok && data.success) {
-      showToast("You've been seated! Please rate your experience.", "success");
+      showToast("Seating confirmed! Please rate your experience.", "success");
     } else {
-      // Even on 404/error, local state is already updated - just show a softer message
       showToast("Seating confirmed with host stand.", "info");
     }
 
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
-    console.warn("Arrival sync warning:", err);
-    // Optimistic fallback: diner seating confirmed locally
-    showToast("You've been seated! Please rate your experience.", "success");
+    console.warn("Seating sync warning:", err);
+    showToast("Seating confirmed! Please rate your experience.", "success");
     if (activeTicketData) {
-      activeTicketData.has_arrived = 1;
-      activeTicketData.arrival_status = 'Seated';
       activeTicketData.status = 'seated';
       activeTicketData.seated_at = Date.now();
+      activeTicketData.seated_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+      activeTicketData.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(activeTicketData.joined_at || Date.now())) / 60000));
       localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId || activeTicketData.id, data: activeTicketData }));
       updateTicketUI();
     }

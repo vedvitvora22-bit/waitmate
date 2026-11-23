@@ -1,6 +1,6 @@
-// cache-bust-20261123-hasarrived-fix-v8
+// cache-bust-20261123-hasarrived-fix-v9
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-hasarrived-fix-v8';
+const CACHE_NAME = 'waitmate-v20261123-hasarrived-fix-v9';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

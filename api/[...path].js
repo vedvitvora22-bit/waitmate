@@ -134,15 +134,152 @@ async function findRestaurantById(id) {
   return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
 }
 
+// ---------------------------------------------------------------------------
+// queue_entries schema helpers
+//
+// Firestore documents are stored with numbered field prefixes (01_ … 22_) so
+// the Firebase Console lists them top-to-bottom in a logical order. The diner
+// app and Founder dashboard keep reading the original unprefixed field names,
+// so every read passes through normalizeQueueEntry() (which understands both
+// the new numbered documents and legacy unprefixed documents) and every write
+// passes through toNumberedEntry() (which emits the clean 22-field document).
+// ---------------------------------------------------------------------------
+
+// Map an unprefixed/numbered queue entry to the canonical unprefixed shape the
+// frontend consumes. Accepts both new (01_…) and legacy documents seamlessly.
+function normalizeQueueEntry(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const pick = (...keys) => {
+    for (const k of keys) {
+      if (raw[k] !== undefined && raw[k] !== null) return raw[k];
+    }
+    return undefined;
+  };
+  const channelRaw = pick("09_channel", "channel", "entry_type");
+  const channel = channelRaw === "walkin" || channelRaw === "walk-in" || channelRaw === "walk_in" ? "walk_in" : (channelRaw ? "remote" : "remote");
+  const guestName = pick("04_guest_name", "guest_name", "customer_name") || "";
+  const joinedMsRaw = pick("22_joined_at_ms", "joined_at");
+  const joinedMs = joinedMsRaw !== undefined ? Number(joinedMsRaw) : Date.now();
+  const ratingRaw = pick("19_rating", "rating", "stars");
+  const actualRaw = pick("17_actual_wait_mins", "actual_wait_mins");
+  const promisedRaw = pick("12_promised_wait_mins", "promised_wait_mins", "estimated_wait_mins");
+
+  const entry = {
+    ticket_number: pick("01_ticket_number", "ticket_number"),
+    restaurant_id: pick("02_restaurant_id", "restaurant_id"),
+    restaurant_name: pick("03_restaurant_name", "restaurant_name") || "",
+    guest_name: guestName,
+    customer_name: guestName,
+    phone: pick("05_phone", "phone") || "",
+    party_size: Number(pick("06_party_size", "party_size") || 2),
+    seating_pref: pick("07_seating_pref", "seating_pref") || "First Available",
+    special_requests: pick("08_special_requests", "special_requests") || "",
+    channel,
+    entry_type: channel,
+    status: pick("10_status", "status") || "waiting",
+    has_arrived: Boolean(pick("11_has_arrived", "has_arrived")),
+    promised_wait_mins: Number(promisedRaw || 0),
+    estimated_wait_mins: Number(promisedRaw || 0),
+    joined_time_ist: pick("13_joined_time_ist", "joined_time_ist") || null,
+    arrived_time_ist: pick("14_arrived_time_ist", "arrived_time_ist") || null,
+    notified_time_ist: pick("15_notified_time_ist", "notified_time_ist") || null,
+    seated_time_ist: pick("16_seated_time_ist", "seated_time_ist") || null,
+    actual_wait_mins: actualRaw === undefined || actualRaw === null ? null : Number(actualRaw),
+    rated: Boolean(pick("18_rated", "rated")),
+    rating: ratingRaw === undefined || ratingRaw === null ? null : Number(ratingRaw),
+    review_comment: pick("20_review_comment", "review_comment", "comment") || "",
+    comment: pick("20_review_comment", "comment", "review_comment") || "",
+    rated_time_ist: pick("21_rated_time_ist", "rated_time_ist") || null,
+    joined_at_ms: joinedMs,
+    joined_at: joinedMs,
+    id: raw.id
+  };
+
+  // Preserve any legacy/auxiliary fields the UI still relies on (delay_mins,
+  // parties_ahead, *_at ms stamps, arrival_status, etc.) while dropping the
+  // numbered storage keys so API responses stay clean.
+  for (const [key, value] of Object.entries(raw)) {
+    if (/^\d{2}_/.test(key)) continue;
+    if (entry[key] === undefined) entry[key] = value;
+  }
+  return entry;
+}
+
+// Map a canonical (unprefixed) queue entry to the numbered 22-field Firestore
+// document. Missing *_ist strings are derived from their ms timestamps.
+function toNumberedEntry(entry) {
+  const e = entry || {};
+  const chanRaw = e.channel || e.entry_type || "remote";
+  const channel = chanRaw === "walkin" || chanRaw === "walk-in" || chanRaw === "walk_in" ? "walk_in" : "remote";
+  const guestName = e.guest_name || e.customer_name || "";
+  const joinedMs = e.joined_at_ms !== undefined && e.joined_at_ms !== null
+    ? Number(e.joined_at_ms)
+    : (e.joined_at !== undefined && e.joined_at !== null ? Number(e.joined_at) : Date.now());
+  const ist = (ms) => (ms === undefined || ms === null || ms === "" ? null : formatIST(ms));
+  const promised = e.promised_wait_mins !== undefined ? e.promised_wait_mins : (e.estimated_wait_mins || 0);
+
+  return {
+    "01_ticket_number": e.ticket_number || "",
+    "02_restaurant_id": e.restaurant_id || "",
+    "03_restaurant_name": e.restaurant_name || "",
+    "04_guest_name": guestName,
+    "05_phone": e.phone || "",
+    "06_party_size": Number(e.party_size || 2),
+    "07_seating_pref": e.seating_pref || "First Available",
+    "08_special_requests": e.special_requests || "",
+    "09_channel": channel,
+    "10_status": e.status || "waiting",
+    "11_has_arrived": Boolean(e.has_arrived),
+    "12_promised_wait_mins": Number(promised || 0),
+    "13_joined_time_ist": e.joined_time_ist || ist(joinedMs) || "",
+    "14_arrived_time_ist": e.arrived_time_ist || ist(e.arrived_at) || null,
+    "15_notified_time_ist": e.notified_time_ist || ist(e.notified_at) || null,
+    "16_seated_time_ist": e.seated_time_ist || ist(e.seated_at) || null,
+    "17_actual_wait_mins": e.actual_wait_mins === undefined || e.actual_wait_mins === null ? null : Number(e.actual_wait_mins),
+    "18_rated": Boolean(e.rated),
+    "19_rating": e.rating === undefined || e.rating === null ? null : Number(e.rating),
+    "20_review_comment": e.review_comment || e.comment || "",
+    "21_rated_time_ist": e.rated_time_ist || ist(e.rated_at) || null,
+    "22_joined_at_ms": joinedMs
+  };
+}
+
+// Read helpers that normalize on the way out so callers always get the
+// canonical unprefixed shape regardless of how the document is stored.
+async function fetchQueueEntries() {
+  const docs = await listCollection("queue_entries");
+  return docs.map(normalizeQueueEntry);
+}
+
+async function fetchQueueEntry(id) {
+  const doc = await getDocument("queue_entries", id);
+  return normalizeQueueEntry(doc);
+}
+
+// Force the seated invariants (status = seated, has_arrived = true, seated IST
+// populated) used by both the owner "Seat" action and any rating submission.
+function markSeated(updates) {
+  const now = Date.now();
+  updates.status = "seated";
+  updates.has_arrived = true;
+  if (!updates.arrived_at) updates.arrived_at = now;
+  if (!updates.arrived_time_ist) updates.arrived_time_ist = formatIST(updates.arrived_at);
+  if (!updates.seated_at) updates.seated_at = now;
+  if (!updates.seated_time_ist) updates.seated_time_ist = formatIST(updates.seated_at);
+  return updates;
+}
+
 // Merge Firestore queue entries with the in-memory ticket store. In-memory
 // entries win on id collisions so local writes are never shadowed by stale copies.
 function allQueueEntries(firestoreEntries) {
   const byId = {};
   for (const entry of (firestoreEntries || [])) {
-    if (entry && entry.id) byId[entry.id] = entry;
+    const normalized = normalizeQueueEntry(entry);
+    if (normalized && normalized.id) byId[normalized.id] = normalized;
   }
   for (const entry of Object.values(global._tickets || {})) {
-    if (entry && entry.id) byId[entry.id] = entry;
+    const normalized = normalizeQueueEntry(entry);
+    if (normalized && normalized.id) byId[normalized.id] = normalized;
   }
   return Object.values(byId);
 }
@@ -331,7 +468,7 @@ async function route(request, response, pathParts) {
     let restaurants = [];
     try { restaurants = await listCollection("restaurants"); } catch { /* ignore */ }
     let entries = [];
-    try { entries = await listCollection("queue_entries"); } catch { entries = Object.values(global._tickets || {}); }
+    try { entries = await fetchQueueEntries(); } catch { entries = Object.values(global._tickets || {}); }
     const byId = {};
     for (const e of entries) if (e && e.id) byId[e.id] = e;
     for (const e of Object.values(global._tickets || {})) if (e && e.id) byId[e.id] = e;
@@ -359,7 +496,7 @@ async function route(request, response, pathParts) {
     }
     const restaurants = await ensureRestaurants();
     let firestoreEntries = [];
-    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
     const result = [];
     for (const restaurant of restaurants) {
@@ -383,7 +520,7 @@ async function route(request, response, pathParts) {
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     let firestoreEntries = [];
-    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
   }
 
@@ -406,7 +543,7 @@ async function route(request, response, pathParts) {
     if (body._rejoin && body._original_ticket_id) {
       let existingTicket;
       try {
-        existingTicket = await getDocument("queue_entries", body._original_ticket_id);
+        existingTicket = await fetchQueueEntry(body._original_ticket_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           existingTicket = global._tickets[body._original_ticket_id] || null;
@@ -423,7 +560,7 @@ async function route(request, response, pathParts) {
     }
 
     let firestoreEntries = [];
-    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
 
     // Compute the exact same baseline + live queue calculation that the
@@ -481,7 +618,7 @@ async function route(request, response, pathParts) {
     const id = pathParts[pathParts.length - 1];
     let ticket;
     try {
-      ticket = await getDocument("queue_entries", id);
+      ticket = await fetchQueueEntry(id);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         ticket = global._tickets[id] || null;
@@ -532,7 +669,7 @@ async function route(request, response, pathParts) {
       restaurant = await findRestaurantById(ticket.restaurant_id).catch(() => null);
     }
     let firestoreEntries = [];
-    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
@@ -548,7 +685,7 @@ async function route(request, response, pathParts) {
     const suppliedPwd = request.headers["x-restaurant-password"] || request.query?.password;
     if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Restaurant password required." });
     let firestoreQueue = [];
-    try { firestoreQueue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreQueue = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queue = allQueueEntries(firestoreQueue);
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
@@ -579,7 +716,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
     let firestoreEntries = [];
-    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
@@ -596,7 +733,7 @@ async function route(request, response, pathParts) {
     const body = request.body || {};
     let ticket;
     try {
-      ticket = await getDocument("queue_entries", body.ticket_id);
+      ticket = await fetchQueueEntry(body.ticket_id);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         ticket = global._tickets[body.ticket_id] || null;
@@ -672,6 +809,8 @@ async function route(request, response, pathParts) {
         updates.has_arrived = true;
         updates.arrived_at = Date.now();
         updates.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+        // Keep status as "waiting" - customer has arrived but not yet seated
+        updates.status = "waiting";
       }
     } else if (body.action === "delay") {
       if (!ticket) {
@@ -773,7 +912,7 @@ async function route(request, response, pathParts) {
     if (body.action === "notify" || body.action === "seat" || body.action === "remove") {
       let ticket;
       try {
-        ticket = await getDocument("queue_entries", body.ticket_id);
+        ticket = await fetchQueueEntry(body.ticket_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           ticket = global._tickets[body.ticket_id] || null;
@@ -923,7 +1062,7 @@ async function route(request, response, pathParts) {
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Invalid restaurant password." });
       let firestoreWalkinEntries = [];
-      try { firestoreWalkinEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+      try { firestoreWalkinEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
       const entries = allQueueEntries(firestoreWalkinEntries);
       const ticketNumber = `WM-${entries.length + 101}`;
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
@@ -1033,7 +1172,7 @@ async function route(request, response, pathParts) {
 
     // Remove queue entries for this restaurant from Firestore
     try {
-      const entries = await listCollection("queue_entries");
+      const entries = await fetchQueueEntries();
       const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
         delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
       }));
@@ -1132,7 +1271,7 @@ async function route(request, response, pathParts) {
     };
     if (ticketId) {
       try {
-        const t = await getDocument("queue_entries", ticketId);
+        const t = await fetchQueueEntry(ticketId);
         if (t) await safeCommit([setDocument("queue_entries", ticketId, { ...t, ...review })]);
       } catch (e) { console.warn("ticket rating update failed:", e?.message || e); }
       if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId] = { ...global._tickets[ticketId], ...review };
@@ -1141,7 +1280,7 @@ async function route(request, response, pathParts) {
       const rest = await findRestaurantById(restaurantId);
       if (rest) {
         let entries = [];
-        try { entries = await listCollection("queue_entries"); } catch (e) {}
+        try { entries = await fetchQueueEntries(); } catch (e) {}
         const rated = entries.filter(e => e.restaurant_id === restaurantId && e.rated);
         const ratingCount = rated.length;
         const avgRating = ratingCount ? rated.reduce((s, e) => s + Number(e.rating || e.stars || 0), 0) / ratingCount : 0;
