@@ -631,6 +631,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             ORDER BY q.joined_at DESC LIMIT 15
             ''')
             recent_queues = [dict(row) for row in c.fetchall()]
+            for rq in recent_queues:
+                rq["phone"] = ""
 
             # Recent reliability checks
             c.execute('''
@@ -816,7 +818,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             rest.pop("password_hash", None)
 
             for idx, e in enumerate(entries):
-                e.pop("phone", None)
+                e["phone"] = ""
                 e["position_rank"] = idx + 1
                 e["is_table_near"] = (idx < 2 and e["status"] in ("waiting", "delayed"))
 
@@ -985,7 +987,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 # If ticket was cleared or created in prior session, restore gracefully so arrival works seamlessly
                 rest_id = data.get("restaurant_id", "rest-1")
                 name = data.get("customer_name", "Arrived Guest")
-                phone = data.get("phone", "+91 98201 44521")
+                phone = ""
                 now = time.time()
                 c.execute('''
                 INSERT INTO queue_entries 
@@ -1132,7 +1134,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
             elif action == "add_walkin":
                 name = data.get("name", "Walk-in Guest")
-                phone = data.get("phone", "+91 99999 00000")
+                phone = str(data.get("phone", "")).strip()
                 party_size = int(data.get("party_size", 2))
                 seating_pref = data.get("seating_pref", "First Available")
                 
