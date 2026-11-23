@@ -13,6 +13,7 @@ const now = Date.now();
 global._tickets = global._tickets || {};
 global._customRestaurants = global._customRestaurants || [];
 global._deletedRestaurantIds = global._deletedRestaurantIds || [];
+global._pwdMap = global._pwdMap || {};
 
 function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
@@ -109,13 +110,26 @@ async function findRestaurantById(id) {
     if (doc) return doc;
   } catch (error) {
     if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      // fallback on Firestore parse error or unconfigured Firebase
+      // fall through to in-memory sources below
     } else {
       throw error;
     }
   }
-  const fb = fallbackRestaurants.find(r => r.id === id);
+  const fb = fallbackRestaurants.find(r => r.id === id) || (global._customRestaurants || []).find(r => r.id === id);
   return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
+}
+
+// Merge Firestore queue entries with the in-memory ticket store. In-memory
+// entries win on id collisions so local writes are never shadowed by stale copies.
+function allQueueEntries(firestoreEntries) {
+  const byId = {};
+  for (const entry of (firestoreEntries || [])) {
+    if (entry && entry.id) byId[entry.id] = entry;
+  }
+  for (const entry of Object.values(global._tickets || {})) {
+    if (entry && entry.id) byId[entry.id] = entry;
+  }
+  return Object.values(byId);
 }
 
 async function safeCommit(writes) {
@@ -130,6 +144,24 @@ async function safeCommit(writes) {
   }
 }
 
+// Raw restaurant lookup that preserves password_hash for write-backs, falling
+// back to fallback seeds and Founder-added custom restaurants when Firestore is unavailable.
+async function getRawRestaurant(id) {
+  try {
+    const doc = await getDocument("restaurants", id);
+    if (doc) return doc;
+  } catch (error) {
+    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+      // fall through to in-memory sources below
+    } else {
+      throw error;
+    }
+  }
+  const fb = fallbackRestaurants.find(r => r.id === id);
+  if (fb) return { ...fb };
+  return (global._customRestaurants || []).find(r => r.id === id) || null;
+}
+
 function publicRestaurant(r) {
   const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
   delete merged.password_hash;
@@ -138,34 +170,27 @@ function publicRestaurant(r) {
 
 async function ensureRestaurants() {
   const deleted = global._deletedRestaurantIds || [];
-  const customList = (global._customRestaurants || [])
+  const pwdMap = global._pwdMap || {};
+  const publicFallback = fallbackRestaurants.map(r => publicRestaurant({ ...r, ...(pwdMap[r.id] || {}) }));
+  const publicCustom = (global._customRestaurants || [])
     .filter(r => !deleted.includes(r.id))
-    .map(publicRestaurant);
+    .map(r => publicRestaurant({ ...r, ...(pwdMap[r.id] || {}) }));
+  let firestorePublic = [];
   try {
-    const restaurants = await listCollection("restaurants");
-    let merged = restaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
-    if (restaurants.length || customList.length) {
-      for (const c of customList) {
-        if (!merged.some(m => m.id === c.id)) merged.push(c);
-      }
-      return merged;
-    }
-    await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
-    merged = fallbackRestaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
-    for (const c of customList) {
-      if (!merged.some(m => m.id === c.id)) merged.push(c);
-    }
-    return merged;
+    const docs = await listCollection("restaurants");
+    firestorePublic = docs.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
   } catch (error) {
-    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      let merged = fallbackRestaurants.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
-      for (const c of customList) {
-        if (!merged.some(m => m.id === c.id)) merged.push(c);
-      }
-      return merged;
-    }
-    throw error;
+    if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
   }
+  const byId = {};
+  for (const r of [...publicFallback, ...publicCustom]) byId[r.id] = r;
+  for (const r of firestorePublic) byId[r.id] = r; // Firestore wins when reachable
+  if (!firestorePublic.length && !global._customRestaurants.length) {
+    try {
+      await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
+    } catch { /* best-effort seed; in-memory fallback already covers it */ }
+  }
+  return Object.values(byId).filter(r => !deleted.includes(r.id));
 }
 
 const PROTO_PROFILES = {
@@ -251,10 +276,40 @@ async function route(request, response, pathParts) {
 
   if (request.method === "OPTIONS") return send(response, 204, {});
 
+  // Diagnostic: reports the active storage backend and live data counts
+  if (request.method === "GET" && path === "/api/health/storage") {
+    let storage = "in_memory_fallback";
+    let reason = "Firebase is not reachable or not configured";
+    try {
+      await getAccessToken();
+      await listCollection("restaurants");
+      storage = "firebase_firestore";
+      reason = null;
+    } catch (error) {
+      reason = String(error.message || error || "Firebase unreachable");
+    }
+    let restaurants = [];
+    try { restaurants = await listCollection("restaurants"); } catch { /* ignore */ }
+    let entries = [];
+    try { entries = await listCollection("queue_entries"); } catch { entries = Object.values(global._tickets || {}); }
+    const byId = {};
+    for (const e of entries) if (e && e.id) byId[e.id] = e;
+    for (const e of Object.values(global._tickets || {})) if (e && e.id) byId[e.id] = e;
+    const deleted = global._deletedRestaurantIds || [];
+    return send(response, 200, {
+      storage,
+      reason,
+      restaurants: restaurants.filter(r => !deleted.includes(r.id)).length,
+      active_queue_entries: Object.values(byId).filter(e => ["waiting", "notified", "delayed"].includes(e.status)).length,
+      custom_overrides: (global._customRestaurants || []).filter(r => !deleted.includes(r.id)).length
+    });
+  }
+
   if (request.method === "GET" && path === "/api/restaurants") {
     const restaurants = await ensureRestaurants();
-    let queueEntries = [];
-    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    let firestoreEntries = [];
+    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queueEntries = allQueueEntries(firestoreEntries);
     const result = [];
     for (const restaurant of restaurants) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
@@ -270,9 +325,9 @@ async function route(request, response, pathParts) {
     const id = normalized[normalized.length - 1];
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    let queueEntries = [];
-    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
-    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
+    let firestoreEntries = [];
+    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
@@ -290,7 +345,9 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Invalid restaurant" });
     if (!restaurant.is_queue_open) return send(response, 400, { error: "Queue is currently closed" });
 
-    const entries = await listCollection("queue_entries").catch(() => Object.values(global._tickets));
+    let firestoreEntries = [];
+    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const entries = allQueueEntries(firestoreEntries);
     const ticketId = `q-${Date.now().toString().slice(-6)}`;
     const ticketNumber = `WM-${entries.length + 101}`;
     const joinedAt = Date.now();
@@ -350,7 +407,12 @@ async function route(request, response, pathParts) {
         throw error;
       }
     }
-    const entries = await listCollection("queue_entries").catch(error => { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; return Object.values(global._tickets).filter(t => t.restaurant_id === ticket.restaurant_id); });
+    if (!restaurant) {
+      restaurant = await findRestaurantById(ticket.restaurant_id).catch(() => null);
+    }
+    let firestoreEntries = [];
+    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const entries = allQueueEntries(firestoreEntries);
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
@@ -364,8 +426,9 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const suppliedPwd = request.headers["x-restaurant-password"] || request.query?.password;
     if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Restaurant password required." });
-    let queue = [];
-    try { queue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    let firestoreQueue = [];
+    try { firestoreQueue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queue = allQueueEntries(firestoreQueue);
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
   }
@@ -394,8 +457,9 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/analytics") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
-    let queueEntries = [];
-    try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    let firestoreEntries = [];
+    try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queueEntries = allQueueEntries(firestoreEntries);
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
     const enriched = [];
@@ -500,16 +564,13 @@ async function route(request, response, pathParts) {
     if (body.action === "toggle_queue") {
       let restaurant;
       try {
-        restaurant = await getDocument("restaurants", body.restaurant_id);
+        restaurant = await getRawRestaurant(body.restaurant_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           restaurant = null;
         } else {
           throw error;
         }
-      }
-      if (!restaurant) {
-        restaurant = fallbackRestaurants.find(r => r.id === body.restaurant_id) || null;
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       const newState = Boolean(body.is_open);
@@ -522,13 +583,16 @@ async function route(request, response, pathParts) {
           throw error;
         }
       }
+      global._pwdMap = global._pwdMap || {};
+      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
+      global._pwdMap[restaurant.id].is_queue_open = newState;
       return send(response, 200, { success: true, message: "Queue status updated." });
     }
 
     if (body.action === "update_announcement") {
       let restaurant;
       try {
-        restaurant = await getDocument("restaurants", body.restaurant_id);
+        restaurant = await getRawRestaurant(body.restaurant_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           restaurant = null;
@@ -537,7 +601,7 @@ async function route(request, response, pathParts) {
         }
       }
       if (!restaurant) {
-        restaurant = fallbackRestaurants.find(r => r.id === body.restaurant_id) || null;
+        restaurant = null;
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       const announcement = String(body.announcement || '');
@@ -559,7 +623,7 @@ async function route(request, response, pathParts) {
     if (body.action === "update_wait_estimate") {
       let restaurant;
       try {
-        restaurant = await getDocument("restaurants", body.restaurant_id);
+        restaurant = await getRawRestaurant(body.restaurant_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           restaurant = null;
@@ -568,7 +632,7 @@ async function route(request, response, pathParts) {
         }
       }
       if (!restaurant) {
-        restaurant = fallbackRestaurants.find(r => r.id === body.restaurant_id) || null;
+        restaurant = null;
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       try {
@@ -580,6 +644,9 @@ async function route(request, response, pathParts) {
           throw error;
         }
       }
+      global._pwdMap = global._pwdMap || {};
+      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
+      global._pwdMap[restaurant.id].manual_override_wait = body.manual_wait_mins;
       return send(response, 200, { success: true, message: "Wait time estimate updated." });
     }
     if (body.action === "add_walkin") {
@@ -595,7 +662,9 @@ async function route(request, response, pathParts) {
       }
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Invalid restaurant password." });
-      const entries = Object.values(global._tickets);
+      let firestoreWalkinEntries = [];
+      try { firestoreWalkinEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+      const entries = allQueueEntries(firestoreWalkinEntries);
       const ticketId = `q-${Date.now().toString().slice(-6)}`;
       const ticketNumber = `WM-${entries.length + 101}`;
       const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now(), notified_at: null, seated_at: null, has_arrived: true, delay_mins: 0 };
@@ -617,10 +686,30 @@ async function route(request, response, pathParts) {
   if (request.method === "POST" && path === "/api/founder/restaurant/toggle") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const body = request.body || {};
-    const restaurant = await getDocument("restaurants", body.restaurant_id);
+    let restaurant;
+    try {
+      restaurant = await getRawRestaurant(body.restaurant_id);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        restaurant = null;
+      } else {
+        throw error;
+      }
+    }
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const newState = !Boolean(restaurant.is_queue_open);
-    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
+    try {
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else {
+        throw error;
+      }
+    }
+    global._pwdMap = global._pwdMap || {};
+    if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
+    global._pwdMap[restaurant.id].is_queue_open = newState;
     return send(response, 200, { success: true, new_state: newState ? 1 : 0, message: "Restaurant queue state updated." });
   }
 
@@ -710,6 +799,10 @@ async function route(request, response, pathParts) {
     const id = `rest-${Date.now().toString().slice(-6)}`;
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
+
+    global._customRestaurants = global._customRestaurants || [];
+    global._customRestaurants.push(sanitizeRestaurant(restaurant));
+
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
   }
 
@@ -735,7 +828,7 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, message: "Password reset successfully." });
   }
 
-  if (request.method === "POST" && path === "/api/reliability/feedback") {
+  if (request.method === "POST" && (path === "/api/feedback" || path === "/api/reliability/feedback")) {
     return send(response, 200, { success: true, message: "Thank you! Your check-in feedback updated the Reliability Score." });
   }
 

@@ -849,6 +849,28 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             self.serve_static_file(os.path.join(BASE_DIR, "sw.js"), "application/javascript; charset=utf-8")
             return
 
+        # API: Diagnostic storage status
+        if path == "/api/health/storage":
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM restaurants")
+            restaurant_count = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM queue_entries WHERE status IN ('waiting', 'notified', 'delayed')")
+            active_queue = c.fetchone()[0]
+            seed_ids = ("rest-1", "rest-2", "rest-3", "rest-4", "rest-5", "rest-6", "rest-7", "rest-8", "rest-9", "rest-10")
+            placeholders = ", ".join("?" for _ in seed_ids)
+            c.execute(f"SELECT COUNT(*) FROM restaurants WHERE id NOT IN ({placeholders})", seed_ids)
+            custom_overrides = c.fetchone()[0]
+            conn.close()
+            self.send_json({
+                "storage": "sqlite",
+                "reason": "Local SQLite backend; Firebase Firestore not configured for this backend",
+                "restaurants": restaurant_count,
+                "active_queue_entries": active_queue,
+                "custom_overrides": custom_overrides
+            })
+            return
+
         # API: List all restaurants with live queue and reliability data
         if path == "/api/restaurants":
             conn = get_db()

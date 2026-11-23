@@ -151,7 +151,7 @@ async function commitWrites(writes) {
 
 function setDocument(collection, id, fields) {
   return {
-    update: {
+    set: {
       name: `projects/${PROJECT_ID}/databases/(default)/documents/${encodeSegment(collection)}/${encodeSegment(id)}`,
       fields: toFirestoreFields(fields)
     }
@@ -159,6 +159,8 @@ function setDocument(collection, id, fields) {
 }
 
 module.exports = {
+  getAccessToken,
+  firestoreRequest,
   listCollection,
   getDocument,
   commitWrites,
