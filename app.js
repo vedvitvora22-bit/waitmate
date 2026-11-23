@@ -310,6 +310,7 @@ let currentCategory = 'all';
 let currentCity = 'all';
 let currentArea = 'all';
 let currentSort = 'reliability';
+let currentMealTime = 'all';
 let currentSearch = '';
 let openOnly = true;
 
@@ -630,6 +631,7 @@ const fallbackRestaurants = [
     address: "Linking Road, Bandra West, Mumbai",
     distance_km: 0.8,
     price_range: "₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
     description: "Famous for crispy Ghee Podi Butter Dosa, Medu Vada, and authentic filter coffee. Ultra-fast token turnover with legendary standing crowds.",
     live_stats: {
@@ -667,6 +669,7 @@ const fallbackRestaurants = [
     address: "Senapati Bapat Marg, Lower Parel, Mumbai",
     distance_km: 1.6,
     price_range: "₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
     description: "Legendary for Boneless Chicken Biryani, Paneer Biryani, and traditional Andhra meals. Massive weekend queues with high table turnover.",
     live_stats: {
@@ -703,6 +706,7 @@ const fallbackRestaurants = [
     address: "Tulloch Road, Colaba, Mumbai",
     distance_km: 0.5,
     price_range: "₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
     description: "Mumbai's iconic street food institution. Open-air charcoal-grilled mutton seekh, chicken bhuna rolls, and buttery rumali rotis.",
     live_stats: {
@@ -738,6 +742,7 @@ const fallbackRestaurants = [
     address: "Mathuradas Mill Compound, Lower Parel, Mumbai",
     distance_km: 1.2,
     price_range: "₹₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80",
     description: "Mumbai's pioneer craft brewery famous for Tin Man, Basmati Blonde, and woodfired sourdough pizzas. High demand on weekend evenings.",
     live_stats: {
@@ -773,6 +778,7 @@ const fallbackRestaurants = [
     address: "Juhu Tara Road, Juhu, Mumbai",
     distance_km: 0.4,
     price_range: "₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
     description: "Steaming hot ginger-elaichi kulhad chai, butter-loaded bun maska, and hot samosas. Ultra-rapid pickup queue popular among students.",
     live_stats: {
@@ -808,6 +814,7 @@ const fallbackRestaurants = [
     address: "Palladium Mall, Lower Parel, Mumbai",
     distance_km: 3.2,
     price_range: "₹₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
     description: "Opulent North Indian dining with slow-simmered Dal Makhani and tandoori platters. Highly volatile peak Saturday dinner queues.",
     live_stats: {
@@ -843,6 +850,7 @@ const fallbackRestaurants = [
     address: "Wakefield House, Ballard Estate, Fort, Mumbai",
     distance_km: 1.5,
     price_range: "₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
     description: "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
     live_stats: {
@@ -879,6 +887,7 @@ const fallbackRestaurants = [
     address: "Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai",
     distance_km: 0.6,
     price_range: "₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
     description: "Iconic South Mumbai Irani bakery serving fresh Bun Maska, Keema Pav, Mawa Cake, and Irani Chai.",
     live_stats: {
@@ -914,6 +923,7 @@ const fallbackRestaurants = [
     address: "Janki Kutir, Juhu Church Road, Juhu, Mumbai",
     distance_km: 2.1,
     price_range: "₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
     description: "Bamboo-shaded theatre courtyard cafe in Juhu known for Irish Coffee, Suleimani Chai, and Amritsari Paratha.",
     live_stats: {
@@ -950,6 +960,7 @@ const fallbackRestaurants = [
     address: "Tardeo Road Junction, Mumbai Central, Mumbai",
     distance_km: 2.8,
     price_range: "₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
     description: "High-turnover Mumbai street food counter famous for extra-butter Pav Bhaji and Masala Tawa Pulao.",
     live_stats: {
@@ -985,6 +996,7 @@ const fallbackRestaurants = [
     address: "Juhu Chowpatty, Juhu, Mumbai",
     distance_km: 3.5,
     price_range: "₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
     description: "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
     live_stats: {
@@ -1021,6 +1033,7 @@ const fallbackRestaurants = [
     address: "Chapel Road, Bandra West, Mumbai",
     distance_km: 1.0,
     price_range: "₹₹",
+    meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
     image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
     description: "Gourmet wood-fired Neapolitan pizzas with fresh mozzarella, basil, and spicy fermented hot honey drizzle.",
     live_stats: {
@@ -1782,6 +1795,25 @@ function areaMatches(r, area) {
   return true;
 }
 
+// Meal Time Filter Pills
+function setMealTimeFilter(meal) {
+  currentMealTime = meal;
+  document.querySelectorAll('.meal-pill').forEach(btn => {
+    if (btn.dataset.meal === meal) {
+      btn.className = "meal-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs";
+    } else {
+      btn.className = "meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
+    }
+  });
+  renderRestaurantsGrid();
+}
+
+function mealTimesMatch(r, meal) {
+  if (meal === 'all') return true;
+  const times = r.meal_times || [];
+  return Array.isArray(times) && times.includes(meal);
+}
+
 // Render Discovery Cards
 function renderRestaurantsGrid() {
   const container = document.getElementById('restaurantsGrid');
@@ -1795,6 +1827,7 @@ function renderRestaurantsGrid() {
   let filtered = allRestaurants.filter(r => {
     if (currentCity !== 'all' && (r.city || 'Mumbai') !== currentCity) return false;
     if (!areaMatches(r, currentArea)) return false;
+    if (!mealTimesMatch(r, currentMealTime)) return false;
     if (currentCategory !== 'all' && r.type !== currentCategory) return false;
     if (openOnly && r.live_stats && !r.live_stats.is_queue_open) return false;
     if (currentCategory === 'saved' && !favorites.has(r.id)) return false;
@@ -2033,6 +2066,7 @@ function resetFilters() {
   document.getElementById('openOnlyCheckbox').checked = true;
   setCategoryFilter('all');
   setCityFilter('all');
+  setMealTimeFilter('all');
   applyFilters();
 }
 

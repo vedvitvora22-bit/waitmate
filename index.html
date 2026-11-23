@@ -203,6 +203,17 @@
         <button onclick="setAreaFilter('central')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-area="central">Lower Parel & Central</button>
       </div>
 
+      <!-- Meal Time Filter Pills -->
+      <div class="flex items-center gap-2 mb-4 overflow-x-auto pb-1 text-xs">
+        <span class="text-slate-500 font-bold shrink-0">Meal Time:</span>
+        <button onclick="setMealTimeFilter('all')" class="meal-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs" data-meal="all">All Day</button>
+        <button onclick="setMealTimeFilter('Breakfast')" class="meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-meal="Breakfast">🍳 Breakfast</button>
+        <button onclick="setMealTimeFilter('Lunch')" class="meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-meal="Lunch">🍱 Lunch</button>
+        <button onclick="setMealTimeFilter('Snacks')" class="meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-meal="Snacks">🍿 Snacks</button>
+        <button onclick="setMealTimeFilter('Dinner')" class="meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-meal="Dinner">🍽️ Dinner</button>
+        <button onclick="setMealTimeFilter('Late Night')" class="meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-meal="Late Night">🌙 Late Night</button>
+      </div>
+
       <!-- Filters & Search Toolbar -->
       <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         
