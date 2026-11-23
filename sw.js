@@ -1,6 +1,6 @@
-// cache-bust-20261124-waitmate-logo-v20
+// cache-bust-20261124-foundergodmode-superadmin-v21
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-waitmate-logo-v20';
+const CACHE_NAME = 'waitmate-v20261124-foundergodmode-superadmin-v21';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
