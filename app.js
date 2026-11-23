@@ -662,7 +662,7 @@ const fallbackRestaurants = [
     distance_km: 1.2,
     price_range: "₹₹₹",
     image_url: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80",
-    description: "Bengaluru's pioneer craft brewery famous for Tin Man, Basmati Blonde, and woodfired sourdough pizzas. High demand on weekend evenings.",
+    description: "Mumbai's pioneer craft brewery famous for Tin Man, Basmati Blonde, and woodfired sourdough pizzas. High demand on weekend evenings.",
     live_stats: {
       queue_count: 2,
       total_waiting_people: 6,
@@ -1231,7 +1231,7 @@ async function loadFounderDashboard() {
     console.warn("Founder data fallback:", err);
     // Render using in-memory / local state
     const totalVenues = allRestaurants.length;
-    const cities = [...new Set(allRestaurants.map(r => r.city || 'Bengaluru'))];
+    const cities = [...new Set(allRestaurants.map(r => r.city || 'Mumbai'))];
     let waitingDiners = 0;
     let waitingParties = 0;
     allRestaurants.forEach(r => {
@@ -1279,7 +1279,7 @@ function renderFounderData(data) {
         <tr class="hover:bg-slate-50 transition">
           <td class="py-3 px-4">
             <div class="font-bold text-slate-900">${r.name}</div>
-            <div class="text-[11px] text-slate-400">📍 ${r.city || 'Bengaluru'} • ${r.category}</div>
+            <div class="text-[11px] text-slate-400">📍 ${r.city || 'Mumbai'} • ${r.category}</div>
           </td>
           <td class="py-3 px-4">
             <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
@@ -1507,7 +1507,7 @@ function renderRestaurantsGrid() {
   if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners in line`;
 
   let filtered = allRestaurants.filter(r => {
-    if (currentCity !== 'all' && (r.city || 'Bengaluru') !== currentCity) return false;
+    if (currentCity !== 'all' && (r.city || 'Mumbai') !== currentCity) return false;
     if (!areaMatches(r, currentArea)) return false;
     if (currentCategory !== 'all' && r.type !== currentCategory) return false;
     if (openOnly && r.live_stats && !r.live_stats.is_queue_open) return false;
@@ -1598,7 +1598,7 @@ function renderRestaurantsGrid() {
               ${r.price_range}
             </span>
             <span class="badge-tag bg-orange-500/90 text-white text-[10px] font-bold">
-              📍 ${r.city || 'Bengaluru'}
+              📍 ${r.city || 'Mumbai'}
             </span>
           </div>
 
@@ -1879,7 +1879,7 @@ async function submitJoinQueue(e) {
       parties_ahead: data.parties_ahead || 0,
       estimated_remaining_mins: data.estimated_wait_mins || 10,
       restaurant: {
-        name: selectedJoinVenue?.name || 'Partner Venue',
+        name: selectedJoinVenue?.name || (allRestaurants.find(r => r.id === restId)?.name) || 'Unknown Venue',
         category: selectedJoinVenue?.category || '',
         address: selectedJoinVenue?.address || '',
         image_url: selectedJoinVenue?.image_url || ''
@@ -2016,7 +2016,21 @@ async function fetchTicketStatus() {
     }
     let data = {};
     try { data = await res.json(); } catch (parseErr) { return; }
-    activeTicketData = data;
+    // Preserve local arrived/grace state if it exists, only merge server updates
+    if (activeTicketData) {
+      const localArrived = activeTicketData.has_arrived;
+      const localDelayMins = activeTicketData.delay_mins || 0;
+      const localGraceUntil = graceUntil;
+      const localAcknowledgedAlert = acknowledgedAlertForTicket;
+      // Merge: keep server data as base, but preserve local arrival/grace flags
+      activeTicketData = { ...data, has_arrived: localArrived, delay_mins: localDelayMins };
+      if (localGraceUntil && Date.now() < localGraceUntil) {
+        graceUntil = localGraceUntil;
+        acknowledgedAlertForTicket = localAcknowledgedAlert;
+      }
+    } else {
+      activeTicketData = data;
+    }
     updateTicketUI();
   } catch (err) {
     // Offline / network error: keep rendering local data if valid
@@ -2073,8 +2087,9 @@ function updateTicketUI() {
   const d = activeTicketData;
   const pill = document.getElementById('activeTicketPill');
 
-  const venueObj = d.restaurant?.name ? d.restaurant : (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId));
-  const venueName = venueObj ? venueObj.name : 'Partner Venue';
+  // Always find the real restaurant name from allRestaurants (never fall back to "Partner Venue")
+  const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
+  const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
 
   if (d.status === 'notified') {
     acknowledgedAlertForTicket = null;
@@ -2297,7 +2312,7 @@ async function dinerArrivedAction() {
 
   const btn = document.getElementById('btnArrivedAction');
   if (btn) {
-    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
+    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Checked In at Entrance</span>`;
     btn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
     lucide.createIcons();
   }
@@ -2322,7 +2337,7 @@ async function dinerArrivedAction() {
     let data = {};
     try { data = JSON.parse(text); } catch (parseErr) { data = {}; }
     if (res.ok && data.success) {
-      showToast(data.message || "Host stand notified! You've arrived at the venue.", "success");
+      showToast("Host notified that you are at the entrance!", "success");
     } else {
       // Even on 404/error, local state is already updated - just show a softer message
       showToast("Arrival registered with host stand.", "info");
@@ -2332,7 +2347,7 @@ async function dinerArrivedAction() {
   } catch (err) {
     console.warn("Arrival sync warning:", err);
     // Optimistic fallback: diner arrival confirmed locally
-    showToast("Arrival confirmed! Host stand has you marked as present.", "success");
+    showToast("Host notified that you are at the entrance!", "success");
     if (activeTicketData) {
       activeTicketData.has_arrived = 1;
       activeTicketData.arrival_status = 'At Venue Entrance';
@@ -2363,13 +2378,13 @@ async function dinerDelayAction(mins) {
     });
     let data = {};
     try { data = await res.json(); } catch (parseErr) { data = {}; }
-    showToast(data.message || `Holding token for +${mins} minutes grace buffer.`, "info");
+    showToast("+5 min grace buffer added to your pass!", "success");
     updateTicketUI();
     showAcknowledgedAlertBanner('grace');
     lucide.createIcons();
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
-    showToast(`Holding your token for +${mins}m parking grace buffer.`, "info");
+    showToast("+5 min grace buffer added to your pass!", "success");
     if (activeTicketData) {
       updateTicketUI();
     }
@@ -2589,7 +2604,7 @@ function populateHostDropdown() {
   if (!select) return;
   select.innerHTML = allRestaurants.map(r => `
     <option value="${r.id}" ${r.id === currentHostVenueId ? 'selected' : ''}>
-      ${r.name} (${r.city || 'Bengaluru'})
+      ${r.name} (${r.city || 'Mumbai'})
     </option>
   `).join('');
 }

@@ -308,18 +308,15 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "GET" && path === "/api/restaurants") {
-    // Temporary diagnostics: surface the sanitized Firestore error when it fails
-    // so the exact HTTP status/error from Google Firestore API is visible.
-    let storageDebug = null;
+    // Diagnostics: surface the active storage backend and Firestore error reason
+    let storageStatus = "firebase";
+    let storageReason = null;
     try {
       await getAccessToken();
       await listCollection("restaurants");
     } catch (error) {
-      storageDebug = {
-        status: error.status || null,
-        code: error.code || null,
-        message: String(error.message || error || "Firestore request failed")
-      };
+      storageStatus = "memory";
+      storageReason = String(error.message || error || "Firebase unreachable").slice(0, 120);
     }
     const restaurants = await ensureRestaurants();
     let firestoreEntries = [];
@@ -333,8 +330,10 @@ async function route(request, response, pathParts) {
       const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
       result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
     }
-    const body = { restaurants: result };
-    if (storageDebug) body._storage_debug = storageDebug;
+    const body = { 
+      restaurants: result,
+      storage_status: storageReason ? `memory: ${storageReason}` : "firebase"
+    };
     return send(response, 200, body);
   }
 
