@@ -398,6 +398,30 @@ function hashProfile(id) {
   return { rush: windows[h % windows.length], peakP: [3,6], peakW: [18,30], offP: [1,2], offW: [6,12] };
 }
 
+const VALID_MEAL_TIMES = ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"];
+
+const MEAL_RUSH_WINDOWS = {
+  Breakfast: [[7, 11]],
+  Lunch: [[12, 15]],
+  Snacks: [[15, 17]],
+  Dinner: [[18, 22]],
+  "Late Night": [[22, 26]]
+};
+
+function rushWindowsForMealTimes(mealTimes) {
+  const windows = [];
+  for (const m of (mealTimes || [])) {
+    if (MEAL_RUSH_WINDOWS[m]) windows.push(...MEAL_RUSH_WINDOWS[m]);
+  }
+  return windows.length ? windows : null;
+}
+
+function normalizeMealTimes(mealTimes) {
+  if (!Array.isArray(mealTimes) || mealTimes.length === 0) return ["Lunch", "Dinner"];
+  const cleaned = mealTimes.filter(m => VALID_MEAL_TIMES.includes(m));
+  return cleaned.length ? cleaned : ["Lunch", "Dinner"];
+}
+
 // Current 5-minute IST time bucket. Every request within the same bucket
 // shares the same bucket key, so all browsers see identical simulated waits.
 function istBucket() {
@@ -419,11 +443,13 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
   const bucket = istBucket();
   const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const hour = istNow.getHours() + istNow.getMinutes() / 60;
-  const inRush = profile.rush.some(([s, e]) => (s <= e ? (hour >= s && hour < e) : (hour >= s || hour < e)));
+  const mealTimes = Array.isArray(restaurant.meal_times) && restaurant.meal_times.length ? restaurant.meal_times : null;
+  const rushWindows = mealTimes ? rushWindowsForMealTimes(mealTimes) : profile.rush;
+  const inRush = rushWindows.some(([s, e]) => (s <= e ? (hour >= s && hour < e) : (hour >= s || hour < e)));
   const seed = String(id) + '|' + bucket;
   const rand = (min, max) => seededDraw(seed, min, max);
   const simulatedParties = inRush ? rand(profile.peakP[0], profile.peakP[1]) : rand(profile.offP[0], profile.offP[1]);
-  const simulatedWait = inRush ? rand(profile.peakW[0], profile.peakW[1]) : rand(profile.offW[0], profile.offW[1]);
+  const simulatedWait = inRush ? rand(profile.peakW[0], profile.peakW[1]) : rand(profile.offW[0], profile.offP ? profile.offW[1] : profile.offW[1]);
   const isOpen = Boolean(restaurant.is_queue_open);
   const realP = Number(realWaitingParties || 0);
   const realG = Number(realWaitingGuests || 0);
@@ -438,6 +464,7 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
       const tables = Number(restaurant.total_tables || 1);
       estimated = Math.max(0, Math.round((totalActiveParties * basePrep * 0.6) + simulatedWait * 0.4 + osc * 2));
       if (totalActiveParties === 0) estimated = 0;
+      estimated = Math.min(estimated, 60);
     }
   }
   return {
@@ -1172,6 +1199,7 @@ async function route(request, response, pathParts) {
     const basePrepTime = Number(body.base_prep_time || 15);
     const imageUrl = body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80";
     const description = body.description || `Authentic ${category} located in ${city}.`;
+    const mealTimes = normalizeMealTimes(body.meal_times);
 
     if (!name || !address || !password) return send(response, 400, { error: "Restaurant name, address, and owner dashboard password are required." });
     if (password.length < 4) return send(response, 400, { error: "Owner dashboard password must be at least 4 characters." });
@@ -1186,6 +1214,7 @@ async function route(request, response, pathParts) {
       address,
       distance_km: 1.0,
       price_range: priceRange,
+      meal_times: mealTimes,
       image_url: imageUrl,
       description,
       password_hash: hashPassword(password),
@@ -1245,7 +1274,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Unauthorized. Only the Founder can add new restaurants." });
     if (!body.name || !body.category || !body.address) return send(response, 400, { error: "Please provide Restaurant Name, Cuisine Category, and Address." });
     const id = `rest-${Date.now().toString().slice(-6)}`;
-    const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
+    const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", meal_times: normalizeMealTimes(body.meal_times), image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
 
     global._customRestaurants = global._customRestaurants || [];
@@ -1443,12 +1472,17 @@ async function route(request, response, pathParts) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
     }
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open"];
+    const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open","meal_times"];
     const updates = { ...restaurant };
     let changed = false;
     for (const field of updatable) {
       if (body[field] !== undefined) {
-        updates[field] = field === "is_queue_open" ? Boolean(body[field]) : body[field];
+        if (field === "meal_times") {
+          const normalized = normalizeMealTimes(body[field]);
+          updates[field] = normalized;
+        } else {
+          updates[field] = field === "is_queue_open" ? Boolean(body[field]) : body[field];
+        }
         changed = true;
       }
     }

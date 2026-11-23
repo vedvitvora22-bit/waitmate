@@ -1596,6 +1596,32 @@
           <label class="block text-xs font-bold text-slate-700 mb-1">Bio & Specialties</label>
           <textarea id="fndNewBio" rows="2" placeholder="Tell diners about your signature dishes, history, and dining atmosphere..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
         </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">Active Meal Windows *</label>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndNewMealTime" value="Breakfast" checked class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍳 Breakfast</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndNewMealTime" value="Lunch" checked class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍱 Lunch</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndNewMealTime" value="Snacks" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍿 Snacks</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndNewMealTime" value="Dinner" checked class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍽️ Dinner</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndNewMealTime" value="Late Night" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🌙 Late Night</span>
+            </label>
+          </div>
+          <p id="fndNewMealError" class="hidden text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-1">Select at least one meal window.</p>
+        </div>
         <div class="flex items-center justify-end gap-2 pt-2">
           <button type="button" onclick="closeFounderAddRestaurantModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Cancel</button>
           <button type="submit" id="fndAddRestaurantSubmitBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Add Restaurant to Network</button>
@@ -1681,6 +1707,32 @@
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Bio & Specialties</label>
           <textarea id="fndEditBio" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">Active Meal Windows *</label>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndEditMealTime" value="Breakfast" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍳 Breakfast</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndEditMealTime" value="Lunch" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍱 Lunch</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndEditMealTime" value="Snacks" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍿 Snacks</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndEditMealTime" value="Dinner" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🍽️ Dinner</span>
+            </label>
+            <label class="meal-checkbox flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition">
+              <input type="checkbox" name="fndEditMealTime" value="Late Night" class="rounded text-orange-500 focus:ring-orange-500">
+              <span class="text-xs font-semibold leading-tight">🌙 Late Night</span>
+            </label>
+          </div>
+          <p id="fndEditMealError" class="hidden text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-1">Select at least one meal window.</p>
         </div>
         <div class="border-t border-slate-200 pt-4 space-y-2">
           <button type="button" onclick="founderDeleteRestaurantFromModal(document.getElementById('fndEditRestaurantId').value)" class="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition border border-rose-200">

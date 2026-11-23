@@ -1499,6 +1499,9 @@ function renderFounderData(data) {
                 ${r.type === 'food_truck' ? '🚚 Food Truck' : '🍽️ Dine-in'}
               </span>
               <span class="font-bold text-slate-700 ml-1">${escapeHtml(r.price_range)}</span>
+              <div class="mt-1.5 flex flex-wrap gap-1">
+                ${((r.meal_times || ['Lunch','Dinner']).map((m) => `<span class="meal-tag px-1.5 py-0.5 rounded text-[9px] font-bold border bg-orange-50 text-orange-800 border-orange-100">${escapeHtml(m)}</span>`).join(''))}
+              </div>
             </td>
             <td class="py-3 px-4">
               <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
@@ -4352,6 +4355,12 @@ function closeFounderAddRestaurantModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+// Collect selected meal-time checkboxes from a Founder venue form
+function getCheckedMealTimes(inputName) {
+  const boxes = document.querySelectorAll(`input[name="${inputName}"]:checked`);
+  return Array.from(boxes).map((b) => b.value);
+}
+
 async function submitFounderAddRestaurant(event) {
   if (event) event.preventDefault();
   const name = document.getElementById('fndNewName').value.trim();
@@ -4365,6 +4374,14 @@ async function submitFounderAddRestaurant(event) {
   const pace = parseInt(document.getElementById('fndNewPace').value) || 15;
   const imageUrl = document.getElementById('fndNewPhoto').value.trim() || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80';
   const bio = document.getElementById('fndNewBio').value.trim();
+  const mealTimes = getCheckedMealTimes('fndNewMealTime');
+  if (mealTimes.length === 0) {
+    const err = document.getElementById('fndNewMealError');
+    if (err) err.classList.remove('hidden');
+    return;
+  }
+  const err = document.getElementById('fndNewMealError');
+  if (err) err.classList.add('hidden');
 
   if (!name || !category || !address || !password) {
     showToast('Please fill in all required fields.', 'error');
@@ -4390,6 +4407,7 @@ async function submitFounderAddRestaurant(event) {
         address,
         price_range: priceRange,
         password,
+        meal_times: mealTimes,
         total_tables: totalTables,
         base_prep_time: pace,
         image_url: imageUrl,
@@ -4416,6 +4434,7 @@ async function submitFounderAddRestaurant(event) {
       city,
       address,
       price_range: priceRange,
+      meal_times: mealTimes,
       image_url: imageUrl,
       description: bio || `Authentic ${category} located in ${city}.`,
       live_stats: { queue_count: 0, estimated_wait_mins: pace, is_queue_open: true, total_waiting_people: 0 },
@@ -4732,6 +4751,11 @@ function openFounderEditRestaurantModal(venueId) {
   document.getElementById('fndEditPace').value = r.base_prep_time || '';
   document.getElementById('fndEditPhoto').value = r.image_url || '';
   document.getElementById('fndEditBio').value = r.description || '';
+  const editBoxes = document.querySelectorAll('input[name="fndEditMealTime"]');
+  const editMeals = Array.isArray(r.meal_times) ? r.meal_times : ["Lunch", "Dinner"];
+  editBoxes.forEach((box) => {
+    box.checked = editMeals.includes(box.value);
+  });
   const modal = document.getElementById('founderEditRestaurantModal');
   if (modal) {
     modal.classList.remove('hidden');
@@ -4765,6 +4789,14 @@ async function submitFounderEditRestaurant(event) {
   const pace = parseInt(document.getElementById('fndEditPace').value) || undefined;
   const imageUrl = document.getElementById('fndEditPhoto').value.trim();
   const bio = document.getElementById('fndEditBio').value.trim();
+  const mealTimes = getCheckedMealTimes('fndEditMealTime');
+  if (mealTimes.length === 0) {
+    const err = document.getElementById('fndEditMealError');
+    if (err) err.classList.remove('hidden');
+    return;
+  }
+  const err = document.getElementById('fndEditMealError');
+  if (err) err.classList.add('hidden');
 
   if (!name || !category || !address) { showToast('Name, category and address are required.', 'error'); return; }
   if (password && password.length < 4) { showToast('Owner password must be at least 4 characters.', 'error'); return; }
@@ -4776,6 +4808,7 @@ async function submitFounderEditRestaurant(event) {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
       body: JSON.stringify({
         restaurant_id: restaurantId, name, category, type, city, address, price_range: priceRange,
+        meal_times: mealTimes,
         ...(password ? { password } : {}),
         ...(totalTables !== undefined ? { total_tables: totalTables } : {}),
         ...(pace !== undefined ? { base_prep_time: pace } : {}),
