@@ -336,7 +336,7 @@ async function route(request, response, pathParts) {
         throw error;
       }
     }
-    const updates = ticket ? { ...ticket } : null;
+    let updates = ticket ? { ...ticket } : null;
     if (body.action === "arrived") {
       if (!ticket) {
         const restId = body.restaurant_id || "rest-1";

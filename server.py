@@ -145,7 +145,7 @@ def init_db():
         "rest-6": "punjab123",
     }
     for rest_id, default_pwd in password_defaults.items():
-        c.execute('UPDATE restaurants SET password_hash = ? WHERE id = ?', (hash_password(default_pwd), rest_id))
+        c.execute("UPDATE restaurants SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')", (hash_password(default_pwd), rest_id))
 
     # Migrate default venues to Mumbai hubs (exclusively Mumbai for now)
     mumbai_addresses = {
