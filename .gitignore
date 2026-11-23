@@ -1,4 +1,5 @@
 waitmate.db
 *.db
+__pycache__/
 .env
 .env.*

@@ -57,17 +57,7 @@ async function submitOwnerPassword(event) {
       body: JSON.stringify({ restaurant_id: venueId, password: pwd })
     });
 
-    const defaultPasswords = {
-      'rest-1': 'rameshwaram123',
-      'rest-2': 'meghana123',
-      'rest-3': 'bademiya123',
-      'rest-4': 'toit123',
-      'rest-5': 'chaisutta123',
-      'rest-6': 'punjab123'
-    };
-    const isDefaultMatch = defaultPasswords[venueId] && pwd.toLowerCase() === defaultPasswords[venueId];
-
-    if (verifyRes.ok || (verifyRes.status !== 401 && isDefaultMatch)) {
+    if (verifyRes.ok) {
       saveHostPassword(venueId, pwd);
       currentHostVenueId = venueId;
       closeOwnerPasswordModal();
@@ -483,8 +473,8 @@ const fallbackRestaurants = [
     name: "The Rameshwaram Cafe",
     category: "Iconic South Indian & Filter Coffee",
     type: "restaurant",
-    city: "Bengaluru",
-    address: "100ft Road, HAL 2nd Stage, Indiranagar, Bengaluru",
+    city: "Mumbai",
+    address: "Linking Road, Bandra West, Mumbai",
     distance_km: 0.8,
     price_range: "₹",
     image_url: "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
@@ -520,8 +510,8 @@ const fallbackRestaurants = [
     name: "Meghana Foods (Biryani & Andhra Meals)",
     category: "Spicy Andhra Biryani & Thalis",
     type: "restaurant",
-    city: "Bengaluru",
-    address: "5th Block, Near Jyoti Nivas College, Koramangala, Bengaluru",
+    city: "Mumbai",
+    address: "Senapati Bapat Marg, Lower Parel, Mumbai",
     distance_km: 1.6,
     price_range: "₹₹",
     image_url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
@@ -557,7 +547,7 @@ const fallbackRestaurants = [
     category: "Late-Night Charcoal Kebabs & Baida Roti",
     type: "food_truck",
     city: "Mumbai",
-    address: "Behind Taj Mahal Palace, Colaba, Mumbai",
+    address: "Tulloch Road, Colaba, Mumbai",
     distance_km: 0.5,
     price_range: "₹₹",
     image_url: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
@@ -591,8 +581,8 @@ const fallbackRestaurants = [
     name: "Toit Brewpub & Kitchen",
     category: "Craft Microbrewery & Woodfired Pizza",
     type: "restaurant",
-    city: "Bengaluru",
-    address: "298, 100ft Road, Indiranagar, Bengaluru",
+    city: "Mumbai",
+    address: "Mathuradas Mill Compound, Lower Parel, Mumbai",
     distance_km: 1.2,
     price_range: "₹₹₹",
     image_url: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80",
@@ -626,8 +616,8 @@ const fallbackRestaurants = [
     name: "Chai Sutta Bar & Bun Maska Express",
     category: "Kulhad Chai, Bun Maska & Samosas",
     type: "food_truck",
-    city: "Pune",
-    address: "FC Road, Near Fergusson College Gate, Pune",
+    city: "Mumbai",
+    address: "Juhu Tara Road, Juhu, Mumbai",
     distance_km: 0.4,
     price_range: "₹",
     image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
@@ -661,8 +651,8 @@ const fallbackRestaurants = [
     name: "Punjab Grill & Royal Tandoor",
     category: "North Indian, Dal Makhani & Kebabs",
     type: "restaurant",
-    city: "Delhi NCR",
-    address: "Outer Circle, Connaught Place, New Delhi",
+    city: "Mumbai",
+    address: "Palladium Mall, Lower Parel, Mumbai",
     distance_km: 3.2,
     price_range: "₹₹₹",
     image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
@@ -1210,7 +1200,7 @@ function setCityFilter(city) {
 
   const topHub = document.getElementById('topActiveCity');
   if (topHub) {
-    topHub.textContent = city === 'all' ? 'All India (Bengaluru, Mumbai, Delhi, Pune)' : `${city}, India`;
+    topHub.textContent = city === 'all' ? 'All Mumbai (Bandra, Lower Parel, Colaba, Juhu)' : `${city}, India`;
   }
 
   renderRestaurantsGrid();
@@ -1255,8 +1245,8 @@ function renderRestaurantsGrid() {
     container.innerHTML = `
       <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200 p-8">
         <i data-lucide="store" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
-        <h3 class="text-base font-bold text-slate-800">No restaurants match your filters in ${currentCity === 'all' ? 'India' : currentCity}</h3>
-        <p class="text-xs text-slate-500 mt-1">Try selecting another city or clearing your search filters.</p>
+        <h3 class="text-base font-bold text-slate-800">No restaurants match your filters in ${currentCity === 'all' ? 'Mumbai' : currentCity}</h3>
+        <p class="text-xs text-slate-500 mt-1">Try clearing your search filters or selecting another neighborhood.</p>
         <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg text-xs font-bold hover:bg-orange-600">Reset Filters</button>
       </div>
     `;
@@ -1663,15 +1653,15 @@ function updateTicketUI() {
   if (['waiting', 'notified', 'delayed'].includes(d.status)) {
     pill.classList.remove('hidden');
     pill.classList.add('flex');
-    document.getElementById('activePillVenue').textContent = d.restaurant.name;
+    document.getElementById('activePillVenue').textContent = d.restaurant?.name || 'Partner Venue';
     document.getElementById('activePillPos').textContent = `#${d.position_in_line}`;
   } else {
     pill.classList.add('hidden');
   }
 
   // Update modal content if open
-  document.getElementById('ticketVenueName').textContent = d.restaurant.name;
-  document.getElementById('ticketVenueCategory').textContent = d.restaurant.category;
+  document.getElementById('ticketVenueName').textContent = d.restaurant?.name || 'Partner Venue';
+  document.getElementById('ticketVenueCategory').textContent = d.restaurant?.category || '';
   document.getElementById('ticketNumber').textContent = d.ticket_number;
   document.getElementById('ticketPosition').textContent = `#${d.position_in_line}`;
   document.getElementById('ticketPartiesAhead').textContent = `${d.parties_ahead} ${d.parties_ahead === 1 ? 'party' : 'parties'} ahead`;
@@ -1696,11 +1686,11 @@ function updateTicketUI() {
     
     // Show Ready notifications
     smsBanner.classList.remove('hidden');
-    document.getElementById('simulatedSmsText').textContent = `Your table at ${d.restaurant.name} is ready! Please proceed to the host counter. Token #${d.ticket_number}`;
+    document.getElementById('simulatedSmsText').textContent = `Your table at ${d.restaurant?.name || 'Partner Venue'} is ready! Please proceed to the host counter. Token #${d.ticket_number}`;
     
     whatsAppCard.classList.remove('hidden');
     document.getElementById('simulatedWhatsAppPhone').textContent = d.phone;
-    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant.name} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
+    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
 
     tableNearAlert.classList.add('hidden');
 
@@ -1728,7 +1718,7 @@ function updateTicketUI() {
     // Show simulated WhatsApp Alert Card for India
     whatsAppCard.classList.remove('hidden');
     document.getElementById('simulatedWhatsAppPhone').textContent = d.phone;
-    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant.name} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
+    document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
 
     smsBanner.classList.add('hidden');
 
@@ -1762,7 +1752,7 @@ function updateTicketUI() {
     }
   } else {
     // Normal waiting
-    document.title = `(${d.position_in_line}) In Queue: ${d.restaurant.name} • WaitMate India`;
+    document.title = `(${d.position_in_line}) In Queue: ${d.restaurant?.name || 'Partner Venue'} • WaitMate India`;
     document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";

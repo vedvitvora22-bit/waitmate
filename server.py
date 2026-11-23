@@ -147,6 +147,20 @@ def init_db():
     for rest_id, default_pwd in password_defaults.items():
         c.execute('UPDATE restaurants SET password_hash = ? WHERE id = ?', (hash_password(default_pwd), rest_id))
 
+    # Migrate default venues to Mumbai hubs (exclusively Mumbai for now)
+    mumbai_addresses = {
+        "rest-1": "Linking Road, Bandra West, Mumbai",
+        "rest-2": "Senapati Bapat Marg, Lower Parel, Mumbai",
+        "rest-3": "Tulloch Road, Colaba, Mumbai",
+        "rest-4": "Mathuradas Mill Compound, Lower Parel, Mumbai",
+        "rest-5": "Juhu Tara Road, Juhu, Mumbai",
+        "rest-6": "Palladium Mall, Lower Parel, Mumbai",
+    }
+    for rest_id, address in mumbai_addresses.items():
+        c.execute('UPDATE restaurants SET city = ? WHERE id = ?', ("Mumbai", rest_id))
+        c.execute('UPDATE restaurants SET address = ? WHERE id = ?', (address, rest_id))
+    c.execute("UPDATE restaurants SET city = 'Mumbai' WHERE city != 'Mumbai'")
+
     conn.commit()
     conn.close()
 
@@ -158,8 +172,8 @@ def seed_data(c):
             "The Rameshwaram Cafe",
             "Iconic South Indian & Filter Coffee",
             "restaurant",
-            "Bengaluru",
-            "100ft Road, HAL 2nd Stage, Indiranagar, Bengaluru",
+            "Mumbai",
+            "Linking Road, Bandra West, Mumbai",
             0.8,
             "₹",
             "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
@@ -179,8 +193,8 @@ def seed_data(c):
             "Meghana Foods (Biryani & Andhra Meals)",
             "Spicy Andhra Biryani & Thalis",
             "restaurant",
-            "Bengaluru",
-            "5th Block, Near Jyoti Nivas College, Koramangala, Bengaluru",
+            "Mumbai",
+            "Senapati Bapat Marg, Lower Parel, Mumbai",
             1.6,
             "₹₹",
             "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
@@ -201,7 +215,7 @@ def seed_data(c):
             "Late-Night Charcoal Kebabs & Baida Roti",
             "food_truck",
             "Mumbai",
-            "Behind Taj Mahal Palace, Colaba, Mumbai",
+            "Tulloch Road, Colaba, Mumbai",
             0.5,
             "₹₹",
             "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
@@ -221,8 +235,8 @@ def seed_data(c):
             "Toit Brewpub & Kitchen",
             "Craft Microbrewery & Woodfired Pizza",
             "restaurant",
-            "Bengaluru",
-            "298, 100ft Road, Indiranagar, Bengaluru",
+            "Mumbai",
+            "Mathuradas Mill Compound, Lower Parel, Mumbai",
             1.2,
             "₹₹₹",
             "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
@@ -242,8 +256,8 @@ def seed_data(c):
             "Chai Sutta Bar & Bun Maska Express",
             "Kulhad Chai, Bun Maska & Samosas",
             "food_truck",
-            "Pune",
-            "FC Road, Near Fergusson College Gate, Pune",
+            "Mumbai",
+            "Juhu Tara Road, Juhu, Mumbai",
             0.4,
             "₹",
             "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
@@ -263,8 +277,8 @@ def seed_data(c):
             "Punjab Grill & Royal Tandoor",
             "North Indian, Dal Makhani & Kebabs",
             "restaurant",
-            "Delhi NCR",
-            "Outer Circle, Connaught Place, New Delhi",
+            "Mumbai",
+            "Palladium Mall, Lower Parel, Mumbai",
             3.2,
             "₹₹₹",
             "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
@@ -828,7 +842,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             name = data.get("name", "").strip()
             category = data.get("category", "").strip()
             v_type = data.get("type", "restaurant").strip() # 'restaurant' or 'food_truck'
-            city = data.get("city", "Bengaluru").strip()
+            city = data.get("city", "Mumbai").strip()
             address = data.get("address", "").strip()
             distance_km = float(data.get("distance_km", 1.0))
             price_range = data.get("price_range", "₹₹").strip()
