@@ -33,6 +33,8 @@
   </script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- QR Code Generator for Venue QR Posters -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-orange-500 selection:text-white">
@@ -186,11 +188,13 @@
         </div>
       </div>
 
-      <!-- City Switcher Pills -->
+      <!-- Mumbai Neighborhood Filter Pills -->
       <div class="flex items-center gap-2 mb-4 overflow-x-auto pb-1 text-xs">
-        <span class="text-slate-500 font-bold shrink-0">Select City:</span>
-        <button onclick="setCityFilter('all')" class="city-btn active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs" data-city="all">All Mumbai</button>
-        <button onclick="setCityFilter('Mumbai')" class="city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-city="Mumbai">📍 Mumbai</button>
+        <span class="text-slate-500 font-bold shrink-0">Mumbai Area:</span>
+        <button onclick="setAreaFilter('all')" class="area-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs" data-area="all">All Mumbai</button>
+        <button onclick="setAreaFilter('south')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-area="south">South Mumbai</button>
+        <button onclick="setAreaFilter('west')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-area="west">Bandra & Juhu</button>
+        <button onclick="setAreaFilter('central')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100" data-area="central">Lower Parel & Central</button>
       </div>
 
       <!-- Filters & Search Toolbar -->
@@ -321,8 +325,26 @@
               <i data-lucide="key" class="w-3.5 h-3.5"></i>
               <span>Change Password</span>
             </button>
-          </div>
 
+            <button onclick="openVenueQrModal(currentHostVenueId)" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+              <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+              <span>Queue QR Code</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Venue Announcement / Specials -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-wrap items-center gap-3">
+          <span class="text-xs font-bold text-slate-600 uppercase tracking-wider">Live Announcement / Specials:</span>
+          <input type="text" id="hostAnnouncementInput" placeholder="e.g. Today's Special: Butter Chicken 20% Off • Live music from 8 PM" class="flex-1 min-w-[200px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          <button onclick="updateHostAnnouncement()" id="hostAnnouncementPublishBtn" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-sm">
+            <i data-lucide="megaphone" class="w-3.5 h-3.5"></i>
+            <span>Publish</span>
+          </button>
+          <button onclick="updateHostAnnouncement('')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1 transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Clear</span>
+          </button>
         </div>
 
         <!-- Host KPI Summary Cards -->
@@ -748,6 +770,7 @@
           <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • India</span>
           <h3 id="joinModalVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
           <p id="joinModalAddress" class="text-xs text-slate-400">Linking Road, Bandra West, Mumbai</p>
+          <p id="joinModalAnnouncement" class="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1 hidden inline-flex items-center gap-1.5"></p>
         </div>
         <button onclick="closeJoinModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -1246,6 +1269,28 @@
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
   <script src="app.js"></script>
+
+  <!-- Venue QR Code Poster Modal -->
+  <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Venue QR Poster</span>
+          <h3 id="venueQrModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Britannia & Co. Restaurant</h3>
+          <p id="venueQrModalAddress" class="text-xs text-slate-500">Wakefield House, Ballard Estate, Fort, Mumbai</p>
+        </div>
+        <button type="button" onclick="closeVenueQrModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
+      </div>
+      <div class="flex flex-col items-center gap-4 py-4">
+        <div id="venueQrCodeCanvas" class="w-56 h-56 border border-slate-200 rounded-lg bg-white flex items-center justify-center shadow-sm"></div>
+        <p class="text-xs text-slate-400 text-center">Scan to join the queue at this venue</p>
+        <div class="flex gap-2 w-full">
+          <button onclick="copyVenueQrLink()" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition">Copy Link</button>
+          <button onclick="window.print()" class="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition">Print / Save Poster</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Owner Change Password Modal -->
   <div id="ownerChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

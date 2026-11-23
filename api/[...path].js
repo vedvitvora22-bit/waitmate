@@ -186,7 +186,7 @@ async function route(request, response, pathParts) {
     const result = [];
     for (const restaurant of restaurants) {
       const liveStats = await getLiveStats(restaurant, queueEntries);
-      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback() });
+      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
     }
     return send(response, 200, { restaurants: result });
   }
@@ -197,7 +197,7 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     let queueEntries = [];
     try { queueEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
-    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback() });
+    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
@@ -445,6 +445,38 @@ async function route(request, response, pathParts) {
       }
       return send(response, 200, { success: true, message: "Queue status updated." });
     }
+
+    if (body.action === "update_announcement") {
+      let restaurant;
+      try {
+        restaurant = await getDocument("restaurants", body.restaurant_id);
+      } catch (error) {
+        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+          restaurant = null;
+        } else {
+          throw error;
+        }
+      }
+      if (!restaurant) {
+        restaurant = fallbackRestaurants.find(r => r.id === body.restaurant_id) || null;
+      }
+      if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      const announcement = String(body.announcement || '');
+      try {
+        await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, announcement })]);
+      } catch (error) {
+        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+          console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+        } else {
+          throw error;
+        }
+      }
+      global._pwdMap = global._pwdMap || {};
+      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
+      global._pwdMap[restaurant.id].announcement = announcement;
+      return send(response, 200, { success: true, message: "Announcement published.", announcement });
+    }
+
     if (body.action === "update_wait_estimate") {
       let restaurant;
       try {

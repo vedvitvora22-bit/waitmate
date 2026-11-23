@@ -73,7 +73,8 @@ def init_db():
         manual_override_wait INTEGER,
         is_queue_open INTEGER DEFAULT 1,
         created_at REAL NOT NULL,
-        password_hash TEXT
+        password_hash TEXT,
+        announcement TEXT DEFAULT ''
     )
     ''')
 
@@ -127,6 +128,12 @@ def init_db():
     # Migrate: add password_hash column to existing databases
     try:
         c.execute('ALTER TABLE restaurants ADD COLUMN password_hash TEXT')
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Migrate: add announcement column to existing databases
+    try:
+        c.execute('ALTER TABLE restaurants ADD COLUMN announcement TEXT DEFAULT ""')
     except sqlite3.OperationalError:
         pass  # column already exists
 
@@ -1331,6 +1338,14 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 conn.commit()
                 conn.close()
                 self.send_json({"success": True, "message": "Queue status updated."})
+                return
+
+            elif action == "update_announcement":
+                announcement = str(data.get("announcement", "") or "")
+                c.execute('UPDATE restaurants SET announcement = ? WHERE id = ?', (announcement, rest_id))
+                conn.commit()
+                conn.close()
+                self.send_json({"success": True, "message": "Announcement published.", "announcement": announcement})
                 return
 
             elif action == "add_walkin":
