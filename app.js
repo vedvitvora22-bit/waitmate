@@ -508,8 +508,8 @@ async function sendPushNotification({ title, body, tag = 'waitmate', actions = [
     body,
     tag,
     renotify: true,
-    icon: icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
-    badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
+    icon: icon || '/logo.svg',
+    badge: '/logo.svg',
     vibrate: [200, 100, 200, 100, 400],
     data: { url: '/' }
   };
@@ -1442,127 +1442,217 @@ async function loadFounderDashboard() {
   });
 }
 
+function escapeHtml(unsafe) {
+  if (unsafe == null) return '';
+  return String(unsafe).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function jsEscape(unsafe) {
+  if (unsafe == null) return '';
+  return String(unsafe).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
 function renderFounderData(data) {
-  const sum = data.summary;
-  document.getElementById('fndTotalVenues').textContent = sum.total_restaurants;
+  const sum = data.summary || {};
+  document.getElementById('fndTotalVenues').textContent = sum.total_restaurants || 0;
   document.getElementById('fndCitiesSummary').textContent = 'Across Mumbai dining hubs';
-  document.getElementById('fndWaitingDiners').textContent = sum.active_diners_in_queue;
-  document.getElementById('fndWaitingParties').textContent = `${sum.active_parties_in_queue} parties in queues`;
-  document.getElementById('fndSeatedDiners').textContent = `${sum.total_seated_diners}`;
-  document.getElementById('fndAvgReliability').textContent = `${sum.platform_avg_reliability}%`;
+  document.getElementById('fndWaitingDiners').textContent = sum.active_diners_in_queue || 0;
+  document.getElementById('fndWaitingParties').textContent = `${sum.active_parties_in_queue || 0} parties in queues`;
+  document.getElementById('fndSeatedDiners').textContent = `${sum.total_seated_diners || 0}`;
+  document.getElementById('fndAvgReliability').textContent = `${sum.platform_avg_reliability || 92}%`;
   const walkawaySaved = Math.min(98, 82 + (sum.total_seated_diners || 0));
   document.getElementById('fndWalkawaySaved').textContent = `${walkawaySaved}% Walkaway Saved`;
-  document.getElementById('fndVenueCountBadge').textContent = `${sum.total_restaurants} venues`;
 
-  // Render Restaurants Network Table
+  // Render Restaurants Network Table (Founder control row per venue)
   const restTbody = document.getElementById('fndRestaurantsTable');
-  if (data.restaurants && data.restaurants.length > 0) {
-    restTbody.innerHTML = data.restaurants.map(r => {
-      const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true };
-      const rel = r.reliability || { score: 95, grade: 'A+' };
-      const isOpen = stats.is_queue_open;
-      return `
-        <tr class="hover:bg-slate-50 transition">
-          <td class="py-3 px-4">
-            <div class="font-bold text-slate-900">${r.name}</div>
-            <div class="text-[11px] text-slate-400">📍 ${r.city || 'Mumbai'} • ${r.category}</div>
-          </td>
-          <td class="py-3 px-4">
-            <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
-              ${r.type === 'food_truck' ? '🚚 Food Truck' : '🍽️ Dine-in'}
-            </span>
-            <span class="font-bold text-slate-700 ml-1">${r.price_range}</span>
-          </td>
-          <td class="py-3 px-4">
-            <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
-            <div class="text-[10px] text-slate-500">Wait: ~${stats.estimated_wait_mins}m</div>
-          </td>
-          <td class="py-3 px-4">
-            <div class="flex items-center gap-1.5">
-              <span class="font-black text-emerald-700">${rel.score}%</span>
-              <span class="badge-tag bg-emerald-50 text-emerald-800 text-[10px] font-bold">Grade ${rel.grade}</span>
-            </div>
-            <div class="text-[10px] text-slate-400">± ${rel.avg_variance_mins || 1.5}m variance</div>
-          </td>
-          <td class="py-3 px-4 text-right">
+  const venues = data.restaurants || founderRestaurantsCache || [];
+  if (restTbody) {
+    document.getElementById('fndVenueCountBadge').textContent = `${venues.length} venues`;
+    if (venues.length > 0) {
+      restTbody.innerHTML = venues.map(r => {
+        const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true, total_waiting_people: 0 };
+        const rel = r.reliability || { score: 95, grade: 'A+', avg_variance_mins: 1.5 };
+        const isOpen = Boolean(stats.is_queue_open);
+        const id = r.id;
+        const nameJs = jsEscape(r.name);
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${escapeHtml(r.name)}</div>
+              <div class="text-[11px] text-slate-400">📍 ${escapeHtml(r.city || 'Mumbai')} • ${escapeHtml(r.category || '')}</div>
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
+                ${r.type === 'food_truck' ? '🚚 Food Truck' : '🍽️ Dine-in'}
+              </span>
+              <span class="font-bold text-slate-700 ml-1">${escapeHtml(r.price_range)}</span>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
+              <div class="text-[10px] text-slate-500">Wait: ~${stats.estimated_wait_mins}m ${stats.has_manual_override ? '<span class="text-orange-600 font-bold ml-1">Manual Override</span>' : ''}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-1.5">
+                <span class="font-black ${rel.score >= 85 ? 'text-emerald-700' : rel.score >= 75 ? 'text-amber-700' : 'text-rose-700'}">${rel.score}%</span>
+                <span class="badge-tag ${rel.score >= 85 ? 'bg-emerald-50 text-emerald-800' : rel.score >= 75 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'} text-[10px] font-bold">Grade ${rel.grade}</span>
+              </div>
+              <div class="text-[10px] text-slate-400">± ${rel.avg_variance_mins || 1.5}m variance</div>
+            </td>
+            <td class="py-3 px-4 text-right">
               <div class="flex items-center justify-end gap-1.5">
-                <button onclick="founderToggleQueue('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
+                <button onclick="founderToggleQueue('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
                   ${isOpen ? 'Pause Queue' : 'Open Queue'}
                 </button>
-                <button onclick="openVenueQrModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                <button onclick="founderOpenHostStand('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="login" class="w-3 h-3"></i> Host Stand
+                </button>
+                <button onclick="openFounderEditRestaurantModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1">
+                  <i data-lucide="edit-3" class="w-3 h-3"></i> Edit
+                </button>
+                <button onclick="openVenueQrModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
                   <i data-lucide="qr-code" class="w-3 h-3"></i> QR
                 </button>
-                <button onclick="openFounderResetPasswordModal('${r.id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
-                <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
-              </button>
-              <button onclick="founderDeleteRestaurant('${r.id}', '${String(r.name || '').replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1">
-                <i data-lucide="trash-2" class="w-3 h-3"></i> Remove
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } else {
-    restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400">No restaurants registered yet.</td></tr>`;
+                <button onclick="openFounderResetPasswordModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
+                </button>
+                <button onclick="founderClearVenueQueue('${id}', '${nameJs}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Clear Queue
+                </button>
+                <button onclick="founderDeleteRestaurant('${id}', '${nameJs}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Remove
+                </button>
+              </div>
+              <div class="flex items-center justify-end gap-1.5 mt-1">
+                <input type="number" id="fnd-wait-${id}" min="0" max="180" placeholder="Wait" class="w-16 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-orange-500 focus:outline-none">
+                <button onclick="founderSetManualWait('${id}')" class="px-2 py-1 bg-orange-50 text-orange-700 rounded text-[10px] font-bold hover:bg-orange-100 border border-orange-200 transition">Set Wait</button>
+                <input type="number" id="fnd-score-${id}" min="0" max="100" placeholder="Score" class="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                <button onclick="founderSetReliability('${id}')" class="px-2 py-1 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold hover:bg-emerald-100 border border-emerald-200 transition">Set Score</button>
+              </div>
+              <div class="flex items-center justify-end gap-1.5 mt-1">
+                <input type="text" id="fnd-ann-${id}" placeholder="Announcement" class="w-32 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                <button onclick="founderSetAnnouncement('${id}')" class="px-2 py-1 bg-amber-50 text-amber-700 rounded text-[10px] font-bold hover:bg-amber-100 border border-amber-200 transition">Publish</button>
+                <button onclick="founderSetAnnouncement('${id}', '')" class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] hover:bg-slate-200 border border-slate-200 transition">Clear</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400">No restaurants registered yet.</td></tr>`;
+    }
   }
 
-  // Render Live Queues Stream
+  // Render Live Cross-Platform Queue Stream (every active party, all venues)
   const queueTbody = document.getElementById('fndLiveQueuesTable');
-  if (data.recent_queues && data.recent_queues.length > 0) {
-    queueTbody.innerHTML = data.recent_queues.map(q => {
-      let statusBadge = `<span class="badge-tag bg-slate-100 text-slate-700">${q.status}</span>`;
-      if (q.status === 'notified') statusBadge = `<span class="badge-tag bg-emerald-100 text-emerald-800 font-bold">Table Ready</span>`;
-      if (q.status === 'seated') statusBadge = `<span class="badge-tag bg-blue-100 text-blue-800">Seated</span>`;
-      if (q.status === 'waiting') statusBadge = `<span class="badge-tag bg-orange-100 text-orange-800 font-bold">Waiting</span>`;
-
-      return `
-        <tr class="hover:bg-slate-50 transition">
-          <td class="py-2.5 px-4 font-mono font-bold text-slate-900">${q.ticket_number}</td>
-          <td class="py-2.5 px-4 font-medium text-slate-800">${q.restaurant_name}</td>
-          <td class="py-2.5 px-4">
-            <div class="font-bold text-slate-900">${q.customer_name} (${q.party_size}p)</div>
-          </td>
-          <td class="py-2.5 px-4">
-            ${statusBadge}
-            <span class="text-[10px] text-slate-500 ml-1">~${q.estimated_wait_mins}m</span>
-          </td>
-          <td class="py-2.5 px-4 text-right">
-            <span class="text-[10px] font-semibold text-slate-500 uppercase">${q.entry_type === 'remote' ? '📱 Remote' : '🚶 Walk-in'}</span>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } else {
-    queueTbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400">No live queue activity currently.</td></tr>`;
+  const queues = data.recent_queues || founderQueuesCache || [];
+  if (queueTbody) {
+    if (queues.length > 0) {
+      queueTbody.innerHTML = queues.map(q => {
+        let statusBadge = `<span class="badge-tag bg-slate-100 text-slate-700">${escapeHtml(q.status)}</span>`;
+        if (q.status === 'notified') statusBadge = `<span class="badge-tag bg-emerald-100 text-emerald-800 font-bold animate-pulse">Table Ready</span>`;
+        if (q.status === 'seated') statusBadge = `<span class="badge-tag bg-blue-100 text-blue-800">Seated</span>`;
+        if (q.status === 'waiting') statusBadge = `<span class="badge-tag bg-orange-100 text-orange-800 font-bold">Waiting</span>`;
+        if (q.status === 'delayed') statusBadge = `<span class="badge-tag bg-amber-100 text-amber-800">Delayed</span>`;
+        const channel = q.channel || q.entry_type || 'remote';
+        const isWalkIn = channel === 'walk_in' || channel === 'walkin' || channel === 'walk-in';
+        const channelLabel = isWalkIn ? '🚶 Walk-In' : '📱 Remote';
+        const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+        const id = q.id || q.ticket_number;
+        const nameJs = jsEscape(q.customer_name || '');
+        const venueJs = jsEscape(q.restaurant_name || '');
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-4 font-mono font-bold text-slate-900">${escapeHtml(q.ticket_number || id)}</td>
+            <td class="py-2.5 px-4 font-medium text-slate-800">${escapeHtml(q.restaurant_name)}</td>
+            <td class="py-2.5 px-4">
+              <div class="font-bold text-slate-900">${escapeHtml(q.customer_name)}</div>
+              <div class="text-[10px] text-slate-500">${escapeHtml(q.phone || '—')}</div>
+            </td>
+            <td class="py-2.5 px-4">
+              <div class="text-slate-800 font-medium">${Number(q.party_size || 0)} guests</div>
+              <div class="text-[10px] text-slate-500">Promised ~${q.promised_wait_mins || q.estimated_wait_mins || 0}m</div>
+            </td>
+            <td class="py-2.5 px-4">${statusBadge}</td>
+            <td class="py-2.5 px-4 text-center">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${channelClass}">${channelLabel}</span>
+            </td>
+            <td class="py-2.5 px-4 text-center">
+              <div class="text-[10px] text-slate-500 font-sans">${escapeHtml(q.joined_time_ist || '—')}</div>
+              <div class="text-[10px] ${q.notified_time_ist ? 'text-emerald-700 font-medium' : 'text-slate-400'}">${escapeHtml(q.notified_time_ist || '—')}</div>
+            </td>
+            <td class="py-2.5 px-4 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                ${q.status !== 'notified' && q.status !== 'seated' && q.status !== 'no_show' && q.status !== 'cancelled' ? `
+                  <button onclick="founderQueueAction('${id}', 'notify')" class="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-[10px] font-bold transition shadow-xs flex items-center gap-1">
+                    <i data-lucide="bell" class="w-2.5 h-2.5"></i> Notify
+                  </button>
+                ` : ''}
+                ${q.status !== 'seated' && q.status !== 'no_show' && q.status !== 'cancelled' ? `
+                  <button onclick="founderQueueAction('${id}', 'seat')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition shadow-xs flex items-center gap-1">
+                    <i data-lucide="check" class="w-2.5 h-2.5"></i> Seat
+                  </button>
+                ` : ''}
+                <button onclick="founderQueueAction('${id}', 'remove')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[10px] font-bold transition flex items-center gap-1" title="Mark no-show / remove">
+                  <i data-lucide="user-x" class="w-2.5 h-2.5"></i> Remove
+                </button>
+                <button onclick="founderEditPartySize('${id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[10px] font-bold hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1">
+                  <i data-lucide="edit-3" class="w-2.5 h-2.5"></i> Size
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      queueTbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-400">No live queue activity currently.</td></tr>`;
+    }
   }
 
-  // Render Reliability Audit Feed
+  // Render Reliability Audit Watchdog — all reviews across the network
   const reviewList = document.getElementById('fndRecentReviewsList');
-  if (data.recent_reviews && data.recent_reviews.length > 0) {
-    reviewList.innerHTML = data.recent_reviews.map(rev => {
-      let ratingBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Spot On</span>`;
-      if (rev.rating === 'faster') ratingBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">Faster</span>`;
-      if (rev.rating === 'slight_delay') ratingBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">+5m Delay</span>`;
-      if (rev.rating === 'severe_delay') ratingBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">Flagged Delay</span>`;
-
-      return `
-        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-bold text-slate-900">${rev.restaurant_name}</span>
-            ${ratingBadge}
-          </div>
-          <div class="text-[11px] text-slate-600 flex items-center gap-2">
-            <span>Promised: <strong>${rev.promised_wait}m</strong></span>
-            <span>•</span>
-            <span>Actual: <strong>${rev.actual_wait}m</strong></span>
-          </div>
-          ${rev.review_note ? `<p class="text-[11px] text-slate-500 italic mt-1 font-sans">"${rev.review_note}"</p>` : ''}
-        </div>
+  const reviews = data.recent_reviews || founderReviewsCache || [];
+  if (reviewList) {
+    if (reviews.length > 0) {
+      reviewList.innerHTML = `
+        <table class="w-full text-left text-[10px]">
+          <thead>
+            <tr class="text-slate-500 font-bold uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
+              <th class="pb-1 pr-2">Guest</th>
+              <th class="pb-1 pr-2">Restaurant</th>
+              <th class="pb-1 pr-2 text-center">Stars</th>
+              <th class="pb-1 pr-2">Comment</th>
+              <th class="pb-1 pr-2 text-center">IST</th>
+              <th class="pb-1 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${reviews.map(rev => {
+              const stars = '★'.repeat(Number(rev.rating || 0)) + '☆'.repeat(5 - Number(rev.rating || 0));
+              const ts = rev.rated_time_ist || rev.created_at || rev.reviewed_at || '';
+              const id = rev.id || rev.review_id;
+              const restJs = jsEscape(rev.restaurant_name || '');
+              return `
+                <tr class="hover:bg-slate-50 transition">
+                  <td class="py-2 px-2 text-slate-800 font-medium">${escapeHtml(rev.guest_name || rev.customer_name || 'Guest')}</td>
+                  <td class="py-2 px-2 text-slate-800">${escapeHtml(rev.restaurant_name)}</td>
+                  <td class="py-2 px-2 text-center text-amber-700 font-bold">${stars}</td>
+                  <td class="py-2 px-2 text-slate-600 italic max-w-[34px] overflow-hidden text-overflow-ellipsis whitespace-nowrap" title="${escapeHtml(rev.review_comment || rev.comment || '')}">${escapeHtml(rev.review_comment || rev.comment || '—')}</td>
+                  <td class="py-2 px-2 text-center text-slate-500">${escapeHtml(ts)}</td>
+                  <td class="py-2 px-2 text-right">
+                    <button onclick="founderDeleteReview('${id}', '${jsEscape(rev.restaurant_id || '')}')" class="px-2 py-1 bg-rose-50 text-rose-700 rounded text-[9px] font-bold hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1">
+                      <i data-lucide="trash-2" class="w-2.5 h-2.5"></i> Delete
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        <p class="text-[10px] text-slate-500 mt-3 text-center">Delete a fake/spam review → that restaurant's Reliability Score™ is recalculated from the remaining reviews automatically.</p>
       `;
-    }).join('');
-  } else {
-    reviewList.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No recent reviews logged yet.</p>`;
+    } else {
+      reviewList.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No reviews logged across the network yet.</p>`;
+    }
   }
 
   lucide.createIcons();
@@ -1605,7 +1695,20 @@ async function loadRestaurants() {
     if (!res.ok) throw new Error('API response not ok');
     const data = await res.json();
     allRestaurants = data.restaurants || [];
-    
+
+    // Global Network Banner pushed by the Founder (visible across all venues)
+    if (data.global_announcement !== undefined) {
+      globalAnnouncementText = data.global_announcement || '';
+      const banner = document.getElementById('globalNetworkBanner');
+      const textEl = document.getElementById('globalBannerText');
+      if (globalAnnouncementText) {
+        if (textEl) textEl.textContent = globalAnnouncementText;
+        if (banner) banner.classList.remove('hidden');
+      } else if (banner) {
+        banner.classList.add('hidden');
+      }
+    }
+
     // Merge Founder-added custom venues
     const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
     if (customVenues.length > 0) {
@@ -1623,6 +1726,8 @@ async function loadRestaurants() {
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
+    const banner = document.getElementById('globalNetworkBanner');
+    if (banner) banner.classList.add('hidden');
     
     // Merge custom venues even in fallback mode
     const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
@@ -4331,4 +4436,339 @@ async function founderDeleteRestaurant(venueId, venueName) {
   } catch (err) {
     showToast(`Error removing restaurant: ${err.message}`, 'error');
   }
+}
+
+// ==========================================
+// 16. FOUNDER SUPER-ADMIN ("GOD MODE") ACTIONS
+// ==========================================
+
+// One-click "Enter Host Stand as Owner" (impersonation) — bypasses restaurant password
+async function founderOpenHostStand(venueId) {
+  if (!isFounderUnlocked()) { openFounderLoginModal(); return; }
+  try {
+    const res = await fetch(`/api/founder/host-stand/queue/${venueId}`, { headers: founderHeaders(), cache: 'no-store' });
+    if (res.status === 401) {
+      sessionStorage.removeItem(FOUNDER_PWD_KEY);
+      openFounderLoginModal();
+      showToast('Founder session expired.', 'error');
+      return;
+    }
+    if (!res.ok) throw new Error('Host stand unavailable');
+    const data = await res.json();
+    hostData = data;
+    currentHostVenueId = venueId;
+    const dirEl = document.getElementById('ownerVenueDirectory');
+    const dashEl = document.getElementById('ownerDashboardContent');
+    if (dirEl) dirEl.classList.add('hidden');
+    if (dashEl) dashEl.classList.remove('hidden');
+    const nameEl = document.getElementById('hostVenueName');
+    const subEl = document.getElementById('hostVenueLocationSub');
+    if (nameEl) nameEl.textContent = data.restaurant.name;
+    if (subEl) subEl.textContent = `${data.restaurant.address} • Host Stand Dashboard (Founder Impersonation)`;
+    renderHostDashboard();
+    switchInterface('owner');
+    showToast(`Opened Host Stand for ${escapeHtml(data.restaurant.name)} as Founder`, 'success');
+  } catch (err) {
+    showToast("Unable to open Host Stand", "error");
+  }
+}
+
+async function founderSetManualWait(venueId) {
+  const input = document.getElementById(`fnd-wait-${venueId}`);
+  const val = input ? input.value : '';
+  if (val === '') { showToast('Enter a wait time (minutes)', 'error'); return; }
+  try {
+    const res = await fetch('/api/founder/restaurant/manual-wait', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: venueId, manual_wait_mins: val === '' ? null : Number(val) })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to update wait estimate');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || 'Wait estimate updated.', 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error updating wait estimate', 'error'); }
+}
+
+async function founderSetReliability(venueId) {
+  const input = document.getElementById(`fnd-score-${venueId}`);
+  const score = input ? Number(input.value) : NaN;
+  if (!Number.isFinite(score) || score < 0 || score > 100) { showToast('Enter a score between 0 and 100', 'error'); return; }
+  try {
+    const res = await fetch('/api/founder/restaurant/reliability', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: venueId, score: Math.round(score) })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to update Reliability Score');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || `Reliability Score set to ${score}%`, 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error updating Reliability Score', 'error'); }
+}
+
+async function founderSetAnnouncement(venueId, announcement) {
+  const input = document.getElementById(`fnd-ann-${venueId}`);
+  const text = announcement === undefined ? (input ? input.value.trim() : '') : announcement;
+  try {
+    const res = await fetch('/api/founder/restaurant/announcement', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: venueId, announcement: text })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to update announcement');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || (text ? 'Announcement published.' : 'Announcement cleared.'), 'success');
+    if (input) input.value = text;
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error updating announcement', 'error'); }
+}
+
+async function founderClearVenueQueue(venueId, venueName) {
+  if (!confirm(`Clear the entire live queue for "${escapeHtml(venueName)}"? This removes all waiting / notified / delayed tickets.`)) return;
+  try {
+    const res = await fetch('/api/founder/queue/clear-venue', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: venueId })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to clear venue queue');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || 'Venue queue cleared.', 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error clearing venue queue', 'error'); }
+}
+
+async function founderPurgeStaleEntries() {
+  if (!confirm("Purge all test / stale (non-active) queue entries across the network? This cannot be undone.")) return;
+  try {
+    const res = await fetch('/api/founder/queue/purge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() }
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to purge entries');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || 'Stale entries purged.', 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error purging entries', 'error'); }
+}
+
+async function founderPublishGlobalAnnouncement() {
+  const input = document.getElementById('fndGlobalAnnouncementInput');
+  const text = (input ? input.value : '').trim();
+  try {
+    const res = await fetch('/api/founder/announcement/global', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ announcement: text })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to push global banner');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || (text ? 'Global banner pushed to all venues.' : 'Global banner cleared.'), 'success');
+    if (input) input.value = text;
+    globalAnnouncementText = text;
+    const banner = document.getElementById('globalNetworkBanner');
+    const textEl = document.getElementById('globalBannerText');
+    if (text) {
+      if (textEl) textEl.textContent = text;
+      if (banner) banner.classList.remove('hidden');
+    } else if (banner) {
+      banner.classList.add('hidden');
+    }
+    await loadFounderDashboard();
+  } catch (err) { showToast('Error pushing global banner', 'error'); }
+}
+
+async function founderExportNetworkData() {
+  try {
+    const res = await fetch('/api/founder/export', { headers: founderHeaders(), cache: 'no-store' });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Export unavailable');
+    const payload = await res.json();
+    const csv = buildNetworkCsv(payload);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `waitmate-network-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Network data exported as CSV.', 'success');
+  } catch (err) { showToast('Error exporting network data', 'error'); }
+}
+
+function buildNetworkCsv(payload) {
+  const lines = [];
+  lines.push('WaitMate India — Founder Network Export');
+  lines.push(`Generated: ${payload.exported_at_ist || payload.exported_at}`);
+  lines.push('');
+  lines.push('--- RESTAURANTS ---');
+  lines.push('id,name,category,type,city,address,price_range,image_url,description,total_tables,base_prep_time,is_queue_open,manual_override_wait,announcement');
+  for (const r of (payload.restaurants || [])) {
+    lines.push(csvRow([
+      r.id, r.name, r.category, r.type, r.city, r.address, r.price_range, r.image_url, r.description, r.total_tables, r.base_prep_time, r.is_queue_open, r.manual_override_wait, r.announcement
+    ]));
+  }
+  lines.push('');
+  lines.push('--- RELIABILITY SCORES ---');
+  lines.push('id,reliability_score,reliability_grade,reliability_verdict,total_verified_checkins');
+  for (const r of (payload.restaurants || [])) {
+    lines.push(csvRow([r.id, r.reliability_score, r.reliability_grade, r.reliability_verdict, r.total_verified_checkins]));
+  }
+  lines.push('');
+  lines.push('--- QUEUE ENTRIES ---');
+  lines.push('id,ticket_number,restaurant_id,restaurant_name,guest_name,customer_name,phone,party_size,seating_pref,special_requests,channel,entry_type,status,has_arrived,promised_wait_mins,estimated_wait_mins,actual_wait_mins,joined_time_ist,notified_time_ist,arrived_time_ist,seated_time_ist,rated,rating,review_comment');
+  for (const q of (payload.queue_entries || [])) {
+    lines.push(csvRow([
+      q.id, q.ticket_number, q.restaurant_id, q.restaurant_name, q.guest_name, q.customer_name, q.phone, q.party_size, q.seating_pref, q.special_requests, q.channel, q.entry_type, q.status, q.has_arrived, q.promised_wait_mins, q.estimated_wait_mins, q.actual_wait_mins, q.joined_time_ist, q.notified_time_ist, q.arrived_time_ist, q.seated_time_ist, q.rated, q.rating, q.review_comment
+    ]));
+  }
+  lines.push('');
+  lines.push('--- REVIEWS ---');
+  lines.push('id,restaurant_id,restaurant_name,rating,stars,guest_name,comment,ticket_id,rated_time_ist,created_at');
+  for (const rv of (payload.reviews || [])) {
+    lines.push(csvRow([rv.id, rv.restaurant_id, rv.restaurant_name, rv.rating, rv.stars, rv.guest_name, rv.review_comment || rv.comment, rv.ticket_id, rv.rated_time_ist, rv.created_at]));
+  }
+  return lines.join('\n');
+}
+
+function csvRow(values) {
+  return values.map(v => {
+    const s = v == null ? '' : String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }).join(',');
+}
+
+async function founderQueueAction(ticketId, action) {
+  try {
+    const res = await fetch('/api/founder/queue/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ ticket_id: ticketId, action })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Queue action failed');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || 'Queue action updated.', 'success');
+    if (action === 'notify') playNotificationChime();
+    await loadFounderDashboard();
+    await loadRestaurants();
+    if (currentTicketId) await fetchTicketStatus();
+  } catch (err) { showToast('Error performing queue action', 'error'); }
+}
+
+async function founderEditPartySize(ticketId) {
+  const entered = window.prompt('Enter new party size (1–20):');
+  if (entered === null) return;
+  const size = Number(entered);
+  if (!Number.isFinite(size) || size < 1 || size > 20) { showToast('Invalid party size.', 'error'); return; }
+  try {
+    const res = await fetch('/api/founder/queue/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ ticket_id: ticketId, action: 'edit_party_size', party_size: size })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to edit party size');
+    showToast(`Party size updated to ${size}.`, 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error editing party size', 'error'); }
+}
+
+function openFounderEditRestaurantModal(venueId) {
+  const r = (founderRestaurantsCache || []).find(x => x.id === venueId) || (allRestaurants || []).find(x => x.id === venueId);
+  if (!r) return;
+  document.getElementById('fndEditRestaurantId').value = r.id;
+  document.getElementById('fndEditModalTitle').textContent = `Edit: ${r.name}`;
+  document.getElementById('fndEditName').value = r.name || '';
+  document.getElementById('fndEditCategory').value = r.category || '';
+  document.getElementById('fndEditType').value = r.type || 'restaurant';
+  document.getElementById('fndEditCity').value = r.city || 'Mumbai';
+  document.getElementById('fndEditAddress').value = r.address || '';
+  document.getElementById('fndEditPrice').value = r.price_range || '₹₹';
+  document.getElementById('fndEditPassword').value = '';
+  document.getElementById('fndEditTables').value = r.total_tables || '';
+  document.getElementById('fndEditPace').value = r.base_prep_time || '';
+  document.getElementById('fndEditPhoto').value = r.image_url || '';
+  document.getElementById('fndEditBio').value = r.description || '';
+  const modal = document.getElementById('founderEditRestaurantModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => document.getElementById('fndEditName')?.focus(), 50);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeFounderEditRestaurantModal() {
+  const modal = document.getElementById('founderEditRestaurantModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function founderDeleteRestaurantFromModal(restaurantId) {
+  const r = (founderRestaurantsCache || []).find(x => x.id === restaurantId) || (allRestaurants || []).find(x => x.id === restaurantId);
+  founderDeleteRestaurant(restaurantId, r ? r.name : restaurantId);
+  closeFounderEditRestaurantModal();
+}
+
+async function submitFounderEditRestaurant(event) {
+  if (event) event.preventDefault();
+  const restaurantId = document.getElementById('fndEditRestaurantId').value;
+  const name = document.getElementById('fndEditName').value.trim();
+  const category = document.getElementById('fndEditCategory').value.trim();
+  const type = document.getElementById('fndEditType').value;
+  const city = document.getElementById('fndEditCity').value || 'Mumbai';
+  const address = document.getElementById('fndEditAddress').value.trim();
+  const priceRange = document.getElementById('fndEditPrice').value;
+  const password = (document.getElementById('fndEditPassword')?.value || '').trim();
+  const totalTables = parseInt(document.getElementById('fndEditTables').value) || undefined;
+  const pace = parseInt(document.getElementById('fndEditPace').value) || undefined;
+  const imageUrl = document.getElementById('fndEditPhoto').value.trim();
+  const bio = document.getElementById('fndEditBio').value.trim();
+
+  if (!name || !category || !address) { showToast('Name, category and address are required.', 'error'); return; }
+  if (password && password.length < 4) { showToast('Owner password must be at least 4 characters.', 'error'); return; }
+
+  const btn = document.getElementById('fndEditRestaurantSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    const res = await fetch('/api/founder/restaurant/update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({
+        restaurant_id: restaurantId, name, category, type, city, address, price_range: priceRange,
+        ...(password ? { password } : {}),
+        ...(totalTables !== undefined ? { total_tables: totalTables } : {}),
+        ...(pace !== undefined ? { base_prep_time: pace } : {}),
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+        description: bio || `Authentic ${category} located in ${city}.`
+      })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); closeFounderEditRestaurantModal(); openFounderLoginModal(); showToast('Founder session expired.', 'error'); return; }
+    if (!res.ok) throw new Error('Update failed');
+    closeFounderEditRestaurantModal();
+    showToast(`"${name}" updated across the network.`, 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error saving venue changes', 'error'); } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Venue Changes'; }
+  }
+}
+
+async function founderDeleteReview(reviewId, restaurantId) {
+  if (!confirm("Delete this review? The restaurant's Reliability Score will be recalculated from the remaining reviews.")) return;
+  try {
+    const res = await fetch(`/api/founder/reviews/${reviewId}`, {
+      method: 'DELETE', headers: { ...founderHeaders() }
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Delete failed');
+    showToast('Review deleted. Reliability Score recalculated.', 'success');
+    await loadFounderDashboard();
+  } catch (err) { showToast('Error deleting review', 'error'); }
 }

@@ -1,6 +1,6 @@
-// cache-bust-20261124-favorites-share-pass-v19
+// cache-bust-20261124-waitmate-logo-v20
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-favorites-share-pass-v19';
+const CACHE_NAME = 'waitmate-v20261124-waitmate-logo-v20';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

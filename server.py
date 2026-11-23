@@ -1031,6 +1031,15 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         elif path == "/sw.js":
             self.serve_static_file(os.path.join(BASE_DIR, "sw.js"), "application/javascript; charset=utf-8")
             return
+        elif path == "/logo.svg":
+            self.serve_static_file(os.path.join(BASE_DIR, "logo.svg"), "image/svg+xml; charset=utf-8")
+            return
+        elif path == "/favicon.svg":
+            self.serve_static_file(os.path.join(BASE_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8")
+            return
+        elif path == "/manifest.json":
+            self.serve_static_file(os.path.join(BASE_DIR, "manifest.json"), "application/json; charset=utf-8")
+            return
 
         # API: Diagnostic storage status
         if path == "/api/health/storage":
