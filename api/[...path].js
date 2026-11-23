@@ -156,7 +156,7 @@ function normalizeQueueEntry(raw) {
     return undefined;
   };
   const channelRaw = pick("09_channel", "channel", "entry_type");
-  const channel = channelRaw === "walkin" || channelRaw === "walk-in" || channelRaw === "walk_in" ? "walk_in" : (channelRaw ? "remote" : "remote");
+  const channel = (channelRaw === "walkin" || channelRaw === "walk-in" || channelRaw === "walk_in") ? "walk_in" : "remote";
   const guestName = pick("04_guest_name", "guest_name", "customer_name") || "";
   const joinedMsRaw = pick("22_joined_at_ms", "joined_at");
   const joinedMs = joinedMsRaw !== undefined ? Number(joinedMsRaw) : Date.now();
@@ -202,6 +202,8 @@ function normalizeQueueEntry(raw) {
     if (/^\d{2}_/.test(key)) continue;
     if (entry[key] === undefined) entry[key] = value;
   }
+  // "stars" was a legacy duplicate of rating; never surface it.
+  delete entry.stars;
   return entry;
 }
 
@@ -578,31 +580,38 @@ async function route(request, response, pathParts) {
     const ticketNumber = `WM-${entries.length + 101}`;
     const joinedAt = Date.now();
     const partySize = Number(body.party_size || 2);
+    // Entry channel: "walk_in" when the diner is already at the venue (QR/deep
+    // link or the in-modal channel selector), otherwise "remote".
+    const isWalkin = body.entry_type === "walk_in" || body.entry_type === "walkin" || body.channel === "walk_in";
     const partiesAhead = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status) && Number(entry.joined_at) < joinedAt).length;
     const ticket = {
       id: ticketId,
       ticket_number: ticketNumber,
       restaurant_id: body.restaurant_id,
+      restaurant_name: restaurant.name || "",
       customer_name: String(body.name).trim(),
       phone: "",
       party_size: partySize,
       seating_pref: body.seating_pref || "First Available",
       special_requests: body.special_requests || "",
-      entry_type: body.entry_type || "remote",
+      channel: isWalkin ? "walk_in" : "remote",
+      entry_type: isWalkin ? "walk_in" : "remote",
       status: "waiting",
       estimated_wait_mins: estWait,
       actual_wait_mins: 0,
       joined_at: joinedAt,
       joined_time_ist: new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
       notified_at: null,
+      arrived_at: isWalkin ? joinedAt : null,
+      arrived_time_ist: isWalkin ? new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST' : null,
       seated_at: null,
       seated_time_ist: null,
-      has_arrived: false,
+      has_arrived: isWalkin,
       delay_mins: 0,
       parties_ahead: partiesAhead
     };
     try {
-      await safeCommit([setDocument("queue_entries", ticketId, ticket)]);
+      await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         global._tickets[ticketId] = { ...ticket };
@@ -883,19 +892,26 @@ async function route(request, response, pathParts) {
         updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
       }
     } else if (body.action === "rate") {
-      // Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
-      // Enforcement: only seated tickets can be rated
+      // Save the post-seating 1-5 star rating and mark the ticket as rated.
+      // A submitted rating always implies the party was seated, so enforce the
+      // seated invariants here (fixes entries where status stayed "notified"
+      // and seated_time_ist stayed null even though a rating was recorded).
       if (!ticket) return send(response, 404, { error: "Ticket not found" });
-      if (ticket.status !== "seated") return send(response, 403, { error: "Ratings are only allowed after the diner has been seated (status must be 'seated')." });
       const stars = Number(body.rating) || 0;
       if (stars < 1 || stars > 5) return send(response, 400, { error: "Rating must be between 1 and 5" });
+      markSeated(updates);
+      if (updates.actual_wait_mins === undefined || updates.actual_wait_mins === null) {
+        updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000));
+      }
       updates.rated = true;
       updates.rating = stars;
       updates.comment = String(body.comment || "");
+      updates.review_comment = updates.comment;
       updates.rated_at = Date.now();
+      updates.rated_time_ist = formatIST(updates.rated_at);
     } else return send(response, 400, { error: "Unknown action" });
     try {
-      await safeCommit([setDocument("queue_entries", updates.id, updates)]);
+      await safeCommit([setDocument("queue_entries", updates.id, toNumberedEntry(updates))]);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
@@ -927,20 +943,15 @@ async function route(request, response, pathParts) {
         return send(response, 401, { error: "Invalid restaurant password." });
       }
       const updates = { ...ticket };
-      if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now();
+      if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now(), updates.notified_time_ist = formatIST(updates.notified_at);
       if (body.action === "seat") { 
         const now = Date.now();
-        updates.status = "seated"; 
-        updates.has_arrived = true; 
-        updates.arrived_at = now; 
-        updates.arrived_time_ist = new Date(now).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; 
-        updates.seated_at = now; 
-        updates.seated_time_ist = new Date(now).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST"; 
+        markSeated(updates);
         updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000)); 
       }
       if (body.action === "remove") updates.status = "no_show";
       try {
-        await safeCommit([setDocument("queue_entries", ticket.id, updates)]);
+        await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
@@ -1068,9 +1079,9 @@ async function route(request, response, pathParts) {
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
     const now = Date.now();
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", entry_type: "walkin", channel: "walkin", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", channel: "walk_in", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
-        await safeCommit([setDocument("queue_entries", ticketId, ticket)]);
+        await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           global._tickets[ticketId] = { ...ticket };
@@ -1272,9 +1283,26 @@ async function route(request, response, pathParts) {
     if (ticketId) {
       try {
         const t = await fetchQueueEntry(ticketId);
-        if (t) await safeCommit([setDocument("queue_entries", ticketId, { ...t, ...review })]);
+        if (t) {
+          // A submitted rating implies the party was seated: enforce the seated
+          // invariants so status/seated_time_ist can never stay "notified"/null.
+          const merged = markSeated({ ...t });
+          merged.rated = true;
+          merged.rating = Number(rating);
+          merged.comment = String(comment || '').trim();
+          merged.review_comment = merged.comment;
+          merged.rated_at = now;
+          merged.rated_time_ist = review.rated_time_ist;
+          merged.restaurant_name = merged.restaurant_name || restaurantName;
+          delete merged.stars; // no duplicate "stars" field in queue_entries
+          const numbered = toNumberedEntry(merged);
+          await safeCommit([setDocument("queue_entries", ticketId, numbered)]);
+          const mem = { ...t, ...merged };
+          delete mem.stars;
+          global._tickets[ticketId] = mem;
+        }
       } catch (e) { console.warn("ticket rating update failed:", e?.message || e); }
-      if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId] = { ...global._tickets[ticketId], ...review };
+      if (global._tickets && global._tickets[ticketId] && !global._tickets[ticketId].rated) global._tickets[ticketId] = { ...global._tickets[ticketId], ...review };
     }
     try {
       const rest = await findRestaurantById(restaurantId);

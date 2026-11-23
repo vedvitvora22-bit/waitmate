@@ -1,6 +1,6 @@
-// cache-bust-20261123-hasarrived-fix-v9
+// cache-bust-20261123-walkin-channel-v11
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-hasarrived-fix-v9';
+const CACHE_NAME = 'waitmate-v20261123-walkin-channel-v11';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

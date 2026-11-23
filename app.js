@@ -317,6 +317,7 @@ let currentInterface = 'customer'; // 'customer', 'owner', 'founder'
 
 let currentTicketId = localStorage.getItem('waitmate_ticket_id') || null;
 let activeTicketData = null;
+let joinChannel = 'remote'; // 'remote' or 'walk_in' — set in Join Queue modal
 let pollTimer = null;
 
 let acknowledgedAlertForTicket = null;
@@ -551,7 +552,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Deep link: ?venue=<id> auto-opens the join queue modal for that venue
   const venueParam = new URLSearchParams(window.location.search).get('venue');
   if (venueParam) {
-    openJoinModal(venueParam);
+    // QR-link walk-in: arrive at the restaurant door → auto-select Walk-In channel
+    openJoinModal(venueParam, 'walk_in');
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
@@ -1833,7 +1835,7 @@ function resetFilters() {
 // ==========================================
 let selectedJoinVenue = null;
 
-function openJoinModal(venueId) {
+function openJoinModal(venueId, channelOverride = null) {
   const r = allRestaurants.find(x => x.id === venueId);
   if (!r) return;
   selectedJoinVenue = r;
@@ -1861,12 +1863,34 @@ function openJoinModal(venueId) {
   document.getElementById('joinCustomerName').value = '';
   document.getElementById('joinSpecialReq').value = '';
 
+  // Entry channel: walk-in when opened via a venue QR/deep link, remote otherwise
+  setJoinChannel(channelOverride === 'walk_in' ? 'walk_in' : 'remote');
+
   document.getElementById('joinQueueModal').classList.remove('hidden');
   lucide.createIcons();
 }
 
 function closeJoinModal() {
   document.getElementById('joinQueueModal').classList.add('hidden');
+}
+
+function setJoinChannel(channel) {
+  joinChannel = channel;
+  const input = document.getElementById('joinChannelInput');
+  const remoteBtn = document.getElementById('joinChannelRemote');
+  const walkinBtn = document.getElementById('joinChannelWalkin');
+  if (input) input.value = channel;
+  const active = "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition border-2 border-orange-500 bg-orange-50 text-orange-950 flex items-center justify-center gap-2";
+  const inactive = "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition border-2 border-slate-200 bg-white text-slate-700 hover:border-orange-400 hover:bg-orange-50 flex items-center justify-center gap-2";
+  if (remoteBtn && walkinBtn) {
+    if (channel === 'walk_in') {
+      remoteBtn.className = inactive;
+      walkinBtn.className = active;
+    } else {
+      remoteBtn.className = active;
+      walkinBtn.className = inactive;
+    }
+  }
 }
 
 function setPartySize(size) {
@@ -1920,7 +1944,7 @@ async function submitJoinQueue(e) {
     party_size: partySize,
     seating_pref: seatingPref,
     special_requests: specialReq,
-    entry_type: 'remote'
+    entry_type: joinChannel
   };
 
   let res;
@@ -1962,15 +1986,27 @@ async function submitJoinQueue(e) {
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
-      entry_type: 'remote',
+      entry_type: joinChannel,
       status: 'waiting',
       estimated_wait_mins: data.estimated_wait_mins ?? 10,
       actual_wait_mins: 0,
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: 0,
+      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
       delay_mins: 0,
+      ...(joinChannel === 'walk_in' && {
+        arrived_at: Date.now() / 1000,
+        arrived_time_ist: new Date().toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }) + ' IST'
+      }),
       position_in_line: data.position_in_line ?? 1,
       parties_ahead: data.parties_ahead ?? 0,
       estimated_remaining_mins: data.estimated_wait_mins ?? 10,
@@ -2020,15 +2056,27 @@ async function submitJoinQueue(e) {
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
-      entry_type: 'remote',
+      entry_type: joinChannel,
       status: 'waiting',
       estimated_wait_mins: estWait,
       actual_wait_mins: 0,
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: 0,
+      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
       delay_mins: 0,
+      ...(joinChannel === 'walk_in' && {
+        arrived_at: Date.now() / 1000,
+        arrived_time_ist: new Date().toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }) + ' IST'
+      }),
       position_in_line: (targetRest.live_stats ? targetRest.live_stats.queue_count : 0) + 1,
       parties_ahead: targetRest.live_stats ? targetRest.live_stats.queue_count : 0,
       estimated_remaining_mins: estWait,
@@ -2227,6 +2275,12 @@ function updateTicketUI() {
   document.getElementById('ticketPartiesAhead').textContent = `${d.parties_ahead} ${d.parties_ahead === 1 ? 'party' : 'parties'} ahead`;
   document.getElementById('ticketPartySize').textContent = `${d.party_size} Guests`;
   document.getElementById('ticketSeating').textContent = d.seating_pref;
+
+  const arrivedAtEl = document.getElementById('ticketArrivedAt');
+  if (arrivedAtEl) {
+    arrivedAtEl.textContent = d.arrived_time_ist || '–';
+    arrivedAtEl.className = d.has_arrived ? "font-bold text-emerald-700 text-[10px] leading-tight" : "font-bold text-slate-400 text-[10px] leading-tight";
+  }
 
   // Check state transitions & "Table is Near" Alert System
   const tableNearAlert = document.getElementById('tableNearAlertBanner');
@@ -2904,7 +2958,7 @@ async function submitReview() {
         rating: rating,
         comment: comment,
         ticket_id: activeTicketData ? activeTicketData.id : null,
-        guest_name: activeTicketData ? (activeTicketData.guest_name || activeTicketData.name) : null
+        guest_name: activeTicketData ? (activeTicketData.guest_name || activeTicketData.customer_name || activeTicketData.name) : null
       })
     });
 
