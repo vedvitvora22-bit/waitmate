@@ -88,6 +88,11 @@ function send(response, status, data) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Restaurant-Password, X-Founder-Password");
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  // Live queue/ticket data must never be cached by browsers or proxies, so the
+  // Host Stand and diner passes always reflect the latest Firestore state.
+  response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.setHeader("Pragma", "no-cache");
+  response.setHeader("Expires", "0");
   response.send(JSON.stringify(data));
 }
 
@@ -718,7 +723,9 @@ async function route(request, response, pathParts) {
       }
     } else if (body.action === "rate") {
       // Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
+      // Enforcement: only seated tickets can be rated
       if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      if (ticket.status !== "seated") return send(response, 403, { error: "Ratings are only allowed after the diner has been seated (status must be 'seated')." });
       const stars = Number(body.rating) || 0;
       if (stars < 1 || stars > 5) return send(response, 400, { error: "Rating must be between 1 and 5" });
       updates.rated = true;

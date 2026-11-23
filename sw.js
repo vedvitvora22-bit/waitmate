@@ -1,6 +1,6 @@
-// cache-bust-20261123-wait-time-sync-v2
+// cache-bust-20261123-host-sync-v3
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-wait-time-sync-v2';
+const CACHE_NAME = 'waitmate-v20261123-host-sync-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -15,13 +15,26 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  let pathname = '';
+  try { pathname = new URL(req.url).pathname; } catch (e) {}
+
+  // Live data (API) and non-GET requests must NEVER be served from cache.
+  // The Host Stand polls /api/host/queue every few seconds and diners poll
+  // /api/queue/ticket; a cache-first strategy would keep showing the previous
+  // queue snapshot so newly-joined guests (written to Firestore by another
+  // device) would not appear. Always hit the network, and only fall back to a
+  // cached copy when the device is offline.
+  if (req.method !== 'GET' || pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req).catch(() => caches.match(req)));
+    return;
+  }
+
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.match(event.request).then((cached) => {
-        const network = fetch(event.request).then((res) => {
-          if (res && res.status === 200 && event.request.method === 'GET') {
-            cache.put(event.request, res.clone());
-          }
+      cache.match(req).then((cached) => {
+        const network = fetch(req).then((res) => {
+          if (res && res.status === 200) cache.put(req, res.clone());
           return res;
         }).catch(() => cached);
         return cached || network;

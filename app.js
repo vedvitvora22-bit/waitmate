@@ -170,7 +170,8 @@ function detectNewHostJoins(venueId) {
 async function renderUnlockedHostStand(venueId, pwd) {
   try {
     const res = await fetch(`/api/host/queue/${venueId}`, {
-      headers: { 'X-Restaurant-Password': pwd }
+      headers: { 'X-Restaurant-Password': pwd },
+      cache: 'no-store'
     });
     if (res.status === 401) {
       clearHostPassword(venueId);
@@ -1317,7 +1318,7 @@ async function submitNewRestaurant(e) {
 async function loadFounderDashboard() {
   if (!isFounderUnlocked()) { openFounderLoginModal(); return; }
   try {
-    const res = await fetch('/api/founder/analytics', { headers: founderHeaders() });
+    const res = await fetch('/api/founder/analytics', { headers: founderHeaders(), cache: 'no-store' });
     if (res.status === 401) {
       sessionStorage.removeItem(FOUNDER_PWD_KEY);
       openFounderLoginModal();
@@ -1515,7 +1516,7 @@ async function founderToggleQueue(restId) {
 // ==========================================
 async function loadRestaurants() {
   try {
-    const res = await fetch('/api/restaurants');
+    const res = await fetch('/api/restaurants', { cache: 'no-store' });
     if (!res.ok) throw new Error('API response not ok');
     const data = await res.json();
     allRestaurants = data.restaurants || [];
@@ -2089,7 +2090,7 @@ async function fetchTicketStatus() {
     if (!currentTicketId) return;
   }
   try {
-    const res = await fetch(`/api/queue/ticket/${currentTicketId}`);
+    const res = await fetch(`/api/queue/ticket/${currentTicketId}`, { cache: 'no-store' });
     if (res.status === 404) {
       // Ticket not found on server (cold start / serverless restart).
       // Do NOT wipe local ticket if we have valid active data.
@@ -2545,7 +2546,7 @@ let currentReviewVenueName = null;
 async function openReliabilityModal(venueId) {
   let r = null;
   try {
-    const res = await fetch(`/api/restaurants/${venueId}`);
+    const res = await fetch(`/api/restaurants/${venueId}`, { cache: 'no-store' });
     if (res.ok) r = await res.json();
   } catch (err) {
     console.warn("Using offline fallback for reliability modal:", err);
