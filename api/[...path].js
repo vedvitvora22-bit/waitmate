@@ -522,16 +522,22 @@ async function route(request, response, pathParts) {
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
+    let globalAnnouncement = "";
+    try {
+      const g = await getDocument("settings", "global_announcement");
+      if (g && g.value !== undefined) globalAnnouncement = String(g.value);
+    } catch { /* ignore */ }
     const result = [];
     for (const restaurant of restaurants) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
       const realParties = realActive.length;
       const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
       const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
-      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
+      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
     }
     const body = { 
       restaurants: result,
+      global_announcement: globalAnnouncement,
       storage_status: storageReason ? `memory: ${storageReason}` : "firebase",
       storage_backend: storageStatus,
       ...(storageReason ? { storage_error: storageReason, storage_reason: storageReason } : {})
@@ -545,7 +551,7 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
-    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFallback(), announcement: restaurant.announcement || '' });
+    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
@@ -756,7 +762,7 @@ async function route(request, response, pathParts) {
     for (const restaurant of restaurants) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
       const liveStats = computePrototypeRestaurantMetrics(restaurant, realActive.length, realActive.reduce((s,e)=>s+Number(e.party_size||0),0));
-      enriched.push({ ...restaurant, live_stats: liveStats, reliability: reliabilityFallback() });
+      enriched.push({ ...restaurant, live_stats: liveStats, reliability: reliabilityFromRestaurant(restaurant) });
     }
     return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });
   }
@@ -1377,6 +1383,416 @@ async function route(request, response, pathParts) {
     uniqueReviews.sort((a, b) => Number(b.created_at) - Number(a.created_at));
 
     return send(response, 200, { reviews: uniqueReviews });
+  }
+
+  // -----------------------------------------------------------------------
+  // Reliability derived from a restaurant record (manual founder overrides
+  // stored on the restaurant document win over the algorithmic fallback).
+  // -----------------------------------------------------------------------
+  function reliabilityFromRestaurant(r) {
+    if (!r) return reliabilityFallback();
+    if (r.reliability_score !== undefined || r.reliability_grade || r.grade) {
+      const score = Math.max(0, Math.min(100, Number(r.reliability_score || 92)));
+      const grade = r.reliability_grade || r.grade || (score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C");
+      return {
+        score,
+        grade,
+        verdict: r.reliability_verdict || "Founder override",
+        badge_color: r.reliability_badge_color || (score >= 85 ? "emerald" : score >= 75 ? "amber" : "rose"),
+        avg_variance_mins: r.avg_variance_mins !== undefined ? Number(r.avg_variance_mins) : 2.5,
+        total_verified_checkins: Number(r.total_verified_checkins || 0),
+        on_time_pct: r.on_time_pct !== undefined ? Number(r.on_time_pct) : 90,
+        early_pct: r.early_pct !== undefined ? Number(r.early_pct) : 5,
+        slight_late_pct: r.slight_late_pct !== undefined ? Number(r.slight_late_pct) : 5,
+        severe_late_pct: r.severe_late_pct !== undefined ? Number(r.severe_late_pct) : 0,
+        recent_reviews: Array.isArray(r.recent_reviews) ? r.recent_reviews : []
+      };
+    }
+    return reliabilityFallback();
+  }
+
+  // -----------------------------------------------------------------------
+  // FOUNDER SUPER-ADMIN ("GOD MODE") ENDPOINTS
+  // Every endpoint below is protected with isFounderAuthorized(request).
+  // -----------------------------------------------------------------------
+
+  // Full restaurant directory for the Founder edit table (no password hashes)
+  if (request.method === "GET" && path === "/api/founder/restaurants") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurants = await ensureRestaurants();
+    let firestoreEntries = [];
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queueEntries = allQueueEntries(firestoreEntries);
+    const result = restaurants.map(r => {
+      const realActive = queueEntries.filter(e => e.restaurant_id === r.id && ["waiting","notified","delayed"].includes(e.status));
+      return { ...sanitizeRestaurant(r), live_stats: getLiveStats(r, queueEntries), reliability: reliabilityFromRestaurant(r), announcement: r.announcement || '', active_parties: realActive.length };
+    });
+    return send(response, 200, { success: true, restaurants: result });
+  }
+
+  // Update any restaurant: name, category, type, city, address, price tier,
+  // table capacity, dining pace, cover photo, bio, queue state.
+  if (request.method === "POST" && path === "/api/founder/restaurant/update") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    let restaurant;
+    try {
+      restaurant = await getRawRestaurant(restaurantId);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
+    }
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open"];
+    const updates = { ...restaurant };
+    let changed = false;
+    for (const field of updatable) {
+      if (body[field] !== undefined) {
+        updates[field] = field === "is_queue_open" ? Boolean(body[field]) : body[field];
+        changed = true;
+      }
+    }
+    if (!changed) return send(response, 400, { error: "No updatable fields provided" });
+    if (Number.isFinite(Number(updates.total_tables))) updates.available_tables = Math.max(1, Math.floor(Number(updates.total_tables) / 4));
+    try {
+      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    global._pwdMap = global._pwdMap || {};
+    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
+    for (const k of ["is_queue_open","manual_override_wait","announcement"]) if (updates[k] !== undefined) global._pwdMap[restaurantId][k] = updates[k];
+    return send(response, 200, { success: true, message: "Restaurant updated.", restaurant: sanitizeRestaurant(updates) });
+  }
+
+  // Direct override of a restaurant's Reliability Score and Grade
+  if (request.method === "POST" && path === "/api/founder/restaurant/reliability") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    let restaurant;
+    try {
+      restaurant = await getRawRestaurant(restaurantId);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
+    }
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const score = Math.max(0, Math.min(100, parseInt(body.score, 10) || 0));
+    if (Number.isNaN(score)) return send(response, 400, { error: "Invalid reliability score" });
+    const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+    const verdicts = { "A+": "Exceptionally Accurate", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits" };
+    const badgeColors = { "A+": "emerald", "A": "emerald", "B": "amber", "C": "rose" };
+    const updates = {
+      ...restaurant,
+      reliability_score: score,
+      reliability_grade: grade,
+      reliability_verdict: body.verdict || verdicts[grade],
+      reliability_badge_color: body.badge_color || badgeColors[grade],
+      reliability_manual_override: true,
+      avg_variance_mins: body.avg_variance_mins !== undefined ? Number(body.avg_variance_mins) : restaurant.avg_variance_mins || 2.5,
+      total_verified_checkins: body.total_verified_checkins !== undefined ? Number(body.total_verified_checkins) : restaurant.total_verified_checkins || 0
+    };
+    try {
+      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    return send(response, 200, { success: true, message: `Reliability Score overridden to ${score}% (Grade ${grade}).`, reliability: reliabilityFromRestaurant(updates) });
+  }
+
+  // Publish / edit / clear a single venue's live announcement
+  if (request.method === "POST" && path === "/api/founder/restaurant/announcement") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    let restaurant;
+    try {
+      restaurant = await getRawRestaurant(restaurantId);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
+    }
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const announcement = String(body.announcement === undefined ? "" : body.announcement);
+    const updates = { ...restaurant, announcement };
+    try {
+      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    global._pwdMap = global._pwdMap || {};
+    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
+    global._pwdMap[restaurantId].announcement = announcement;
+    return send(response, 200, { success: true, message: announcement ? "Announcement published." : "Announcement cleared.", announcement });
+  }
+
+  // Force-override a restaurant's live estimated wait time
+  if (request.method === "POST" && path === "/api/founder/restaurant/manual-wait") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    let restaurant;
+    try {
+      restaurant = await getRawRestaurant(restaurantId);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
+    }
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const manualWait = body.manual_wait_mins === null || body.manual_wait_mins === undefined || body.manual_wait_mins === "" ? null : Number(body.manual_wait_mins);
+    if (manualWait !== null && (Number.isNaN(manualWait) || manualWait < 0 || manualWait > 180)) {
+      return send(response, 400, { error: "Manual wait must be between 0 and 180 minutes" });
+    }
+    const updates = { ...restaurant, manual_override_wait: manualWait };
+    try {
+      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    global._pwdMap = global._pwdMap || {};
+    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
+    global._pwdMap[restaurantId].manual_override_wait = manualWait;
+    return send(response, 200, { success: true, message: manualWait === null ? "Wait estimate reset to algorithmic." : `Wait estimate overridden to ${manualWait} mins.`, manual_override_wait: manualWait });
+  }
+
+  // Global network banner shown across all venues
+  if (request.method === "POST" && path === "/api/founder/announcement/global") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const value = String(body.announcement === undefined ? "" : body.announcement);
+    try {
+      await safeCommit([setDocument("settings", "global_announcement", { value, updated_at: Date.now() })]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    return send(response, 200, { success: true, message: value ? "Global network banner published." : "Global network banner cleared.", announcement: value });
+  }
+
+  // Read runtime settings (global banner, etc.)
+  if (request.method === "GET" && path === "/api/founder/settings") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    let settings = [];
+    try {
+      settings = await listCollection("settings");
+    } catch (error) {
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
+    const found = settings.find(s => s.id === "global_announcement");
+    return send(response, 200, { success: true, settings, global_announcement: found ? (found.value || "") : "" });
+  }
+
+  // Live cross-platform queue stream: every active party across all venues
+  if (request.method === "GET" && path === "/api/founder/queues") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    let firestoreEntries = [];
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const entries = allQueueEntries(firestoreEntries);
+    const restaurants = await ensureRestaurants();
+    const byId = {};
+    for (const r of restaurants) byId[r.id] = r;
+    const active = entries.filter(e => ["waiting","notified","delayed"].includes(e.status));
+    const enriched = active.map(e => {
+      const r = byId[e.restaurant_id];
+      return {
+        ...e,
+        phone: e.phone || "",
+        restaurant_name: (r ? r.name : e.restaurant_name) || "Unknown Venue",
+        joined_time_ist: e.joined_time_ist || formatIST(e.joined_at),
+        notified_time_ist: e.notified_time_ist || (e.notified_at ? formatIST(e.notified_at) : null),
+        arrived_time_ist: e.arrived_time_ist || (e.arrived_at ? formatIST(e.arrived_at) : null),
+        seated_time_ist: e.seated_time_ist || (e.seated_at ? formatIST(e.seated_at) : null)
+      };
+    });
+    enriched.sort((a, b) => Number(b.joined_at || 0) - Number(a.joined_at || 0));
+    return send(response, 200, { success: true, queues: enriched });
+  }
+
+  // Founder queue action on any ticket: notify / seat / remove / edit party size
+  if (request.method === "POST" && path === "/api/founder/queue/action") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    let ticket;
+    try { ticket = await fetchQueueEntry(body.ticket_id); } catch (error) { if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { ticket = global._tickets[body.ticket_id] || null; } else { throw error; } }
+    if (!ticket) return send(response, 404, { error: "Ticket not found" });
+    const updates = { ...ticket };
+    if (body.action === "notify") {
+      updates.status = "notified";
+      updates.notified_at = Date.now();
+      updates.notified_time_ist = formatIST(updates.notified_at);
+    } else if (body.action === "seat") {
+      const now = Date.now();
+      markSeated(updates);
+      updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
+    } else if (body.action === "remove") {
+      updates.status = "no_show";
+    } else if (body.action === "edit_party_size") {
+      const size = Number(body.party_size);
+      if (!Number.isFinite(size) || size < 1 || size > 20) return send(response, 400, { error: "Party size must be between 1 and 20" });
+      updates.party_size = size;
+    } else {
+      return send(response, 400, { error: "Unknown queue action" });
+    }
+    try {
+      await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
+    } catch (error) {
+      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
+      } else { throw error; }
+    }
+    global._tickets[ticket.id] = updates;
+    return send(response, 200, { success: true, message: "Queue action updated.", ticket: updates });
+  }
+
+  // Clear a venue's active queue (waiting / notified / delayed tickets removed)
+  if (request.method === "POST" && path === "/api/founder/queue/clear-venue") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    let firestoreEntries = [];
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const entries = allQueueEntries(firestoreEntries);
+    const targets = entries.filter(e => e.restaurant_id === restaurantId && ["waiting","notified","delayed"].includes(e.status));
+    const deletes = targets.map(e => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+    if (deletes.length) await safeCommit(deletes);
+    for (const e of targets) delete global._tickets[e.id];
+    return send(response, 200, { success: true, message: `Cleared ${targets.length} active ticket(s) from the venue queue.`, cleared: targets.length });
+  }
+
+  // Purge test / stale entries: all historical (non-active) queue entries
+  if (request.method === "POST" && path === "/api/founder/queue/purge") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    let firestoreEntries = [];
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const entries = allQueueEntries(firestoreEntries);
+    const targets = entries.filter(e => !["waiting","notified","delayed"].includes(e.status));
+    const deletes = targets.map(e => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+    if (deletes.length) await safeCommit(deletes);
+    for (const e of targets) delete global._tickets[e.id];
+    return send(response, 200, { success: true, message: `Purged ${targets.length} stale/test queue entry(ies).`, purged: targets.length });
+  }
+
+  // Full network review feed for the Reliability Audit Watchdog
+  if (request.method === "GET" && path === "/api/founder/reviews") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    let firestoreReviews = [];
+    try {
+      const docs = await listCollection("reviews");
+      firestoreReviews = docs;
+    } catch (error) {
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
+    const memoryReviews = (global._reviews || []);
+    const allReviews = [...firestoreReviews, ...memoryReviews];
+    const unique = Object.values(allReviews.reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
+    unique.sort((a, b) => Number(b.created_at || b.rated_at || 0) - Number(a.created_at || a.rated_at || 0));
+    const restaurants = await ensureRestaurants();
+    const byId = {};
+    for (const r of restaurants) byId[r.id] = r;
+    const enriched = unique.map(r => ({ ...r, restaurant_name: (byId[r.restaurant_id] || {}).name || r.restaurant_name || "Unknown Venue" }));
+    return send(response, 200, { success: true, reviews: enriched });
+  }
+
+  // Delete / hide a review and recalculate the restaurant's Reliability Score
+  if (request.method === "DELETE" && path.startsWith("/api/founder/reviews/")) {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const reviewId = path.split("/").pop();
+    if (!reviewId) return send(response, 400, { error: "Missing review id" });
+    let firestoreReviews = [];
+    try {
+      const docs = await listCollection("reviews");
+      firestoreReviews = docs;
+    } catch (error) {
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
+    const target = firestoreReviews.find(r => r.id === reviewId);
+    const restaurantId = target ? target.restaurant_id : null;
+    const deletes = [];
+    if (target) deletes.push({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/reviews/${encodeSegment(reviewId)}` } });
+    if (deletes.length) await safeCommit(deletes);
+    global._reviews = (global._reviews || []).filter(r => r.id !== reviewId);
+    // Also un-rate the linked ticket so it can't be double counted
+    if (target && target.ticket_id) {
+      try {
+        const t = await fetchQueueEntry(target.ticket_id);
+        if (t) {
+          const unticket = { ...t, rated: false, rating: null, review_comment: "", comment: "", rated_at: null, rated_time_ist: null };
+          await safeCommit([setDocument("queue_entries", target.ticket_id, toNumberedEntry(unticket))]);
+          global._tickets[target.ticket_id] = unticket;
+        }
+      } catch (e) { console.warn("un-rate ticket failed:", e?.message || e); }
+    }
+    // Recalculate Reliability Score from remaining reviews
+    if (restaurantId) {
+      try {
+        const all = await listCollection("reviews");
+        const rated = [...(all.filter(r => r.restaurant_id === restaurantId)), ...((global._reviews || []).filter(r => r.restaurant_id === restaurantId))];
+        const uniq = Object.values(rated.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+        if (uniq.length) {
+          const avg = uniq.reduce((s, r) => s + Number(r.rating || 0), 0) / uniq.length;
+          const score = Math.max(50, Math.min(99, Math.round(55 + (avg - 1) * 11)));
+          const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+          const rest = await findRestaurantById(restaurantId);
+          if (rest) {
+            await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, reliability_grade: grade, reliability_manual_override: false, total_verified_checkins: uniq.length, average_rating: avg })]);
+          }
+        }
+      } catch (e) { console.warn("recalculate reliability failed:", e?.message || e); }
+    }
+    return send(response, 200, { success: true, message: "Review deleted and Reliability Score recalculated." });
+  }
+
+  // Export full network data (JSON). CSV is rendered client-side from this payload.
+  if (request.method === "GET" && path === "/api/founder/export") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurants = await ensureRestaurants().then(list => list.map(sanitizeRestaurant));
+    let firestoreEntries = [];
+    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queueEntries = allQueueEntries(firestoreEntries);
+    let firestoreReviews = [];
+    try {
+      const docs = await listCollection("reviews");
+      firestoreReviews = docs;
+    } catch (error) {
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
+    const settings = [];
+    try { settings = await listCollection("settings"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) {} }
+    const reviews = Object.values([...firestoreReviews, ...((global._reviews || []))].reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
+    return send(response, 200, {
+      success: true,
+      exported_at: new Date().toISOString(),
+      exported_at_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
+      restaurants,
+      queue_entries: queueEntries,
+      reviews,
+      settings
+    });
+  }
+
+  // Founder impersonation: open any restaurant's Host Stand Dashboard without
+  // the restaurant owner password (Founder authorization only).
+  if (request.method === "GET" && path.startsWith("/api/founder/host-stand/queue/")) {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const id = pathParts[pathParts.length - 1];
+    const restaurant = await findRestaurantById(id);
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    let firestoreQueue = [];
+    try { firestoreQueue = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const queue = allQueueEntries(firestoreQueue);
+    const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+    return send(response, 200, {
+      restaurant: sanitizeRestaurant(restaurant),
+      live_stats: getLiveStats(restaurant, entries),
+      reliability: reliabilityFromRestaurant(restaurant),
+      announcement: restaurant.announcement || '',
+      queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; })
+    });
   }
 
   return send(response, 404, { error: "Endpoint not found" });

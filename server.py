@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import time
 import uuid
+from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -46,6 +47,16 @@ def verify_founder_password(password):
     if not provided:
         return False
     return _founder_hash(provided) == get_active_founder_hash()
+
+
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
+
+
+def format_ist(ts):
+    try:
+        return datetime.fromtimestamp(float(ts), tz=IST_TZ).strftime('%I:%M %p')
+    except (TypeError, ValueError, OSError):
+        return None
 
 # Initialize database schema and initial data
 def init_db():
@@ -695,8 +706,59 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
+def _founder_override(restaurant_id):
+    """Founder manual Reliability Score override stored in app_settings."""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT value FROM app_settings WHERE key = ?", (f"fnd_override_{restaurant_id}",))
+        row = c.fetchone()
+        conn.close()
+        if row and row[0]:
+            return json.loads(row[0])
+    except Exception:
+        pass
+    return None
+
+
+def _founder_setting(key):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row and row[0] else ""
+    except Exception:
+        return ""
+
+
+def format_ist(ts):
+    import datetime
+    if not ts:
+        return None
+    dt = datetime.datetime.fromtimestamp(float(ts), tz=datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+    return dt.strftime("%d %b %Y, %I:%M %p IST")
+
+
 # Reliability Score Calculation Algorithm
 def calculate_reliability(restaurant_id):
+    override = _founder_override(restaurant_id)
+    if override:
+        return {
+            "score": int(override.get("score", 92)),
+            "grade": override.get("grade", "A"),
+            "verdict": override.get("verdict", "Founder override"),
+            "badge_color": override.get("badge_color", "emerald"),
+            "avg_variance_mins": float(override.get("avg_variance_mins", 2.5)),
+            "total_verified_checkins": int(override.get("total_verified_checkins", 0)),
+            "on_time_pct": int(override.get("on_time_pct", 90)),
+            "early_pct": int(override.get("early_pct", 5)),
+            "slight_late_pct": int(override.get("slight_late_pct", 5)),
+            "severe_late_pct": int(override.get("severe_late_pct", 0)),
+            "recent_reviews": override.get("recent_reviews", [])
+        }
     conn = get_db()
     c = conn.cursor()
     c.execute('''
@@ -1266,6 +1328,13 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 e["phone"] = ""
                 e["position_rank"] = idx + 1
                 e["is_table_near"] = (idx < 2 and e["status"] in ("waiting", "delayed"))
+                # Mirror the canonical channel/join-time fields so the Host Stand
+                # waitlist can render the Remote Join vs Walk-In badge and the IST
+                # join time even when backed by the local SQLite store.
+                e["channel"] = e.get("channel") or e.get("09_channel") or ("walk_in" if e.get("entry_type") in ("walk_in", "walkin", "walk-in") else "remote")
+                e["09_channel"] = e["channel"]
+                joined_ts = e.get("joined_at")
+                e["joined_time_ist"] = e.get("joined_time_ist") or (format_ist(joined_ts) if joined_ts is not None else None)
 
             live_stats = get_restaurant_live_stats(rest_id)
             reliability = calculate_reliability(rest_id)

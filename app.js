@@ -3405,9 +3405,9 @@ function renderHostDashboard() {
     }
 
     const join = hostJoinInfo(q);
-    const channel = q.channel || q.entry_type || 'remote';
-    const isWalkIn = channel === 'walk_in' || channel === 'walkin' || channel === 'walk-in';
-    const channelLabel = isWalkIn ? '🚶 Walk-In' : '🌐 Remote Join';
+    const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
+    const isWalkIn = channel === 'walk_in';
+    const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
     const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
 
     return `
@@ -3418,7 +3418,7 @@ function renderHostDashboard() {
             <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-[10px]">#${idx + 1}</span>
             <span>${q.ticket_number}</span>
           </div>
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${channelClass}">${channelLabel}</span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border ${channelClass}">${channelLabel}</span>
           <div class="text-[10px] text-slate-500 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
         </td>
 
