@@ -19,6 +19,21 @@ function isAnyPasswordModalOpen() {
   });
 }
 
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  const btn = input ? input.parentElement.querySelector('button[onclick*="togglePasswordVisibility"]') : null;
+  const icon = btn ? btn.querySelector('i[data-lucide]') : null;
+  if (!input || !icon) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.setAttribute('data-lucide', 'eye-off');
+  } else {
+    input.type = 'password';
+    icon.setAttribute('data-lucide', 'eye');
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
 // Refresh /api/restaurants every minute so all open browsers stay in sync
 // with the same server-computed waits and queue counts (values only change
 // per 5-minute bucket or when real diners join/leave).

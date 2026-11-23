@@ -111,7 +111,13 @@ function reliabilityFallback() {
 async function findRestaurantById(id) {
   try {
     const doc = await getDocument("restaurants", id);
-    if (doc) return doc;
+    if (doc) {
+      const pwdMap = global._pwdMap || {};
+      if (pwdMap[id]) {
+        return { ...doc, ...pwdMap[id] };
+      }
+      return doc;
+    }
   } catch (error) {
     if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
       // fall through to in-memory sources below
@@ -153,7 +159,13 @@ async function safeCommit(writes) {
 async function getRawRestaurant(id) {
   try {
     const doc = await getDocument("restaurants", id);
-    if (doc) return doc;
+    if (doc) {
+      const pwdMap = global._pwdMap || {};
+      if (pwdMap[id]) {
+        return { ...doc, ...pwdMap[id] };
+      }
+      return doc;
+    }
   } catch (error) {
     if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
       // fall through to in-memory sources below
@@ -162,7 +174,7 @@ async function getRawRestaurant(id) {
     }
   }
   const fb = fallbackRestaurants.find(r => r.id === id);
-  if (fb) return { ...fb };
+  if (fb) return { ...fb, ...(global._pwdMap?.[id] || {}) };
   const custom = (global._customRestaurants || []).find(r => r.id === id);
   if (custom) return { ...custom, ...(global._pwdMap?.[id] || {}) };
   return null;
@@ -672,6 +684,47 @@ async function route(request, response, pathParts) {
         return send(response, 404, { error: "Ticket not found" });
       }
       updates.status = "cancelled";
+    } else if (body.action === "seated") {
+      // Diner confirms they've been seated ("I'm at the Venue" post-seating check-in)
+      if (!ticket) {
+        // Cold start: reconstruct a seated ticket so the diner's pass stays valid
+        const restId = body.restaurant_id || "rest-1";
+        const now = Date.now();
+        updates = {
+          id: body.ticket_id,
+          ticket_number: `WM-${Date.now().toString().slice(-3)}`,
+          restaurant_id: restId,
+          customer_name: body.customer_name || "Seated Guest",
+          phone: "",
+          party_size: 2,
+          seating_pref: "First Available",
+          special_requests: "",
+          entry_type: "remote",
+          status: "seated",
+          estimated_wait_mins: 8,
+          actual_wait_mins: 10,
+          joined_at: now - 600000,
+          notified_at: null,
+          seated_at: now,
+          has_arrived: true,
+          delay_mins: 0
+        };
+      } else {
+        updates.status = "seated";
+        updates.seated_at = Date.now();
+        updates.has_arrived = true;
+        const joined = Number(ticket.joined_at || Date.now());
+        updates.actual_wait_mins = Math.max(1, Math.floor((Date.now() - joined) / 60000));
+      }
+    } else if (body.action === "rate") {
+      // Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
+      if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      const stars = Number(body.rating) || 0;
+      if (stars < 1 || stars > 5) return send(response, 400, { error: "Rating must be between 1 and 5" });
+      updates.rated = true;
+      updates.rating = stars;
+      updates.comment = String(body.comment || "");
+      updates.rated_at = Date.now();
     } else return send(response, 400, { error: "Unknown action" });
     try {
       await safeCommit([setDocument("queue_entries", updates.id, updates)]);
@@ -987,7 +1040,10 @@ async function route(request, response, pathParts) {
     }
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
-    global._pwdMap = global._pwdMap || {}; global._pwdMap[restaurant.id] = { password_hash: hashPassword(nextPwd) }; await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    const newHash = hashPassword(nextPwd);
+    global._pwdMap = global._pwdMap || {};
+    global._pwdMap[restaurant.id] = { ...(global._pwdMap[restaurant.id] || {}), password_hash: newHash };
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Restaurant password updated successfully." });
   }
 
@@ -997,7 +1053,10 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
-    global._pwdMap = global._pwdMap || {}; global._pwdMap[restaurant.id] = { password_hash: hashPassword(nextPwd) }; await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: hashPassword(nextPwd) })]);
+    const newHash = hashPassword(nextPwd);
+    global._pwdMap = global._pwdMap || {};
+    global._pwdMap[restaurant.id] = { ...(global._pwdMap[restaurant.id] || {}), password_hash: newHash };
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Password reset successfully." });
   }
 

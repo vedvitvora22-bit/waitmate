@@ -149,6 +149,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # column already exists
 
+    # Migrate: add post-seating rating columns to queue_entries
+    for col_def in ("rated INTEGER DEFAULT 0", "rating INTEGER", "comment TEXT", "rated_at REAL"):
+        try:
+            c.execute(f'ALTER TABLE queue_entries ADD COLUMN {col_def}')
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
     # Seed initial data if empty
     c.execute('SELECT COUNT(*) FROM restaurants')
     if c.fetchone()[0] == 0:
@@ -1444,6 +1451,41 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             elif action == "cancel":
                 c.execute('UPDATE queue_entries SET status = "cancelled" WHERE id = ?', (real_id,))
                 msg = "Your queue spot has been cancelled."
+            elif action == "seated":
+                # Diner confirms they've been seated ("I'm at the Venue" post-seating check-in)
+                now = time.time()
+                if q:
+                    joined = q["joined_at"]
+                    actual_wait = max(1, int((now - joined) / 60))
+                    c.execute('UPDATE queue_entries SET status = "seated", seated_at = ?, actual_wait_mins = ?, has_arrived = 1 WHERE id = ?', (now, actual_wait, real_id))
+                else:
+                    # Cold start: diner confirmed seated but ticket row missing — reconstruct as seated
+                    rest_id = data.get("restaurant_id", "rest-1")
+                    name = data.get("customer_name", "Seated Guest")
+                    now = time.time()
+                    c.execute('''
+                    INSERT INTO queue_entries
+                    (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, seated_at, has_arrived)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ''', (ticket_id, "WM-101", rest_id, name, "", 2, "First Available", "Verified arrival", "remote", "seated", 8, now - 600, now))
+                msg = "You've been seated! Please rate your experience."
+            elif action == "rate":
+                # Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
+                if not q:
+                    conn.close()
+                    self.send_json({"error": "Ticket not found"}, 404)
+                    return
+                try:
+                    stars = int(data.get("rating", 0) or 0)
+                except (TypeError, ValueError):
+                    stars = 0
+                if stars < 1 or stars > 5:
+                    conn.close()
+                    self.send_json({"error": "Rating must be between 1 and 5"}, 400)
+                    return
+                comment = str(data.get("comment", "") or "")
+                c.execute('UPDATE queue_entries SET rated = 1, rating = ?, comment = ?, rated_at = ? WHERE id = ?', (stars, comment, time.time(), real_id))
+                msg = "Thanks! Your rating has been saved."
             else:
                 conn.close()
                 self.send_json({"error": "Unknown action"}, 400)

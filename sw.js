@@ -1,6 +1,6 @@
-// cache-bust-20261123-wait-time-sync
+// cache-bust-20261123-wait-time-sync-v2
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-wait-time-sync';
+const CACHE_NAME = 'waitmate-v20261123-wait-time-sync-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
