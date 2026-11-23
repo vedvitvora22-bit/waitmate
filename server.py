@@ -1493,6 +1493,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     conn.close()
                     self.send_json({"error": "Ratings are only allowed after the diner has been seated (status must be 'seated')."}, 403)
                     return
+                # Idempotency: a ticket can only be rated once per visit.
+                if q["rated"]:
+                    conn.close()
+                    self.send_json({"success": True, "message": "Ticket already rated. Duplicate submission ignored."})
+                    return
                 try:
                     stars = int(data.get("rating", 0) or 0)
                 except (TypeError, ValueError):
@@ -1920,6 +1925,17 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             review_id = f"rev-{int(time.time() * 1000)}"
             conn = get_db()
             c = conn.cursor()
+
+            # Idempotency: a ticket can only be rated once per visit.
+            ticket_id = data.get("ticket_id", "")
+            if ticket_id:
+                c.execute('SELECT rated FROM queue_entries WHERE id = ? OR ticket_number = ?', (ticket_id, ticket_id))
+                trow = c.fetchone()
+                if trow and trow["rated"]:
+                    conn.close()
+                    self.send_json({"success": True, "message": "Ticket already rated. Duplicate submission ignored."})
+                    return
+
             c.execute('''
                 INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, ticket_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)

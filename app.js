@@ -2174,7 +2174,7 @@ async function fetchTicketStatus() {
       const localGraceUntil = graceUntil;
       const localAcknowledgedAlert = acknowledgedAlertForTicket;
       // Merge: keep server data as base, but preserve local arrival/grace flags
-      activeTicketData = { ...data, has_arrived: localArrived, delay_mins: localDelayMins };
+      activeTicketData = { ...data, has_arrived: localArrived, delay_mins: localDelayMins, _hasPromptedFeedback: activeTicketData._hasPromptedFeedback };
       if (localGraceUntil && Date.now() < localGraceUntil) {
         graceUntil = localGraceUntil;
         acknowledgedAlertForTicket = localAcknowledgedAlert;
@@ -2387,7 +2387,8 @@ function updateTicketUI() {
       d.entry_type === 'remote' &&
       d.status === 'seated' &&
       !d.rated &&
-      !d._hasPromptedFeedback
+      !d._hasPromptedFeedback &&
+      !isTicketRated(d.id)
     ) {
       d._hasPromptedFeedback = true;
       closeTicketModal();
@@ -3081,7 +3082,12 @@ async function submitDinerFeedback(e) {
   }
 
   const submitBtn = e.currentTarget ? e.currentTarget.querySelector('button[type="submit"]') : null;
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving Rating...'; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
+
+  // Mark this ticket as rated in localStorage + in-memory state BEFORE any
+  // network request, so the background ticket poll cannot re-open the
+  // "You've Been Seated!" modal while the rating request is still in flight.
+  markTicketRated(ticketId);
 
   try {
     // 1. Record wait-accuracy check-in (updates the public Reliability Score™)
@@ -3113,7 +3119,7 @@ async function submitDinerFeedback(e) {
     const reviewData = await reviewRes.json().catch(() => ({}));
     if (!reviewRes.ok) throw new Error(reviewData.error || 'Failed to save star rating');
 
-    // 3. Mark this ticket as rated (Firestore + localStorage) so it can't be rated twice
+    // 3. Persist the rated flag on the server (backend safely ignores duplicates if already rated)
     await fetch('/api/queue/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

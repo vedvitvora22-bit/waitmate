@@ -172,7 +172,13 @@ function normalizeQueueEntry(raw) {
     return undefined;
   };
   const channelRaw = pick("09_channel", "channel", "entry_type");
-  const channel = (channelRaw === "walkin" || channelRaw === "walk-in" || channelRaw === "walk_in") ? "walk_in" : "remote";
+  let channel;
+  if (channelRaw !== undefined && channelRaw !== null && String(channelRaw).trim() !== "") {
+    channel = (channelRaw === "walkin" || channelRaw === "walk-in" || channelRaw === "walk_in") ? "walk_in" : "remote";
+  } else {
+    // Fall back to the legacy is_walk_in boolean when no explicit channel is stored.
+    channel = pick("is_walk_in") ? "walk_in" : "remote";
+  }
   const guestName = pick("04_guest_name", "guest_name", "customer_name") || "";
   const joinedMsRaw = pick("22_joined_at_ms", "joined_at");
   const joinedMs = joinedMsRaw !== undefined ? Number(joinedMsRaw) : Date.now();
@@ -610,6 +616,7 @@ async function route(request, response, pathParts) {
       party_size: partySize,
       seating_pref: body.seating_pref || "First Available",
       special_requests: body.special_requests || "",
+      "09_channel": isWalkin ? "walk_in" : "remote",
       channel: isWalkin ? "walk_in" : "remote",
       entry_type: isWalkin ? "walk_in" : "remote",
       status: "waiting",
@@ -913,6 +920,11 @@ async function route(request, response, pathParts) {
       // seated invariants here (fixes entries where status stayed "notified"
       // and seated_time_ist stayed null even though a rating was recorded).
       if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      // Idempotency: a ticket can only be rated once per visit. If it was
+      // already rated (e.g. a duplicate submission while the first request was
+      // still in flight), ignore it safely instead of double-counting the
+      // reliability_score.
+      if (ticket.rated) return send(response, 200, { success: true, message: "Ticket already rated. Duplicate submission ignored.", ticket: ticket });
       const stars = Number(body.rating) || 0;
       if (stars < 1 || stars > 5) return send(response, 400, { error: "Rating must be between 1 and 5" });
       markSeated(updates);
@@ -1095,7 +1107,7 @@ async function route(request, response, pathParts) {
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
     const now = Date.now();
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", channel: "walk_in", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2),     seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
       } catch (error) {
@@ -1300,6 +1312,9 @@ async function route(request, response, pathParts) {
       try {
         const t = await fetchQueueEntry(ticketId);
         if (t) {
+          // Idempotency: a ticket can only be rated once per visit. Ignore
+          // duplicate submissions instead of double-counting the score.
+          if (t.rated) return send(response, 200, { success: true, message: "Ticket already rated. Duplicate submission ignored.", ticket: t });
           // A submitted rating implies the party was seated: enforce the seated
           // invariants so status/seated_time_ist can never stay "notified"/null.
           const merged = markSeated({ ...t });
