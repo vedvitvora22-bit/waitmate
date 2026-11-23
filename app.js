@@ -1093,7 +1093,6 @@ function renderFounderData(data) {
           <td class="py-2.5 px-4 font-medium text-slate-800">${q.restaurant_name}</td>
           <td class="py-2.5 px-4">
             <div class="font-bold text-slate-900">${q.customer_name} (${q.party_size}p)</div>
-            <div class="text-[10px] font-mono text-slate-400">${q.phone}</div>
           </td>
           <td class="py-2.5 px-4">
             ${statusBadge}
@@ -1426,7 +1425,7 @@ function openJoinModal(venueId) {
 
   document.getElementById('joinVenueId').value = r.id;
   document.getElementById('joinModalVenueName').textContent = r.name;
-  document.getElementById('joinModalAddress').textContent = `${r.address} • ${r.distance_km} km away`;
+  document.getElementById('joinModalAddress').textContent = `${r.address}`;
   document.getElementById('joinPreviewWait').textContent = `~${r.live_stats ? r.live_stats.estimated_wait_mins : 15} mins wait`;
   document.getElementById('joinPreviewAhead').textContent = `${r.live_stats ? r.live_stats.queue_count : 2} parties ahead of you`;
   document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Accurate`;
@@ -1471,7 +1470,6 @@ async function submitJoinQueue(e) {
   e.preventDefault();
   const restId = document.getElementById('joinVenueId').value;
   const name = document.getElementById('joinCustomerName').value.trim();
-  const phone = document.getElementById('joinCustomerPhone').value.trim();
   const partySize = parseInt(document.getElementById('joinPartySizeInput').value);
   const seatingPref = document.getElementById('joinSeatingPrefInput').value;
   const specialReq = document.getElementById('joinSpecialReq').value.trim();
@@ -1489,7 +1487,7 @@ async function submitJoinQueue(e) {
   const joinPayload = {
     restaurant_id: restId,
     name: name,
-    phone: phone,
+    phone: '',
     party_size: partySize,
     seating_pref: seatingPref,
     special_requests: specialReq,
@@ -1554,7 +1552,7 @@ async function submitJoinQueue(e) {
       ticket_number: ticketNum,
       restaurant_id: restId,
       customer_name: name,
-      phone: phone || "+91 99999 00000",
+      phone: '',
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
@@ -1689,7 +1687,6 @@ function updateTicketUI() {
     document.getElementById('simulatedSmsText').textContent = `Your table at ${d.restaurant?.name || 'Partner Venue'} is ready! Please proceed to the host counter. Token #${d.ticket_number}`;
     
     whatsAppCard.classList.remove('hidden');
-    document.getElementById('simulatedWhatsAppPhone').textContent = d.phone;
     document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
 
     tableNearAlert.classList.add('hidden');
@@ -1715,9 +1712,8 @@ function updateTicketUI() {
     document.getElementById('nearPositionBadge').textContent = `#${d.position_in_line} in line`;
     document.getElementById('nearDistanceNotice').textContent = `~${Math.max(2, Math.round(d.estimated_remaining_mins * 0.7))} mins walking distance`;
 
-    // Show simulated WhatsApp Alert Card for India
+    // Show Digital Boarding Pass Alert Card
     whatsAppCard.classList.remove('hidden');
-    document.getElementById('simulatedWhatsAppPhone').textContent = d.phone;
     document.getElementById('simulatedWhatsAppText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${d.restaurant?.name || 'Partner Venue'} is almost ready (#${d.position_in_line} in line, ~${d.estimated_remaining_mins} mins). Please make your way to the host desk. Table held for 5 mins."`;
 
     smsBanner.classList.add('hidden');
@@ -1835,7 +1831,7 @@ async function dinerArrivedAction() {
       action: 'arrived',
       restaurant_id: activeTicketData ? activeTicketData.restaurant_id : 'rest-1',
       customer_name: activeTicketData ? activeTicketData.customer_name : 'Arrived Guest',
-      phone: activeTicketData ? activeTicketData.phone : '+91 98201 44521'
+      phone: ''
     };
 
     const res = await fetch('/api/queue/action', {
@@ -2269,7 +2265,7 @@ async function hostAction(ticketId, action) {
       if (action === 'notify') {
         entry.status = 'notified';
         playNotificationChime();
-        showToast("Notification sent to guest phone & WhatsApp!", "success");
+        showToast("Table Ready alert sent to guest's Digital Boarding Pass!", "success");
       } else if (action === 'seat') {
         entry.status = 'seated';
         entry.actual_wait_mins = Math.max(1, Math.floor((Date.now()/1000 - entry.joined_at)/60));

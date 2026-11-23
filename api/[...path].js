@@ -288,7 +288,7 @@ async function route(request, response, pathParts) {
     let queue = [];
     try { queue = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
-    return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
+    return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
   }
 
   if (request.method === "POST" && path === "/api/founder/verify-password") {
@@ -321,7 +321,7 @@ async function route(request, response, pathParts) {
     const seated = queueEntries.filter(entry => entry.status === "seated");
     const enriched = [];
     for (const restaurant of restaurants) enriched.push({ ...restaurant, live_stats: await getLiveStats(restaurant, queueEntries), reliability: reliabilityFallback() });
-    return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse(), recent_reviews: [] });
+    return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });
   }
 
   if (request.method === "POST" && path === "/api/queue/action") {
@@ -345,7 +345,7 @@ async function route(request, response, pathParts) {
           ticket_number: `WM-${Date.now().toString().slice(-3)}`,
           restaurant_id: restId,
           customer_name: body.customer_name || "Arrived Guest",
-          phone: body.phone || "+91 98201 44521",
+          phone: "",
           party_size: 2,
           seating_pref: "First Available",
           special_requests: "",
