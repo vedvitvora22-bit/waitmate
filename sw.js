@@ -1,6 +1,6 @@
-// cache-bust-20261123-deterministic-waits
+// cache-bust-20261123-wait-time-sync
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-deterministic-waits';
+const CACHE_NAME = 'waitmate-v20261123-wait-time-sync';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
