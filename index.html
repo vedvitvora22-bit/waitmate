@@ -538,15 +538,11 @@
               <input type="text" id="regAddress" required placeholder="e.g. Linking Road, Bandra West, Mumbai, Maharashtra 400050" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
             </div>
 
-            <!-- Row 4: Owner Details & Phone -->
+            <!-- Row 4: Owner Details -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Manager / Owner Name *</label>
                 <input type="text" id="regOwnerName" required placeholder="e.g. Suresh Kumar" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Owner Contact (+91 Phone) *</label>
-                <input type="tel" id="regOwnerPhone" required placeholder="+91 98450 12345" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
               </div>
             </div>
 
@@ -627,7 +623,7 @@
               WaitMate Executive Dashboard
             </h2>
             <p class="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Real-time oversight across all Indian partner venues. Monitor active queue depths, seating throughput, queue accuracy ratings, and anti-overpromising compliance.
+              Real-time oversight across all Mumbai partner venues. Monitor active queue depths, seating throughput, queue accuracy ratings, and anti-overpromising compliance.
             </p>
           </div>
 
@@ -639,6 +635,10 @@
             <button onclick="loadFounderDashboard()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
               <span>Refresh Network Data</span>
+            </button>
+            <button onclick="openFounderAddRestaurantModal()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>+ Add Restaurant</span>
             </button>
           </div>
         </div>
@@ -666,7 +666,7 @@
           <div>
             <span class="text-[11px] font-bold text-purple-300 uppercase block">Network Reliability</span>
             <div class="text-2xl sm:text-3xl font-black text-white mt-0.5" id="fndAvgReliability">--%</div>
-            <span class="text-[10px] text-emerald-400 font-bold">87.4% Walkaway Saved</span>
+            <span class="text-[10px] text-emerald-400 font-bold" id="fndWalkawaySaved">--% Walkaway Saved</span>
           </div>
         </div>
       </div>
@@ -712,7 +712,7 @@
             <div class="p-4 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h3 class="font-bold text-slate-900 text-sm">Live Cross-Platform Queue Stream</h3>
-                <p class="text-xs text-slate-500">Real-time incoming parties across all Indian venues</p>
+                <p class="text-xs text-slate-500">Real-time incoming parties across all Mumbai venues</p>
               </div>
               <span class="w-2 h-2 rounded-full bg-emerald-500 live-pulse"></span>
             </div>
@@ -775,7 +775,7 @@
       <!-- Modal Header -->
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
         <div>
-          <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • India</span>
+          <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • Mumbai</span>
           <h3 id="joinModalVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
           <p id="joinModalAddress" class="text-xs text-slate-400">Linking Road, Bandra West, Mumbai</p>
           <p id="joinModalAnnouncement" class="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1 hidden inline-flex items-center gap-1.5"></p>
@@ -924,7 +924,7 @@
             </div>
             <div class="text-center" id="step2">
               <div class="w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold" id="step2Icon">✓</div>
-              <span>En Route</span>
+              <span>In Queue</span>
             </div>
             <div class="text-center" id="step3">
               <div class="w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1" id="step3Icon">3</div>
@@ -954,7 +954,7 @@
             </div>
             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
               <span class="text-[10px] text-slate-400 block uppercase">Arrival</span>
-              <span id="ticketArrivalStatus" class="font-bold text-emerald-600">En Route</span>
+              <span id="ticketArrivalStatus" class="font-bold text-emerald-600">In Queue</span>
             </div>
           </div>
 
@@ -1431,6 +1431,95 @@
         <div class="flex items-center justify-end gap-2 pt-2">
           <button type="button" onclick="closeFounderChangePasswordModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Cancel</button>
           <button type="submit" id="founderChangePwdSubmitBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Founder Add New Restaurant Modal -->
+  <div id="founderAddRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Action</span>
+          <h3 class="font-heading font-extrabold text-lg text-slate-900 mt-1">Add New Restaurant to Mumbai Network</h3>
+        </div>
+        <button type="button" onclick="closeFounderAddRestaurantModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">Create a new live venue on WaitMate Mumbai. It appears across customer discovery, owner dashboards, and the founder command center with its own QR code, password lock, and dynamic wait algorithm.</p>
+      <form id="founderAddRestaurantForm" onsubmit="submitFounderAddRestaurant(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant / Brand Name *</label>
+          <input type="text" id="fndNewName" required placeholder="e.g. The Bombay Canteen" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Cuisine / Category *</label>
+          <input type="text" id="fndNewCategory" required placeholder="e.g. Coastal Seafood, Vada Pav, Irani Chai" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Venue Type *</label>
+            <select id="fndNewType" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="restaurant">🍽️ Dine-in Restaurant</option>
+              <option value="food_truck">🚚 Food Truck / Street Kiosk</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">City *</label>
+            <select id="fndNewCity" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" disabled>
+              <option value="Mumbai" selected>Mumbai, India</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Full Mumbai Street Address & Landmark *</label>
+          <input type="text" id="fndNewAddress" required placeholder="e.g. Linking Road, Bandra West, Mumbai, Maharashtra 400050" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Price Tier *</label>
+            <select id="fndNewPrice" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="₹">₹ (Budget / Street / Quick-Service)</option>
+              <option value="₹₹" selected>₹₹ (Casual Dining / Popular Dine-in)</option>
+              <option value="₹₹₹">₹₹₹ (Premium / Fine Dining)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Owner Dashboard Password *</label>
+            <input type="password" id="fndNewPassword" required minlength="4" placeholder="Create dashboard password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <p class="text-[11px] text-slate-500 mt-1">Owners use this to unlock the host stand for this venue. Minimum 4 characters.</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Total Table Capacity</label>
+            <input type="number" id="fndNewTables" min="1" max="150" value="16" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <span class="text-[10px] text-slate-400">Used by the dynamic wait algorithm</span>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Average Dining Pace (mins per party)</label>
+            <input type="number" id="fndNewPace" min="3" max="90" value="15" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <span class="text-[10px] text-slate-400">e.g. 8m Dosa/Chai · 20m Biryani · 40m Brewery</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Cover Photo URL</label>
+          <input type="url" id="fndNewPhoto" placeholder="https://images.unsplash.com/..." value="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-600 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <div class="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
+            <span>Quick Photo Presets:</span>
+            <button type="button" onclick="setFounderPresetPhoto('dosa')" class="text-orange-600 hover:underline">South Indian Dosa</button> •
+            <button type="button" onclick="setFounderPresetPhoto('biryani')" class="text-orange-600 hover:underline">Hyderabadi Biryani</button> •
+            <button type="button" onclick="setFounderPresetPhoto('kebab')" class="text-orange-600 hover:underline">Kebab / Street Food</button> •
+            <button type="button" onclick="setFounderPresetPhoto('cafe')" class="text-orange-600 hover:underline">Cafe & Bakery</button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Bio & Specialties</label>
+          <textarea id="fndNewBio" rows="2" placeholder="Tell diners about your signature dishes, history, and dining atmosphere..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="closeFounderAddRestaurantModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Cancel</button>
+          <button type="submit" id="fndAddRestaurantSubmitBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Add Restaurant to Network</button>
         </div>
       </form>
     </div>
