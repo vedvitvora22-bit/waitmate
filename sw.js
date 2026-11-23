@@ -1,4 +1,4 @@
-// cache-bust-20261123-alert-under-4m
+// cache-bust-20261123-owner-join-alert
 // WaitMate India — Service Worker
 // Handles background push notifications for "Table is Near" and "Table Ready" alerts
 

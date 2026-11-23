@@ -88,6 +88,39 @@ async function submitOwnerPassword(event) {
   }
 }
 
+// Fires exactly one alert per newly-joined waiting party on the owner's Host Stand.
+function detectNewHostJoins(venueId) {
+  if (!hostData || !Array.isArray(hostData.queue)) return;
+  const activeStatuses = ['waiting', 'delayed', 'notified'];
+  const activeTickets = hostData.queue.filter(q => q && activeStatuses.includes(q.status));
+
+  // First time viewing this venue: seed the set with already-waiting guests so opening
+  // the Host Stand does NOT spam alerts for guests who were already in the queue.
+  if (hostQueueInitializedFor !== venueId) {
+    seenHostTicketIds = new Set(activeTickets.map(q => q.id));
+    hostQueueInitializedFor = venueId;
+    return;
+  }
+
+  activeTickets.forEach(q => {
+    if (seenHostTicketIds.has(q.id)) return;
+    // Mark seen immediately so each new party triggers ONLY ONE single alert.
+    seenHostTicketIds.add(q.id);
+
+    showToast(`🔔 New party joined: ${q.customer_name} (${q.party_size} guests) • ${q.ticket_number}`, 'info');
+    playNotificationChime();
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification("New Guest in Queue • WaitMate", {
+          body: `${q.customer_name} • ${q.party_size} guests • ${q.ticket_number}`
+        });
+      } catch (e) {
+        console.warn("Browser notification failed:", e);
+      }
+    }
+  });
+}
+
 async function renderUnlockedHostStand(venueId, pwd) {
   try {
     const res = await fetch(`/api/host/queue/${venueId}`, {
@@ -110,6 +143,7 @@ async function renderUnlockedHostStand(venueId, pwd) {
       queue: q
     };
   }
+  detectNewHostJoins(venueId);
   const dirEl = document.getElementById('ownerVenueDirectory');
   const dashEl = document.getElementById('ownerDashboardContent');
   if (dirEl) dirEl.classList.add('hidden');
@@ -241,6 +275,11 @@ let selectedRestaurantId = null;
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
+
+// Host Stand new-customer join alert tracking
+let seenHostTicketIds = new Set();
+let hostQueueInitializedFor = null;
+let hostStandPollTimer = null;
 
 // Audio context for chime notifications (Synthesized Web Audio API)
 let audioCtx = null;
@@ -440,6 +479,10 @@ function updateNotifBadge() {
     badge.innerHTML = `<i data-lucide="bell" class="w-3 h-3 text-orange-400 animate-bounce"></i><span class="text-orange-400 font-bold">Enable Alerts</span>`;
     badge.className = "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 cursor-pointer hover:bg-orange-500/20 transition";
     badge.onclick = async () => {
+      if (!('Notification' in window)) {
+        showToast('In-app audio & visual alerts are active!', 'success');
+        return;
+      }
       const granted = await requestNotificationPermission();
       if (granted) {
         updateNotifBadge();
@@ -474,12 +517,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentTicketId = saved.id;
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
-      if (activeTicketData) {
+      if (activeTicketData && !['seated', 'cancelled'].includes(activeTicketData.status)) {
         const pill = document.getElementById('activeTicketPill');
         if (pill) {
           pill.classList.remove('hidden');
           pill.classList.add('flex');
         }
+        startTicketPolling();
       }
     }
   } catch (e) { /* ignore corrupt storage */ }
@@ -1012,6 +1056,8 @@ function switchInterface(role) {
     openFounderLoginModal();
     return;
   }
+  // Host Stand auto-polling only applies to the owner tab.
+  if (role !== 'owner') stopHostStandPolling();
   currentInterface = role;
   const custDiv = document.getElementById('customerInterface');
   const ownerDiv = document.getElementById('ownerInterface');
@@ -1042,6 +1088,7 @@ function switchInterface(role) {
     ownerDiv.classList.remove('hidden');
     tabOwner.className = activeTabClass;
     showOwnerDirectory();
+    startHostStandPolling();
   } else if (role === 'founder') {
     ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
     founderDiv.classList.remove('hidden');
@@ -1792,6 +1839,9 @@ async function submitJoinQueue(e) {
     startTicketPolling();
     openTicketModal();
     await loadRestaurants(); // refresh queue counts
+    // If the owner is viewing this venue's Host Stand, refresh instantly so the new
+    // join appears and fires the single new-party alert without waiting for the poll.
+    if (currentHostVenueId === restId) await loadHostStand();
 
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
@@ -1853,6 +1903,8 @@ async function submitJoinQueue(e) {
     startTicketPolling();
     openTicketModal();
     renderRestaurantsGrid();
+    // Owner viewing this venue in offline mode: refresh Host Stand + fire the alert now.
+    if (currentHostVenueId === restId) loadHostStand();
 
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
@@ -2425,6 +2477,24 @@ async function loadHostStand() {
     return;
   }
   await renderUnlockedHostStand(currentHostVenueId, savedPwd);
+}
+
+// Auto-poll the Host Stand queue every 5s while the owner tab is active so new
+// customer joins appear automatically and fire a single alert without page reloads.
+function startHostStandPolling() {
+  if (hostStandPollTimer) clearInterval(hostStandPollTimer);
+  hostStandPollTimer = setInterval(() => {
+    if (currentInterface === 'owner' && currentHostVenueId) {
+      loadHostStand();
+    }
+  }, 5000);
+}
+
+function stopHostStandPolling() {
+  if (hostStandPollTimer) {
+    clearInterval(hostStandPollTimer);
+    hostStandPollTimer = null;
+  }
 }
 
 // ==========================================
@@ -3277,6 +3347,25 @@ async function submitFounderAddRestaurant(event) {
       return;
     }
     if (!res.ok) throw new Error(data.error || 'Failed to add restaurant');
+    
+    // Persist custom venue locally for demo resilience
+    const customVenue = {
+      id: data.restaurant_id || `custom-${Date.now()}`,
+      name,
+      category,
+      type,
+      city,
+      address,
+      price_range: priceRange,
+      image_url: imageUrl,
+      description: bio || `Authentic ${category} located in ${city}.`,
+      live_stats: { queue_count: 0, estimated_wait_mins: pace, is_queue_open: true, total_waiting_people: 0 },
+      reliability: { score: 95, grade: 'A+', avg_variance_mins: 2.0, total_verified_checkins: 0, on_time_pct: 80, early_pct: 10, slight_late_pct: 8, severe_late_pct: 2 }
+    };
+    const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
+    customVenues.push(customVenue);
+    localStorage.setItem('waitmate_custom_venues', JSON.stringify(customVenues));
+
     closeFounderAddRestaurantModal();
     showToast(`🎉 "${name}" is now live on WaitMate Mumbai!`, 'success');
     await loadFounderDashboard();
@@ -3308,6 +3397,14 @@ async function founderDeleteRestaurant(venueId, venueName) {
       return;
     }
     if (!res.ok) throw new Error(data.error || 'Failed to remove restaurant');
+    
+    // Persist deleted venue ID locally for demo resilience
+    const deletedVenues = JSON.parse(localStorage.getItem('waitmate_deleted_venues') || '[]');
+    if (!deletedVenues.includes(venueId)) {
+      deletedVenues.push(venueId);
+      localStorage.setItem('waitmate_deleted_venues', JSON.stringify(deletedVenues));
+    }
+
     showToast(`✅ "${venueName}" removed from WaitMate Mumbai network.`, 'success');
     await loadFounderDashboard();
     await loadRestaurants();
