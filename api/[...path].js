@@ -220,15 +220,30 @@ function hashProfile(id) {
   return { rush: windows[h % windows.length], peakP: [3,6], peakW: [18,30], offP: [1,2], offW: [6,12] };
 }
 
+// Current 5-minute IST time bucket. Every request within the same bucket
+// shares the same bucket key, so all browsers see identical simulated waits.
+function istBucket() {
+  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  return Math.floor(istNow.getTime() / 300000);
+}
+
+// Deterministic seeded pseudo-random value keyed by restaurant.id + bucket.
+// No Math.random(): same restaurant + same bucket always yields the same draw.
+function seededDraw(key, min, max) {
+  let h = 0;
+  for (let i = 0; i < String(key).length; i++) h = (h * 31 + String(key).charCodeAt(i)) >>> 0;
+  return min + (h % (max - min + 1));
+}
+
 function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realWaitingGuests) {
   const id = restaurant.id;
   const profile = PROTO_PROFILES[id] || hashProfile(id);
+  const bucket = istBucket();
   const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const hour = istNow.getHours() + istNow.getMinutes() / 60;
   const inRush = profile.rush.some(([s, e]) => (s <= e ? (hour >= s && hour < e) : (hour >= s || hour < e)));
-  const bucket = Math.floor(Date.now() / 300000);
-  const seed = (bucket + (id.split('').reduce((a,c)=>a+c.charCodeAt(0),0))) % 1000;
-  const rand = (min, max) => min + (seed % (max - min + 1));
+  const seed = String(id) + '|' + bucket;
+  const rand = (min, max) => seededDraw(seed, min, max);
   const simulatedParties = inRush ? rand(profile.peakP[0], profile.peakP[1]) : rand(profile.offP[0], profile.offP[1]);
   const simulatedWait = inRush ? rand(profile.peakW[0], profile.peakW[1]) : rand(profile.offW[0], profile.offW[1]);
   const isOpen = Boolean(restaurant.is_queue_open);
@@ -385,7 +400,7 @@ async function route(request, response, pathParts) {
       if (existingTicket) {
         // Ticket exists, return it with the same ID
         global._tickets[body._original_ticket_id] = { ...existingTicket };
-        return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: existingTicket.estimated_wait_mins || 10, message: "Ticket re-synced." });
+        return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: existingTicket.estimated_wait_mins ?? 10, message: "Ticket re-synced." });
       }
       // If original ticket truly gone, fall through to create new (but this shouldn't happen with localStorage persistence)
     }
@@ -393,10 +408,22 @@ async function route(request, response, pathParts) {
     let firestoreEntries = [];
     try { firestoreEntries = await listCollection("queue_entries"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
+
+    // Compute the exact same baseline + live queue calculation that the
+    // restaurant discovery card (GET /api/restaurants) shows, so the Digital
+    // Boarding Pass starts at the promised wait time instead of snapping down
+    // to a hardcoded value on Join Queue.
+    const realActive = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status));
+    const realParties = realActive.length;
+    const realGuests = realActive.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
+    const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
+    const estWait = Number.isFinite(liveStats.estimated_wait_mins) ? liveStats.estimated_wait_mins : 10;
+
     const ticketId = `q-${Date.now().toString().slice(-6)}`;
     const ticketNumber = `WM-${entries.length + 101}`;
     const joinedAt = Date.now();
     const partySize = Number(body.party_size || 2);
+    const partiesAhead = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status) && Number(entry.joined_at) < joinedAt).length;
     const ticket = {
       id: ticketId,
       ticket_number: ticketNumber,
@@ -408,13 +435,14 @@ async function route(request, response, pathParts) {
       special_requests: body.special_requests || "",
       entry_type: body.entry_type || "remote",
       status: "waiting",
-      estimated_wait_mins: 10,
+      estimated_wait_mins: estWait,
       actual_wait_mins: 0,
       joined_at: joinedAt,
       notified_at: null,
       seated_at: null,
       has_arrived: false,
-      delay_mins: 0
+      delay_mins: 0,
+      parties_ahead: partiesAhead
     };
     try {
       await safeCommit([setDocument("queue_entries", ticketId, ticket)]);
@@ -426,7 +454,7 @@ async function route(request, response, pathParts) {
       }
     }
     global._tickets[ticketId] = global._tickets[ticketId] || { ...ticket };
-    return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, estimated_wait_mins: 10, message: `Spot confirmed! Your ticket is ${ticketNumber}.` });
+    return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, estimated_wait_mins: estWait, parties_ahead: partiesAhead, position_in_line: partiesAhead + 1, message: `Spot confirmed! Your ticket is ${ticketNumber}.` });
   }
 
   if (request.method === "GET" && path.startsWith("/api/queue/ticket/")) {
@@ -489,7 +517,7 @@ async function route(request, response, pathParts) {
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
-    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, Number(ticket.estimated_wait_mins || 10) + Number(ticket.delay_mins || 0) - elapsed) : 0;
+    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, Number(ticket.estimated_wait_mins ?? 10) + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
     return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
   }
 
@@ -557,7 +585,35 @@ async function route(request, response, pathParts) {
       }
     }
     let updates = ticket ? { ...ticket } : null;
-    if (body.action === "arrived") {
+    if (body.action === "seat_self") {
+      if (!ticket) {
+        const restId = body.restaurant_id || "rest-1";
+        updates = {
+          id: body.ticket_id,
+          ticket_number: `WM-${Date.now().toString().slice(-3)}`,
+          restaurant_id: restId,
+          customer_name: body.customer_name || "Arrived Guest",
+          phone: "",
+          party_size: 2,
+          seating_pref: "First Available",
+          special_requests: "",
+          entry_type: "remote",
+          status: "seated",
+          estimated_wait_mins: 8,
+          actual_wait_mins: 0,
+          joined_at: Date.now() - 300000,
+          notified_at: null,
+          seated_at: Date.now(),
+          has_arrived: true,
+          delay_mins: 0,
+          rated: false
+        };
+      } else {
+        updates.status = "seated";
+        updates.seated_at = Date.now();
+        updates.has_arrived = true;
+      }
+    } else if (body.action === "arrived") {
       if (!ticket) {
         // Cold start: ticket not in memory but diner says they arrived.
         // Return 200 OK with a reconstructed ticket so the frontend never sees "no active ticket".
@@ -956,15 +1012,35 @@ async function route(request, response, pathParts) {
       return send(response, 400, { error: "Missing required fields: restaurantId, restaurantName, rating (1-5)" });
     }
 
+    const ticketId = body.ticket_id;
+    const delta = {5:2,4:0.5,3:-0.5,2:-2,1:-3}[Number(rating)] || 0;
+    // mark ticket rated
+    if (ticketId) {
+      try {
+        const t = await getDocument("queue_entries", ticketId);
+        if (t) await safeCommit([setDocument("queue_entries", ticketId, { ...t, rated: true })]);
+      } catch (e) {}
+      if (global._tickets && global._tickets[ticketId]) global._tickets[ticketId].rated = true;
+    }
+    // recalc restaurant reliability
+    try {
+      const rest = await findRestaurantById(restaurantId);
+      if (rest) {
+        let score = Number(rest.reliability_score || 90) + delta;
+        score = Math.max(50, Math.min(99, score));
+        const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+        await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade })]);
+      }
+    } catch (e) {}
     const review = {
       id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       restaurant_id: restaurantId,
       restaurant_name: restaurantName,
       rating: Number(rating),
       comment: String(comment || '').trim(),
+      ticket_id: ticketId || null,
       created_at: Date.now()
     };
-
     try {
       await safeCommit([setDocument("reviews", review.id, review)]);
     } catch (error) {
@@ -977,7 +1053,6 @@ async function route(request, response, pathParts) {
     }
     global._reviews = global._reviews || [];
     global._reviews.push(review);
-
     return send(response, 200, { success: true, message: "Review submitted successfully!", review });
   }
 

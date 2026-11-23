@@ -1,6 +1,6 @@
-// cache-bust-20261123-announcements
+// cache-bust-20261124-seating-rating
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261123-announcements';
+const CACHE_NAME = 'waitmate-v20261124-seating-rating';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

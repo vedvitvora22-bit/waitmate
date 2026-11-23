@@ -1,5 +1,20 @@
 
 let pendingUnlockVenueId = null;
+let restaurantsRefreshTimer = null;
+let restaurantsRefreshing = false;
+
+// Refresh /api/restaurants every minute so all open browsers stay in sync
+// with the same server-computed waits and queue counts (values only change
+// per 5-minute bucket or when real diners join/leave).
+function startRestaurantsRefresh() {
+  if (restaurantsRefreshTimer) return;
+  restaurantsRefreshTimer = setInterval(async () => {
+    if (document.visibilityState !== 'visible' || restaurantsRefreshing) return;
+    restaurantsRefreshing = true;
+    try { await loadRestaurants(); } catch (err) { console.warn('Restaurants background refresh failed:', err); }
+    finally { restaurantsRefreshing = false; }
+  }, 60000);
+}
 
 function closeOwnerPasswordModal() {
   const modal = document.getElementById('ownerPasswordModal');
@@ -471,6 +486,7 @@ async function sendTableReadyNotification(ticketData) {
 document.addEventListener('DOMContentLoaded', async () => {
   await initPushNotifications();
   await loadRestaurants();
+  startRestaurantsRefresh();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking
   try {
@@ -1905,16 +1921,16 @@ async function submitJoinQueue(e) {
       special_requests: specialReq,
       entry_type: 'remote',
       status: 'waiting',
-      estimated_wait_mins: data.estimated_wait_mins || 10,
+      estimated_wait_mins: data.estimated_wait_mins ?? 10,
       actual_wait_mins: 0,
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
       has_arrived: 0,
       delay_mins: 0,
-      position_in_line: data.position_in_line || 1,
-      parties_ahead: data.parties_ahead || 0,
-      estimated_remaining_mins: data.estimated_wait_mins || 10,
+      position_in_line: data.position_in_line ?? 1,
+      parties_ahead: data.parties_ahead ?? 0,
+      estimated_remaining_mins: data.estimated_wait_mins ?? 10,
       restaurant: {
         name: selectedJoinVenue?.name || (allRestaurants.find(r => r.id === restId)?.name) || 'Unknown Venue',
         category: selectedJoinVenue?.category || '',
@@ -1948,7 +1964,7 @@ async function submitJoinQueue(e) {
   {
     console.warn("Using offline join queue fallback");
     const ticketId = `q-${Date.now().toString().slice(-6)}`;
-    const ticketNum = `WM-${Math.floor(Math.random() * 800) + 100}`;
+    const ticketNum = `WM-${String(Date.now()).slice(-6)}`;
     const targetRest = allRestaurants.find(x => x.id === restId) || fallbackRestaurants[0];
     const estWait = targetRest.live_stats ? targetRest.live_stats.estimated_wait_mins : 15;
 
