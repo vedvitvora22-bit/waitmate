@@ -509,8 +509,8 @@ async function sendPushNotification({ title, body, tag = 'waitmate', actions = [
     body,
     tag,
     renotify: true,
-    icon: icon || '/logo.svg',
-    badge: '/logo.svg',
+    icon: icon || '/logo.jpg',
+    badge: '/logo.jpg',
     vibrate: [200, 100, 200, 100, 400],
     data: { url: '/' }
   };
@@ -2672,7 +2672,7 @@ function updateTicketUI() {
   lucide.createIcons();
 }
 
-function openTicketModal() {
+const openTicketModalImpl = function openTicketModal() {
   // Try to restore from localStorage if we don't have active data in memory
   if (!activeTicketData && currentTicketId) {
     try {
@@ -2692,7 +2692,7 @@ function openTicketModal() {
   updateTicketUI();
   document.getElementById('ticketModal').classList.remove('hidden');
   lucide.createIcons();
-}
+};
 
 function closeTicketModal() {
   document.getElementById('ticketModal').classList.add('hidden');
@@ -2770,7 +2770,7 @@ async function sharePassWhatsApp() {
 }
 
 // Update the share link preview when the pass modal opens
-const _origOpenTicketModal = openTicketModal;
+const _origOpenTicketModal = openTicketModalImpl;
 function openTicketModal() {
   _origOpenTicketModal();
   const preview = document.getElementById('sharePassLinkPreview');
