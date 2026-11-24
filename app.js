@@ -248,12 +248,12 @@ function renderOwnerDirectory() {
           </div>
           <div class="p-4">
             <h4 class="font-heading font-extrabold text-base text-slate-900">${r.name}</h4>
-            <p class="text-xs text-slate-500 mt-0.5">${r.category}</p>
-            <p class="text-[11px] text-slate-400 mt-2">${r.address}</p>
+            <p class="text-xs text-slate-600 mt-0.5">${r.category}</p>
+            <p class="text-[11px] text-slate-600 mt-2">${r.address}</p>
           </div>
         </div>
         <div class="px-4 pb-4">
-          <button onclick="openProtectedHostStand('${r.id}')" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-orange-600 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2">
+            <button onclick="openProtectedHostStand('${r.id}')" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2">
             <span>${isUnlocked ? 'Open Host Stand' : 'Unlock Host Stand'}</span>
           </button>
         </div>
@@ -1515,7 +1515,7 @@ function renderFounderData(data) {
           <tr class="hover:bg-slate-50 transition">
             <td class="py-3 px-4">
               <div class="font-bold text-slate-900">${escapeHtml(r.name)}</div>
-              <div class="text-[11px] text-slate-400">📍 ${escapeHtml(r.city || 'Mumbai')} • ${escapeHtml(r.category || '')}</div>
+              <div class="text-[11px] text-slate-600">📍 ${escapeHtml(r.city || 'Mumbai')} • ${escapeHtml(r.category || '')}</div>
             </td>
             <td class="py-3 px-4">
               <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
@@ -1528,14 +1528,14 @@ function renderFounderData(data) {
             </td>
             <td class="py-3 px-4">
               <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
-              <div class="text-[10px] text-slate-500">Wait: ~${stats.estimated_wait_mins}m ${stats.has_manual_override ? '<span class="text-orange-600 font-bold ml-1">Manual Override</span>' : ''}</div>
+              <div class="text-[10px] text-slate-600">Wait: ~${stats.estimated_wait_mins}m ${stats.has_manual_override ? '<span class="text-orange-600 font-bold ml-1">Manual Override</span>' : ''}</div>
             </td>
             <td class="py-3 px-4">
               <div class="flex items-center gap-1.5">
                 <span class="font-black ${rel.score >= 85 ? 'text-emerald-700' : rel.score >= 75 ? 'text-amber-700' : 'text-rose-700'}">${rel.score}%</span>
                 <span class="badge-tag ${rel.score >= 85 ? 'bg-emerald-50 text-emerald-800' : rel.score >= 75 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'} text-[10px] font-bold">Grade ${rel.grade}</span>
               </div>
-              <div class="text-[10px] text-slate-400">± ${rel.avg_variance_mins || 1.5}m variance</div>
+              <div class="text-[10px] text-slate-600">± ${rel.avg_variance_mins || 1.5}m variance</div>
             </td>
             <td class="py-3 px-4 text-right">
               <div class="flex items-center justify-end gap-1.5">
@@ -1577,7 +1577,7 @@ function renderFounderData(data) {
         `;
       }).join('');
     } else {
-      restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400">No restaurants registered yet.</td></tr>`;
+      restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-600">No restaurants registered yet.</td></tr>`;
     }
   }
 
@@ -1605,19 +1605,19 @@ function renderFounderData(data) {
             <td class="py-2.5 px-4 font-medium text-slate-800">${escapeHtml(q.restaurant_name)}</td>
             <td class="py-2.5 px-4">
               <div class="font-bold text-slate-900">${escapeHtml(q.customer_name)}</div>
-              <div class="text-[10px] text-slate-500">${escapeHtml(q.phone || '—')}</div>
+              <div class="text-[10px] text-slate-600">${escapeHtml(q.phone || '—')}</div>
             </td>
             <td class="py-2.5 px-4">
               <div class="text-slate-800 font-medium">${Number(q.party_size || 0)} guests</div>
-              <div class="text-[10px] text-slate-500">Promised ~${q.promised_wait_mins || q.estimated_wait_mins || 0}m</div>
+              <div class="text-[10px] text-slate-600">Promised ~${q.promised_wait_mins || q.estimated_wait_mins || 0}m</div>
             </td>
             <td class="py-2.5 px-4">${statusBadge}</td>
             <td class="py-2.5 px-4 text-center">
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${channelClass}">${channelLabel}</span>
             </td>
             <td class="py-2.5 px-4 text-center">
-              <div class="text-[10px] text-slate-500 font-sans">${escapeHtml(q.joined_time_ist || '—')}</div>
-              <div class="text-[10px] ${q.notified_time_ist ? 'text-emerald-700 font-medium' : 'text-slate-400'}">${escapeHtml(q.notified_time_ist || '—')}</div>
+              <div class="text-[10px] text-slate-600 font-sans">${escapeHtml(q.joined_time_ist || '—')}</div>
+              <div class="text-[10px] ${q.notified_time_ist ? 'text-emerald-700 font-medium' : 'text-slate-600'}">${escapeHtml(q.notified_time_ist || '—')}</div>
             </td>
             <td class="py-2.5 px-4 text-right">
               <div class="flex items-center justify-end gap-1.5">
@@ -1687,10 +1687,10 @@ function renderFounderData(data) {
             }).join('')}
           </tbody>
         </table>
-        <p class="text-[10px] text-slate-500 mt-3 text-center">Delete a fake/spam review → that restaurant's Reliability Score™ is recalculated from the remaining reviews automatically.</p>
+        <p class="text-[10px] text-slate-600 mt-3 text-center">Delete a fake/spam review → that restaurant's Reliability Score™ is recalculated from the remaining reviews automatically.</p>
       `;
     } else {
-      reviewList.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No reviews logged across the network yet.</p>`;
+      reviewList.innerHTML = `<p class="text-xs text-slate-600 text-center py-6">No reviews logged across the network yet.</p>`;
     }
   }
 
@@ -1891,8 +1891,8 @@ function renderRestaurantsGrid() {
       <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200 p-8">
         <i data-lucide="store" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
         <h3 class="text-base font-bold text-slate-800">No restaurants match your filters in ${currentCity === 'all' ? 'Mumbai' : currentCity}</h3>
-        <p class="text-xs text-slate-500 mt-1">Try clearing your search filters or selecting another neighborhood.</p>
-        <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg text-xs font-bold hover:bg-orange-600">Reset Filters</button>
+        <p class="text-xs text-slate-600 mt-1">Try clearing your search filters or selecting another neighborhood.</p>
+        <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-slate-100 border border-slate-300 text-slate-800 rounded-lg text-xs font-bold hover:bg-slate-200">Reset Filters</button>
       </div>
     `;
     lucide.createIcons();
@@ -2031,7 +2031,7 @@ function renderRestaurantsGrid() {
           <!-- Bottom Action Buttons -->
           <div class="space-y-2 pt-1">
             ${isCurrentInQueue ? `
-              <button onclick="openTicketModal()" class="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20">
+              <button onclick="openTicketModal()" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-slate-900/20">
                 <i data-lucide="ticket" class="w-4 h-4"></i>
                 <span>You're in Queue! View Live Pass</span>
               </button>
@@ -2041,18 +2041,18 @@ function renderRestaurantsGrid() {
                   <i data-lucide="smartphone" class="w-3 h-3"></i>
                   <span>Remote Join</span>
                 </button>
-                <button onclick="openJoinModal('${r.id}', 'walk_in')" class="py-2.5 px-3 rounded-xl text-xs font-bold border border-slate-900 text-slate-900 bg-white hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
+                <button onclick="openJoinModal('${r.id}', 'walk_in')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-100 border border-slate-300 text-slate-800 hover:bg-slate-200 transition flex items-center justify-center gap-1.5">
                   <i data-lucide="map-pin" class="w-3 h-3"></i>
                   <span>Walk-In</span>
                 </button>
               </div>
             ` : `
-              <button disabled class="w-full py-2.5 px-4 bg-slate-100 text-slate-400 rounded-xl text-xs font-semibold cursor-not-allowed">
+              <button disabled class="w-full py-2.5 px-4 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold cursor-not-allowed">
                 Queue Currently Paused
               </button>
             `}
 
-            <button onclick="openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-500 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
+            <button onclick="openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
               <i data-lucide="bar-chart-2" class="w-3 h-3"></i>
               <span>View Verified Accuracy History & Heatmap</span>
             </button>
@@ -2571,7 +2571,7 @@ function updateTicketUI() {
   const arrivedAtEl = document.getElementById('ticketArrivedAt');
   if (arrivedAtEl) {
     arrivedAtEl.textContent = d.arrived_time_ist || '–';
-    arrivedAtEl.className = d.has_arrived ? "font-bold text-emerald-700 text-[10px] leading-tight" : "font-bold text-slate-400 text-[10px] leading-tight";
+    arrivedAtEl.className = d.has_arrived ? "font-bold text-emerald-700 text-[10px] leading-tight" : "font-bold text-slate-600 text-[10px] leading-tight";
   }
 
   // Check state transitions & "Table is Near" Alert System
@@ -2627,7 +2627,7 @@ function updateTicketUI() {
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
     document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
-    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-orange-600";
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
     const alertAcknowledged = acknowledgedAlertForTicket === d.id;
@@ -2637,7 +2637,7 @@ function updateTicketUI() {
       document.getElementById('nearPositionBadge').textContent = `#${d.position_in_line} in line`;
       document.getElementById('nearDistanceNotice').textContent = 'Priority Boarding';
 
-      livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-orange-900 shadow-sm space-y-1 border border-orange-200 bg-orange-50";
+      livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1";
       livePassAlertCard.classList.remove('hidden');
       document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is less than 4 mins away. Please make your way to the host desk. Table held for 5 mins."`;
 
@@ -3347,7 +3347,7 @@ function renderReviews(reviews) {
             <span class="text-amber-400 text-sm font-medium">${stars}</span>
             <span class="text-slate-600 font-medium">${review.rating} / 5</span>
           </div>
-          <span class="text-slate-400 text-[10px]">${timeAgo}</span>
+          <span class="text-slate-600 text-[10px]">${timeAgo}</span>
         </div>
         ${review.comment ? `<p class="text-slate-700 font-medium italic">"${review.comment}"</p>` : ''}
       </div>
@@ -3450,8 +3450,8 @@ function renderHourlyPatternChart(patterns) {
             <div class="w-full h-16 bg-slate-200 rounded-md overflow-hidden flex flex-col justify-end my-1 p-0.5">
               <div class="w-full ${barColor} rounded-sm" style="height: ${heightPct}%" title="${p.hour}: ${p.avg_wait}m wait (${p.reliability}% accurate)"></div>
             </div>
-            <span class="text-slate-500 font-medium truncate w-full">${p.hour.replace(':00', '')}</span>
-            <span class="text-[9px] text-slate-400">${p.rush_level}</span>
+            <span class="text-slate-600 font-medium truncate w-full">${p.hour.replace(':00', '')}</span>
+            <span class="text-[9px] text-slate-600">${p.rush_level}</span>
           </div>
         `;
       }).join('')}
@@ -3696,7 +3696,7 @@ function renderHostDashboard() {
   if (queue.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="py-8 text-center text-slate-400">
+        <td colspan="6" class="py-8 text-center text-slate-600">
           <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
           Queue is empty right now. Walk-ins and remote diners will appear here automatically.
         </td>
@@ -3733,7 +3733,7 @@ function renderHostDashboard() {
             <span>${q.ticket_number}</span>
           </div>
           <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border ${channelClass}">${channelLabel}</span>
-          <div class="text-[10px] text-slate-500 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
+          <div class="text-[10px] text-slate-600 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
         </td>
 
         <td class="py-3 px-4">
@@ -3743,19 +3743,19 @@ function renderHostDashboard() {
 
         <td class="py-3 px-4">
           <div class="font-semibold text-slate-800">${q.party_size} Guests</div>
-          <div class="text-[10px] text-slate-500">${q.seating_pref}</div>
+          <div class="text-[10px] text-slate-600">${q.seating_pref}</div>
         </td>
 
         <td class="py-3 px-4">
           <div class="text-slate-800 font-medium">Joined ${join.relative}</div>
-          <div class="text-[10px] text-slate-500">Promised: ${q.estimated_wait_mins}m</div>
+          <div class="text-[10px] text-slate-600">Promised: ${q.estimated_wait_mins}m</div>
         </td>
 
         <td class="py-3 px-4">
           <div class="flex items-center gap-1.5 flex-wrap">
             ${statusPill}
             ${idx < 2 && ['waiting', 'delayed'].includes(q.status) ? `<span class="badge-tag bg-orange-100 text-orange-900 border border-orange-300 font-bold animate-pulse">🚨 Near (#${idx+1})</span>` : ''}
-            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `<span class="text-[10px] text-slate-400">En route</span>`}
+            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `            <span class="text-[10px] text-slate-600">En route</span>`}
           </div>
         </td>
 
@@ -3763,7 +3763,7 @@ function renderHostDashboard() {
           ${q.status !== 'seated' && q.status !== 'no_show' ? `
             <div class="flex items-center justify-end gap-1.5">
               ${q.status !== 'notified' ? `
-                <button onclick="hostAction('${q.id}', 'notify')" class="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1">
+                <button onclick="hostAction('${q.id}', 'notify')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1">
                   <i data-lucide="bell" class="w-3 h-3"></i> Notify
                 </button>
               ` : ''}
@@ -3777,7 +3777,7 @@ function renderHostDashboard() {
               </button>
             </div>
           ` : `
-            <span class="text-[11px] text-slate-400 font-medium">Completed</span>
+            <span class="text-[11px] text-slate-600 font-medium">Completed</span>
           `}
         </td>
 
@@ -3991,7 +3991,7 @@ function showToast(message, type = "info") {
   if (type === 'info') icon = 'info';
 
   toast.innerHTML = `
-    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 text-orange-400"></i>
+    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : type === 'error' ? 'text-rose-400' : 'text-slate-300'}"></i>
     <span class="flex-1">${message}</span>
   `;
 

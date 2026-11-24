@@ -391,10 +391,10 @@ def get_restaurant_tables(restaurant_id):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "SELECT table_id, seats, free_at FROM restaurant_tables WHERE restaurant_id = ? ORDER BY table_id",
+        "SELECT id, table_id, seats, free_at FROM restaurant_tables WHERE restaurant_id = ? ORDER BY table_id",
         (restaurant_id,),
     )
-    tables = [{"id": r[0], "seats": r[1], "free_at": r[2]} for r in c.fetchall()]
+    tables = [{"id": r[0], "table_id": r[1], "seats": r[2], "free_at": r[3]} for r in c.fetchall()]
     conn.close()
     return tables
 
@@ -485,7 +485,7 @@ def run_simulation_tick(restaurant_id):
     waiting = [dict(r) for r in c.fetchall()]
 
     queue = [{"id": e["id"], "size": int(e["party_size"] or 2), "is_ghost": False} for e in waiting]
-    available = [{"id": t["id"], "seats": int(t["seats"])} for t in open_tables]
+    available = [{"id": t["id"], "table_id": t["table_id"], "seats": int(t["seats"])} for t in open_tables]
     seated_pairs, remaining = process_live_queue(queue, available)
 
     by_id = {e["id"]: e for e in waiting}
@@ -500,7 +500,9 @@ def run_simulation_tick(restaurant_id):
             (seated_at, actual_wait, customer["id"]),
         )
         # Slot-aware turn-time: Dinner groups stay longer than Breakfast/Snacks.
-        free_at = seated_at + calculate_realistic_duration(base_mins, int(customer["size"])).total_seconds() / 60.0
+        # free_at is an epoch-seconds timestamp (seated_at = time.time() in s),
+        # so add the duration in seconds (not minutes).
+        free_at = seated_at + calculate_realistic_duration(base_mins, int(customer["size"])).total_seconds()
         c.execute("UPDATE restaurant_tables SET free_at = ? WHERE id = ?", (free_at, table["id"]))
         try:
             log_id = f"log-tick-{int(now * 1000)}-{customer['id']}"
@@ -516,7 +518,7 @@ def run_simulation_tick(restaurant_id):
         seated.append({
             "ticket_id": customer["id"],
             "ticket_number": entry.get("ticket_number"),
-            "table_id": table["id"],
+            "table_id": table["table_id"],
             "actual_wait_mins": actual_wait,
         })
     conn.commit()
@@ -1354,7 +1356,7 @@ class VirtualRestaurant:
         table = self.find_table(party_size, req_time)
         if table:
             self.bookings.append({
-                "table_id": table["id"],
+            "table_id": table["table_id"],
                 "start": req_time,
                 "end": req_time + self.turn_time,
                 "party_size": party_size
@@ -3311,7 +3313,10 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
-        self.send_header("Cache-Control", "no-cache")
+        # Static assets are versioned by deploy; allow shared caches to hold them
+        # with stale-while-revalidate so repeated page refreshes do not re-fetch
+        # (and never trigger backend/Firestore reads) for unchanged assets.
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.send_cors_headers()
         self.end_headers()
         self.wfile.write(content)

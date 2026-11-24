@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "build": "python3 -m py_compile server.py && echo \"WaitMate build OK: server.py compiles cleanly\"",
+    "test": "python3 tests/test_seating_engine.py"
+  },
   "dependencies": {
     "jsdom": "^31.0.1"
   }
