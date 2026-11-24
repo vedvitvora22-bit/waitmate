@@ -1243,13 +1243,10 @@ function switchInterface(role) {
 
   custDiv.classList.add('hidden');
   ownerDiv.classList.add('hidden');
-  founderDiv.classList.add('hidden');
+  if (founderDiv) founderDiv.classList.add('hidden');
 
   tabCust.className = inactiveTabClass;
   tabOwner.className = inactiveTabClass;
-  // Founder tab stays hidden from the public navbar at all times.
-  tabFounder.className = inactiveTabClass.replace(/\bflex\b/, '') + ' hidden';
-  tabFounder.style.display = 'none';
 
   if (role === 'customer') {
     custDiv.classList.remove('hidden');
@@ -1262,9 +1259,11 @@ function switchInterface(role) {
     startHostStandPolling();
   } else if (role === 'founder') {
     ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
-    founderDiv.classList.remove('hidden');
-    tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
-    tabFounder.style.display = 'none';
+    if (founderDiv) founderDiv.classList.remove('hidden');
+    if (tabFounder) {
+      tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
+      tabFounder.style.display = 'none';
+    }
     loadFounderDashboard();
   }
   lucide.createIcons();
