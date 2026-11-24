@@ -1,6 +1,6 @@
-// cache-bust-20261124-container-clip-v32
+// cache-bust-20261124-qr-print-v33
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-container-clip-v32';
+const CACHE_NAME = 'waitmate-v20261124-qr-print-v33';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

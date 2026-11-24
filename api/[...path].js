@@ -12,6 +12,13 @@ const {
 
 const now = Date.now();
 
+// In-memory cooldown guard (module scope) so warm Vercel invocations can short-
+// circuit repeated simulation ticks on back-to-back requests without touching
+// Firestore. Mirrors the persisted last_simulated_at cooldown (120s here is
+// intentionally stricter than the 60s persistence guard).
+global._lastSimCache = global._lastSimCache || {};
+const LAST_SIM_COOLDOWN_MS = 120000;
+
 global._tickets = global._tickets || {};
 global._customRestaurants = global._customRestaurants || [];
 global._deletedRestaurantIds = global._deletedRestaurantIds || [];
@@ -507,6 +514,12 @@ async function clearAllGhostEntriesJs(restaurantId) {
 async function runSimulationTick(restaurantId) {
   try {
     const now = Date.now();
+    // Fast in-memory guard: skip before any Firestore work if a tick already ran
+    // within the 120s cooldown window (prevents back-to-back repeat ticks).
+    const lastCached = Number((global._lastSimCache || {})[restaurantId] || 0);
+    if (lastCached && now - lastCached < LAST_SIM_COOLDOWN_MS) {
+      return { skipped: true, cooldown_remaining: Math.ceil((LAST_SIM_COOLDOWN_MS - (now - lastCached)) / 1000) };
+    }
     const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return { skipped: true, error: 'restaurant not found' };
     const last = Number(restaurant.last_simulated_at || 0);
@@ -603,6 +616,7 @@ async function runSimulationTick(restaurantId) {
     global._pwdMap[restaurantId].tables = tables;
     global._pwdMap[restaurantId].available_tables = openCount;
     global._pwdMap[restaurantId].last_simulated_at = now;
+    global._lastSimCache[restaurantId] = now;
 
     return {
       skipped: false,
@@ -734,12 +748,15 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "GET" && path === "/api/restaurants") {
-    // Diagnostics: surface the active storage backend and Firestore error reason
+    // Lightweight storage-status probe: only verify that Firebase auth is
+    // reachable (the access token is cached at module scope, so this is ~free
+    // when warm). We deliberately DO NOT do a separate listCollection() probe
+    // here — ensureRestaurants() below is the single authoritative restaurants
+    // read, so the hot GET path issues one restaurants query, not two.
     let storageStatus = "firebase";
     let storageReason = null;
     try {
       await getAccessToken();
-      await listCollection("restaurants");
     } catch (error) {
       storageStatus = "memory";
       storageReason = String(error.message || error || "Firebase unreachable").slice(0, 250);
@@ -748,11 +765,9 @@ async function route(request, response, pathParts) {
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
-    // Trigger the simulation tick on page loads (60-second cooldown per
-    // restaurant is enforced inside runSimulationTick).
-    await Promise.all(restaurants.map(async (restaurant) => {
-      try { await runSimulationTick(restaurant.id); } catch { /* keep response intact */ }
-    }));
+    // GET stays a fast, non-blocking read: simulation ticks are NOT triggered
+    // here. The frontend fires a background POST /api/queue/simulate-tick when
+    // a tick is actually due, so customer page loads never block on writes.
     let globalAnnouncement = "";
     try {
       const g = await getDocument("settings", "global_announcement");
@@ -780,7 +795,7 @@ async function route(request, response, pathParts) {
     const id = normalized[normalized.length - 1];
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    try { await runSimulationTick(id); } catch { /* keep response intact */ }
+    // GET stays a fast, non-blocking read — no simulation tick here.
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });

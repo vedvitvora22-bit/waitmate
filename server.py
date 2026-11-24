@@ -1888,10 +1888,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Restaurant not found"}, 404)
                 return
 
-            try:
-                run_simulation_tick(rest_id)
-            except Exception:
-                pass
+            # GET stays a fast, non-blocking read — no simulation tick here.
 
             r_dict = dict(row)
             r_dict.pop("password_hash", None)

@@ -2,6 +2,8 @@
 let pendingUnlockVenueId = null;
 let restaurantsRefreshTimer = null;
 let restaurantsRefreshing = false;
+let lastSimTriggerAt = 0;
+const SIM_TRIGGER_COOLDOWN_MS = 110000;
 
 const PASSWORD_MODAL_IDS = [
   'ownerPasswordModal',
@@ -34,17 +36,38 @@ function togglePasswordVisibility(inputId) {
   if (window.lucide) lucide.createIcons();
 }
 
-// Refresh /api/restaurants every minute so all open browsers stay in sync
-// with the same server-computed waits and queue counts (values only change
-// per 5-minute bucket or when real diners join/leave).
+// Refresh /api/restaurants every 15s so all open browsers stay in sync with the
+// same server-computed waits and queue counts. Polling is skipped entirely while
+// the tab is hidden (document.hidden) to avoid wasting radio/battery in the
+// background.
 function startRestaurantsRefresh() {
   if (restaurantsRefreshTimer) return;
   restaurantsRefreshTimer = setInterval(async () => {
-    if (document.visibilityState !== 'visible' || restaurantsRefreshing || isAnyPasswordModalOpen()) return;
+    if (document.hidden || document.visibilityState !== 'visible' || restaurantsRefreshing || isAnyPasswordModalOpen()) return;
     restaurantsRefreshing = true;
     try { await loadRestaurants(); } catch (err) { console.warn('Restaurants background refresh failed:', err); }
     finally { restaurantsRefreshing = false; }
-  }, 60000);
+  }, 15000);
+}
+
+// Fire a non-blocking background POST to advance the simulation tick. The GET
+// /api/restaurants response renders instantly; this runs out-of-band and never
+// blocks the UI. Throttled client-side (and again server-side via the 120s
+// LAST_SIM_CACHE cooldown) so back-to-back requests don't re-run ticks.
+function triggerBackgroundSimTick() {
+  if (document.hidden) return;
+  const now = Date.now();
+  if (now - lastSimTriggerAt < SIM_TRIGGER_COOLDOWN_MS) return;
+  lastSimTriggerAt = now;
+  const ids = (allRestaurants || []).map(r => r.id).filter(Boolean);
+  ids.forEach(id => {
+    fetch('/api/queue/simulate-tick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurant_id: id }),
+      keepalive: true
+    }).catch(() => {});
+  });
 }
 
 function closeOwnerPasswordModal() {
@@ -1526,7 +1549,7 @@ function renderFounderData(data) {
                   <i data-lucide="edit-3" class="w-3 h-3"></i> Edit
                 </button>
                 <button onclick="openVenueQrModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
-                  <i data-lucide="qr-code" class="w-3 h-3"></i> QR
+                  <i data-lucide="qr-code" class="w-3 h-3"></i> <span>Generate QR Code</span>
                 </button>
                 <button onclick="openFounderResetPasswordModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
                   <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
@@ -1739,6 +1762,8 @@ async function loadRestaurants() {
     
     renderRestaurantsGrid();
     populateHostDropdown();
+    // Cards are already on screen; advance the simulation out-of-band.
+    triggerBackgroundSimTick();
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
@@ -3563,121 +3588,6 @@ function stopHostStandPolling() {
     clearInterval(hostStandPollTimer);
     hostStandPollTimer = null;
   }
-}
-
-// ==========================================
-// Venue QR Poster + Deep Link Helpers
-// ==========================================
-function openVenueQrModal(venueId) {
-  currentVenueQrId = venueId;
-  const r = allRestaurants.find(x => x.id === venueId) || fallbackRestaurants.find(x => x.id === venueId);
-  if (!r) return;
-  document.getElementById('qrModalVenueName').textContent = r.name;
-  document.getElementById('qrModalVenueAddress').textContent = r.address || '';
-  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(venueId)}`;
-  const directUrlEl = document.getElementById('qrModalDirectUrl');
-  if (directUrlEl) directUrlEl.textContent = qrUrl;
-  const canvas = document.getElementById('venueQrCodeCanvas');
-  canvas.innerHTML = '';
-  new QRCode(canvas, {
-    text: qrUrl,
-    width: 240,
-    height: 240,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.H
-  });
-  document.getElementById('venueQrModal').classList.remove('hidden');
-}
-
-function closeVenueQrModal() {
-  document.getElementById('venueQrModal').classList.add('hidden');
-  currentVenueQrId = null;
-}
-
-function copyVenueQrLink() {
-  if (!currentVenueQrId) return;
-  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(currentVenueQrId)}`;
-  navigator.clipboard.writeText(qrUrl).then(() => {
-    showToast('Venue QR link copied to clipboard', 'success');
-  }).catch(() => {
-    showToast('Unable to copy link', 'error');
-  });
-}
-
-function downloadVenueQrPng() {
-  const venueId = currentVenueQrId;
-  if (!venueId) return;
-  const r = allRestaurants.find(x => x.id === venueId) || fallbackRestaurants.find(x => x.id === venueId);
-  if (!r) return;
-  const qrUrl = `${window.location.origin}/?venue=${encodeURIComponent(venueId)}`;
-  const name = r.name || 'Restaurant';
-  const address = r.address || 'Mumbai, India';
-
-  const card = document.createElement('canvas');
-  card.width = 600;
-  card.height = 760;
-  const ctx = card.getContext('2d');
-
-  // White printable poster card
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, 600, 760);
-
-  // WaitMate India header band
-  ctx.fillStyle = '#ea580c';
-  ctx.fillRect(0, 0, 600, 80);
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('WaitMate India', 300, 52);
-  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillStyle = '#f97316';
-  ctx.fillText('Live Restaurant Queues • Mumbai', 300, 70);
-
-  // Restaurant name and Mumbai address
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 24px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(name, 300, 142);
-  ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillStyle = '#475569';
-  ctx.fillText(address, 300, 168);
-  ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillStyle = '#64748b';
-  ctx.fillText('Scan to join the live queue', 300, 196);
-
-  // Rendered QR code image from the live modal canvas
-  const qrBox = document.getElementById('venueQrCodeCanvas');
-  const qrImg = qrBox ? (qrBox.querySelector('img') || qrBox.querySelector('canvas')) : null;
-  if (qrImg) {
-    ctx.drawImage(qrImg, 180, 216, 240, 240);
-  } else {
-    const qrCanvas = document.createElement('canvas');
-    qrCanvas.width = 240;
-    qrCanvas.height = 240;
-    new QRCode(qrCanvas, {
-      text: qrUrl,
-      width: 240,
-      height: 240,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.H
-    });
-    ctx.drawImage(qrCanvas, 180, 216, 240, 240);
-  }
-
-  // Footer
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('Scan with Phone Camera to Join Live Queue', 300, 498);
-  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillStyle = '#64748b';
-  ctx.fillText(qrUrl, 300, 522);
-  ctx.fillText('WaitMate India • Zero waiting, verified seating.', 300, 544);
-
-  const link = document.createElement('a');
-  link.download = `waitmate-${venueId}-qr.png`;
-  link.href = card.toDataURL('image/png');
-  link.click();
 }
 
 // ==========================================

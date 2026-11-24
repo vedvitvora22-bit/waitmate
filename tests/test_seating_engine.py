@@ -353,6 +353,10 @@ for _ in range(50):
         assert_le(mins, max_expected, f"size {size}: duration {mins:.1f} above max {max_expected}")
 
 # Slot-aware: Dinner base_mins=50 should produce longer turns than Breakfast base_mins=25
+# Seeded for determinism (calculate_realistic_duration adds +/- human variance,
+# so an unseeded single-draw comparison is flaky; the average check below is the
+# robust invariant). Mirrors the seeding already used in sections 7 and 8.
+random.seed(42)
 for _ in range(30):
     d_breakfast = server.calculate_realistic_duration(25, 4)
     d_dinner = server.calculate_realistic_duration(50, 4)
