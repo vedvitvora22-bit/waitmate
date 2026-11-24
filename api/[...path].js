@@ -1545,7 +1545,7 @@ async function route(request, response, pathParts) {
     try {
       const entries = await fetchQueueEntries();
       const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
-        delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
+        delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
       }));
       if (deletes.length) await safeCommit(deletes);
     } catch (error) {
@@ -1554,7 +1554,7 @@ async function route(request, response, pathParts) {
 
     // Remove the restaurant document from Firestore
     try {
-      await safeCommit([{ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
+      await safeCommit([{ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
     } catch (error) {
       if (!(error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError)) throw error;
     }
@@ -1989,7 +1989,7 @@ async function route(request, response, pathParts) {
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => e.restaurant_id === restaurantId && ["waiting","notified","delayed"].includes(e.status));
-    const deletes = targets.map(e => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+    const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
     for (const e of targets) delete global._tickets[e.id];
     return send(response, 200, { success: true, message: `Cleared ${targets.length} active ticket(s) from the venue queue.`, cleared: targets.length });
@@ -2002,7 +2002,7 @@ async function route(request, response, pathParts) {
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => !["waiting","notified","delayed"].includes(e.status));
-    const deletes = targets.map(e => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+    const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
     for (const e of targets) delete global._tickets[e.id];
     return send(response, 200, { success: true, message: `Purged ${targets.length} stale/test queue entry(ies).`, purged: targets.length });
@@ -2044,7 +2044,7 @@ async function route(request, response, pathParts) {
     const target = firestoreReviews.find(r => r.id === reviewId);
     const restaurantId = target ? target.restaurant_id : null;
     const deletes = [];
-    if (target) deletes.push({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/reviews/${encodeSegment(reviewId)}` } });
+    if (target) deletes.push({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/reviews/${encodeSegment(reviewId)}` } });
     if (deletes.length) await safeCommit(deletes);
     global._reviews = (global._reviews || []).filter(r => r.id !== reviewId);
     // Also un-rate the linked ticket so it can't be double counted
