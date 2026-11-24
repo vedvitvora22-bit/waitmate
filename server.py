@@ -168,6 +168,204 @@ def fs_list(collection):
 
 
 # ------------------------------------------------------------------
+# IN-MEMORY RESTAURANT PASSWORD CACHE + OFFLINE FALLBACKS
+#
+# The Host Stand password check must degrade gracefully: a wrong password
+# must NEVER surface "Quota exceeded" (or any 500) and the correct password
+# must ALWAYS unlock even when Firestore is down or quota-limited.
+# ------------------------------------------------------------------
+
+# rest_id -> {"hash": <sha256 hex>, "cached_at": <epoch seconds>}
+RESTAURANT_PWD_CACHE = {}
+# How long a cached password hash is considered fresh (seconds). A fresh
+# cache entry is verified without even touching Firestore.
+RESTAURANT_PWD_CACHE_TTL_SECONDS = 300
+
+
+def _parse_fallback_passwords(raw):
+    """Parse FALLBACK_RESTAURANT_PASSWORDS env var: JSON map of
+    rest_id -> plaintext password. Returns {} when unset/invalid."""
+    raw = (raw or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
+FALLBACK_RESTAURANT_PASSWORDS = _parse_fallback_passwords(
+    os.environ.get("FALLBACK_RESTAURANT_PASSWORDS")
+)
+FOUNDER_OVERRIDE_PASSWORD = os.environ.get("FOUNDER_OVERRIDE_PASSWORD", "").strip() or None
+
+
+def _check_password_hash(provided, stored_hash):
+    """Compare a plaintext password against a stored sha256 hash (mirrors
+    verify_password() casing rules)."""
+    provided = str(provided or "").strip()
+    if not provided or not stored_hash:
+        return False
+    lower = provided.lower()
+    return hash_password(provided) == stored_hash or hash_password(lower) == stored_hash
+
+
+def _is_firestore_unavailable_error(exc):
+    """True for Firestore quota / connection failures that must be swallowed
+    and never surfaced as a 500 to the frontend (429 / 500 / 503 /
+    ResourceExhausted / connection errors)."""
+    text = str(exc).lower()
+    if any(token in text for token in (
+        "quota", "resourceexhausted", "resource exhausted", "429", "500",
+        "503", "unavailable", "deadline", "connection", "network",
+    )):
+        return True
+    try:
+        from google.api_core import exceptions as _exc
+        if isinstance(exc, (
+            _exc.ResourceExhausted, _exc.InternalServerError,
+            _exc.ServiceUnavailable, _exc.TooManyRequests,
+            _exc.GoogleAPICallError,
+        )):
+            return True
+    except Exception:
+        pass
+    try:
+        import grpc
+        if isinstance(exc, grpc.RpcError) and exc.code() in (
+            grpc.StatusCode.RESOURCE_EXHAUSTED, grpc.StatusCode.INTERNAL,
+            grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED,
+        ):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _firestore_read_restaurant_password(rest_id):
+    """Read password_hash from the restaurants document in Firestore.
+
+    Returns the hash string, None when the document has no password, or
+    raises when the Firestore read fails (quota / connection / etc.). The
+    caller is responsible for wrapping this in try/except.
+    """
+    db = get_firestore()
+    if db is None:
+        raise ConnectionError("firestore client unavailable")
+    doc = db.collection("restaurants").document(str(rest_id)).get()
+    data = doc.to_dict() or {}
+    return data.get("password_hash") or None
+
+
+def _verify_password_against_fallbacks(rest_id, password):
+    """Verify password against offline fallbacks when Firestore is down:
+    (a) last known in-memory cached hash (stale cache acceptable),
+    (b) FALLBACK_RESTAURANT_PASSWORDS env map,
+    (c) FOUNDER_OVERRIDE_PASSWORD master password."""
+    provided = str(password or "").strip()
+    if not provided:
+        return False
+
+    # (a) last known in-memory cached password for that restaurant
+    cached = RESTAURANT_PWD_CACHE.get(rest_id)
+    if cached and cached.get("hash") and _check_password_hash(provided, cached["hash"]):
+        return True
+
+    # (b) per-restaurant fallback password map from env
+    env_pwd = FALLBACK_RESTAURANT_PASSWORDS.get(rest_id)
+    if env_pwd and provided == env_pwd.strip():
+        return True
+
+    # (c) founder/master override password valid for any restaurant
+    if FOUNDER_OVERRIDE_PASSWORD and provided == FOUNDER_OVERRIDE_PASSWORD:
+        return True
+
+    return False
+
+
+def _verify_password_against_sqlite(rest_id, password):
+    """Last-resort check against the local SQLite password_hash column."""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT password_hash FROM restaurants WHERE id = ?", (rest_id,))
+        row = c.fetchone()
+        conn.close()
+    except Exception:
+        return False
+    if not row:
+        return False
+    return _check_password_hash(password, row["password_hash"])
+
+
+def verify_host_password(rest_id, password):
+    """Verify a Host Stand restaurant password without ever leaking Firestore
+    failures to the frontend.
+
+    Resolution order:
+      1. Fresh in-memory cache entry -> verified directly, no Firestore call.
+      2. Firestore read inside try/except -> on success, cache + verify.
+      3. Firestore down/quota-limited -> fallbacks: stale cache, env fallback
+         map / master override, then local SQLite password_hash.
+
+    Returns (http_status, body_dict). Wrong password always yields
+    401 {"success": False, "error": "Incorrect password"} -- never "Quota
+    exceeded". Correct password always yields 200 {"success": True, ...}.
+    """
+    if not rest_id:
+        return 400, {"success": False, "error": "restaurant_id is required"}
+
+    password = str(password or "")
+    now = time.time()
+
+    # 1. In-memory cache first: verify directly without querying Firestore.
+    cached = RESTAURANT_PWD_CACHE.get(rest_id)
+    if cached and now - float(cached.get("cached_at", 0)) < RESTAURANT_PWD_CACHE_TTL_SECONDS:
+        if cached.get("hash") and _check_password_hash(password, cached["hash"]):
+            return 200, {"success": True, "message": "Unlocked."}
+        return 401, {"success": False, "error": "Incorrect password"}
+
+    # 2. Firestore read wrapped in try/except; quota/connection errors are
+    #    swallowed and never returned as a 500 to the frontend.
+    fs_hash = None
+    try:
+        fs_hash = _firestore_read_restaurant_password(rest_id)
+    except Exception as exc:
+        print(f"[verify-password] Firestore read failed for {rest_id}: {type(exc).__name__}: {exc}")
+        fs_hash = None
+
+    if fs_hash is not None:
+        RESTAURANT_PWD_CACHE[rest_id] = {"hash": fs_hash, "cached_at": now}
+        if _check_password_hash(password, fs_hash):
+            return 200, {"success": True, "message": "Unlocked."}
+        return 401, {"success": False, "error": "Incorrect password"}
+
+    # 3. Firestore down / quota-limited: verify against offline fallbacks.
+    if _verify_password_against_fallbacks(rest_id, password):
+        return 200, {"success": True, "message": "Unlocked."}
+    if _verify_password_against_sqlite(rest_id, password):
+        return 200, {"success": True, "message": "Unlocked."}
+
+    # Unknown restaurant (not even in local SQLite) -> 404; wrong password for
+    # a known restaurant -> 401 Incorrect password (never "Quota exceeded").
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT id FROM restaurants WHERE id = ?", (rest_id,))
+        exists = c.fetchone() is not None
+        conn.close()
+    except Exception:
+        exists = False
+    if exists:
+        return 401, {"success": False, "error": "Incorrect password"}
+    return 404, {"success": False, "error": "Restaurant not found"}
+
+
+
+# ------------------------------------------------------------------
 # Unified IST Meal-Slot Engine (Breakfast, Lunch, Snacks, Dinner,
 # Late Night, Off Hours). Each slot defines base turn-time minutes,
 # ghost spawn chance, and max ghosts for the Mumbai ghost-queue simulator.
@@ -466,6 +664,16 @@ def run_simulation_tick(restaurant_id):
     spawn_chance = meal_slot_config["spawn_chance"]
     max_ghosts = meal_slot_config["max_ghosts"]
 
+    # Mumbai IST peak-rush surge (Lunch 13:00-15:00, Snacks 17:30-19:00,
+    # Dinner 20:00-22:30): elevate ghost spawn intensity during peak windows
+    # so the simulator reflects real Mumbai dinner/lunch rushes.
+    peak_dt = datetime.fromtimestamp(now, tz=ZoneInfo("Asia/Kolkata"))
+    traffic = get_mumbai_traffic_config(dt=peak_dt)
+    is_mumbai_peak = traffic["bucket"] != "Off-Peak" or is_mumbai_peak_window(dt=peak_dt)
+    if is_mumbai_peak:
+        spawn_chance = min(1.0, spawn_chance * traffic["multiplier"])
+        max_ghosts = int(max_ghosts * traffic["multiplier"])
+
     # 1. Free expired tables
     tables = get_restaurant_tables(restaurant_id)
     freed = 0
@@ -593,6 +801,8 @@ def run_simulation_tick(restaurant_id):
         "base_mins": base_mins,
         "spawn_chance": spawn_chance,
         "max_ghosts": max_ghosts,
+        "mumbai_peak": is_mumbai_peak,
+        "traffic_multiplier": traffic["multiplier"],
         "freed_tables": freed,
         "open_tables": open_count_after,
         "seated": seated,
@@ -1682,6 +1892,12 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_cors_headers()
+        if status == 200:
+            # Let shared/CDN caches hold successful read responses briefly so
+            # repeated page refreshes do not re-hit SQLite/Firestore and burn
+            # the daily Firestore read quota. Browsers still use no-store via
+            # fetch() so live data stays fresh for the end user.
+            self.send_header("Cache-Control", "public, s-maxage=60, stale-while-revalidate=60")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
@@ -2559,23 +2775,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             data = self.read_json_body()
             rest_id = data.get("restaurant_id")
             password = data.get("password", "")
-
-            conn = get_db()
-            c = conn.cursor()
-            c.execute('SELECT * FROM restaurants WHERE id = ?', (rest_id,))
-            rest_row = c.fetchone()
-            conn.close()
-
-            if not rest_row:
-                self.send_json({"error": "Restaurant not found"}, 404)
-                return
-
-            rest = dict(rest_row)
-            if not verify_password(rest, password):
-                self.send_json({"error": "Incorrect restaurant password."}, 401)
-                return
-
-            self.send_json({"success": True, "message": "Access granted."})
+            status, body = verify_host_password(rest_id, password)
+            self.send_json(body, status)
             return
 
         # API: Host Stand Actions
