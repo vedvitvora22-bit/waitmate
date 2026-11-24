@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/favicon.svg">
+  <link rel="icon" href="/logo.jpg" type="image/jpeg">
+  <link rel="apple-touch-icon" href="/logo.jpg">
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -83,7 +83,7 @@
       
       <!-- Brand Logo -->
       <div class="flex items-center gap-3">
-        <img src="/logo.svg" alt="WaitMate" class="w-9 h-9 shrink-0" width="36" height="36">
+        <img src="/logo.jpg" alt="WaitMate" class="w-9 h-9 shrink-0" width="36" height="36">
         <div>
           <div class="flex items-center gap-1.5">
             <span class="font-heading font-extrabold text-xl tracking-tight text-slate-900">Wait<span class="text-emerald-500">Mate</span></span>
@@ -97,9 +97,10 @@
       <div class="flex items-center gap-2 sm:gap-3">
         
         <!-- Active Ticket Pill (Appears when customer has active queue ticket) -->
-        <button id="activeTicketPill" onclick="openTicketModal()" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/25 hover:bg-orange-600 transition animate-bounce">
+        <button id="activeTicketPill" onclick="openActiveBoardingPass()" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/25 hover:bg-orange-600 hover:brightness-110 active:scale-[0.98] transition cursor-pointer">
           <span class="w-2 h-2 rounded-full bg-white live-pulse"></span>
           <span>My Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
+          <span class="ml-1 text-[10px] opacity-80">View →</span>
         </button>
 
         <!-- 3-Way Role Mode Switcher Tabs -->
@@ -689,7 +690,7 @@
       <!-- Modal Header -->
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
         <div>
-          <span class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • Mumbai</span>
+          <span id="joinModalEyebrow" class="text-orange-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • Mumbai</span>
           <h3 id="joinModalVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
           <p id="joinModalAddress" class="text-xs text-slate-400">Linking Road, Bandra West, Mumbai</p>
           <p id="joinModalAnnouncement" class="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1 hidden inline-flex items-center gap-1.5"></p>
@@ -806,7 +807,7 @@
 
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+              <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
               <div>
                 <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
                 <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian & Filter Coffee</p>
@@ -1331,7 +1332,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+          <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">Owner Access</span>
           <h3 id="ownerChangePwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Change Dashboard Password</h3>
         </div>
@@ -1371,7 +1372,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+          <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Action</span>
           <h3 id="founderResetPwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Reset Restaurant Password</h3>
         </div>
@@ -1403,7 +1404,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+          <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">Owner Access</span>
           <h3 id="ownerPwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Unlock Restaurant Dashboard</h3>
         </div>
@@ -1433,7 +1434,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+          <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Access</span>
           <h3 class="font-heading font-extrabold text-lg text-slate-900 mt-1">Founder Command Center</h3>
         </div>
@@ -1463,7 +1464,7 @@
   <footer class="mt-auto border-t border-slate-200 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
       <div class="flex items-center gap-2 select-none">
-        <img src="/logo.svg" alt="WaitMate" class="w-7 h-7 shrink-0" width="28" height="28">
+        <img src="/logo.jpg" alt="WaitMate" class="w-7 h-7 shrink-0" width="28" height="28">
         <span id="footerBrandText" class="font-heading font-extrabold text-base tracking-tight text-slate-800 cursor-default">Wait<span class="text-emerald-500">Mate</span> <span class="text-[10px] font-black text-slate-400 align-middle">INDIA</span></span>
       </div>
       <p class="text-[11px] text-slate-500 font-medium">Zero waiting, verified seating. &copy; 2026 WaitMate India.</p>
@@ -1475,7 +1476,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.svg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
+          <img src="/logo.jpg" alt="WaitMate" class="w-6 h-6 shrink-0" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Access</span>
           <h3 class="font-heading font-extrabold text-lg text-slate-900 mt-1">Change Founder Password</h3>
         </div>

@@ -319,6 +319,7 @@ let currentInterface = 'customer'; // 'customer', 'owner', 'founder'
 let currentTicketId = localStorage.getItem('waitmate_ticket_id') || null;
 let activeTicketData = null;
 let joinChannel = 'remote'; // 'remote' or 'walk_in' — set in Join Queue modal
+let isSubmitting = false;   // submission lock for the Join Queue submit button
 let pollTimer = null;
 
 let acknowledgedAlertForTicket = null;
@@ -2103,11 +2104,24 @@ function openJoinModal(venueId, channelOverride = null) {
   // Reset defaults (empty fields for clean customer entry)
   setPartySize(2);
   setSeatingPref('First Available');
-  document.getElementById('joinCustomerName').value = '';
+  const savedName = localStorage.getItem('waitmate_guest_name') || '';
+  document.getElementById('joinCustomerName').value = savedName;
   document.getElementById('joinSpecialReq').value = '';
 
   // Entry channel: walk-in when opened via a venue QR/deep link, remote otherwise
-  setJoinChannel(channelOverride === 'walk_in' ? 'walk_in' : 'remote');
+  const channel = channelOverride === 'walk_in' ? 'walk_in' : 'remote';
+  setJoinChannel(channel);
+
+  // Reset submission lock + button state so the modal never opens stuck
+  // on "Securing Queue Spot..." from a previous interrupted submission.
+  isSubmitting = false;
+  const joinSubmitBtn = document.getElementById('joinSubmitBtn');
+  if (joinSubmitBtn) {
+    joinSubmitBtn.disabled = false;
+    joinSubmitBtn.innerHTML = channel === 'walk_in'
+      ? `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Confirm Walk-In Check-In</span>`
+      : `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Remote Queue</span>`;
+  }
 
   document.getElementById('joinQueueModal').classList.remove('hidden');
   lucide.createIcons();
@@ -2130,6 +2144,10 @@ function setJoinChannel(channel) {
       badge.textContent = 'Remote Join (On my way)';
       badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-700 border-slate-200 bg-slate-200/50";
     }
+  }
+  const eyebrow = document.getElementById('joinModalEyebrow');
+  if (eyebrow) {
+    eyebrow.textContent = channel === 'walk_in' ? 'WALK-IN CHECK-IN • MUMBAI' : 'REMOTE QUEUE ENTRY • MUMBAI';
   }
 }
 
@@ -2175,8 +2193,10 @@ async function submitJoinQueue(e) {
     showToast("Please enter your name", "error");
     return;
   }
+  localStorage.setItem('waitmate_guest_name', name);
 
   const submitBtn = document.getElementById('joinSubmitBtn');
+  isSubmitting = true;
   submitBtn.disabled = true;
   submitBtn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Securing Queue Spot...`;
   lucide.createIcons();
@@ -2210,6 +2230,7 @@ async function submitJoinQueue(e) {
     try { data = await res.json(); } catch (parseErr) { data = {}; }
 
     if (!res.ok) {
+      isSubmitting = false;
       submitBtn.disabled = false;
       submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
       lucide.createIcons();
@@ -2486,15 +2507,18 @@ function updateTicketUI() {
   if (graceUntil && Date.now() > graceUntil) graceUntil = null;
   lastTicketStatus = d.status;
 
-  if (['waiting', 'notified', 'delayed'].includes(d.status)) {
-    pill.classList.remove('hidden');
-    pill.classList.add('flex');
-    document.getElementById('activePillVenue').textContent = venueName;
-    document.getElementById('activePillPos').textContent = `#${d.position_in_line}`;
-    localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+  if (d.status === 'notified') {
+    pill.classList.add('emerald-pulse');
+    pill.classList.remove('bg-orange-500');
+    pill.classList.add('bg-emerald-500');
+    pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-white live-pulse"></span><span>Table Ready! Tap to View Pass →</span>`;
   } else {
-    pill.classList.add('hidden');
+    pill.classList.remove('emerald-pulse');
+    pill.classList.remove('bg-emerald-500');
+    pill.classList.add('bg-orange-500');
   }
+  pill.classList.remove('hidden');
+  pill.classList.add('flex');
 
   if (d.status === 'seated' || d.status === 'cancelled') {
     localStorage.removeItem('waitmate_active_ticket');

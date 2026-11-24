@@ -1034,6 +1034,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         elif path == "/logo.svg":
             self.serve_static_file(os.path.join(BASE_DIR, "logo.svg"), "image/svg+xml; charset=utf-8")
             return
+        elif path == "/logo.jpg":
+            self.serve_static_file(os.path.join(BASE_DIR, "logo.jpg"), "image/jpeg")
+            return
         elif path == "/favicon.svg":
             self.serve_static_file(os.path.join(BASE_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8")
             return

@@ -458,7 +458,7 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
   let estimated = 0;
   if (isOpen) {
     if (restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined) {
-      estimated = Number(restaurant.manual_override_wait);
+      estimated = Math.min(60, Number(restaurant.manual_override_wait));
     } else {
       const basePrep = Number(restaurant.base_prep_time || 10);
       const tables = Number(restaurant.total_tables || 1);
