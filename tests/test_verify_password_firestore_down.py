@@ -229,10 +229,14 @@ def run():
             print("  PASS: env fallback map unlocks / rejects offline")
 
             # ===============================================================
-            section("F. UNKNOWN RESTAURANT -> 404")
+            section("F. UNKNOWN RESTAURANT -> 404 (FIRESTORE REACHABLE, NO DOC)")
             # ===============================================================
-            status, body = server.verify_host_password("does-not-exist", "anything")
-            assert_eq(status, 404, "unknown restaurant -> 404")
+            server._firestore_read_restaurant_password = lambda rid: server._FIRESTORE_MISSING
+            try:
+                status, body = server.verify_host_password("does-not-exist", "anything")
+                assert_eq(status, 404, "unknown restaurant -> 404")
+            finally:
+                server._firestore_read_restaurant_password = boom
             print("  PASS: unknown restaurant -> 404 Restaurant not found")
 
         finally:
