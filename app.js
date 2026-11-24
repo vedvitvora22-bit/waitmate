@@ -356,7 +356,7 @@ let selectedRestaurantId = null;
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
-let hostShowGhostGuests = true;
+let hostShowGhostGuests = false;
 
 // Seated-rating gating: a diner can only rate once they've been seated, and only once per visit
 let ratedTickets = new Set();
@@ -599,6 +599,76 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
+
+  // ---- App Launch Splash Screen: pre-load data while logo is centered ----
+  const splashEl = document.getElementById('appSplash');
+  const splashParams = new URLSearchParams(window.location.search);
+  const splashPath = (window.location.pathname || '/').toLowerCase();
+  const splashHash = (window.location.hash || '').toLowerCase();
+  const isDeepLink = splashPath === '/founder' || splashPath.endsWith('/founder')
+    || splashParams.get('founder') === '1' || splashHash === '#founder'
+    || splashParams.get('passId') || splashParams.get('ticket') || splashParams.get('venue');
+
+  // Fire initial data fetches immediately while the splash is visible.
+  const dataPromise = (async () => {
+    try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
+    try { await loadActivePassData(); } catch (err) { console.warn('Splash pre-load: active pass failed', err); }
+    // Reviews are fetched per-venue on demand, but seed the cache with the first
+    // venue so the Customer grid is populated without an extra round-trip.
+    try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
+  })();
+
+  // Minimum splash visibility (1500ms) AND wait for data to resolve, capped at 3500ms.
+  // Deep links (founder / passId / ticket / venue) shorten this to 400ms for snappy checks.
+  const MIN_SPLASH_MS = isDeepLink ? 400 : 1500;
+  const MAX_SPLASH_MS = isDeepLink ? 1200 : 3500;
+  const splashReadyAt = Date.now() + MIN_SPLASH_MS;
+  const splashDeadline = Date.now() + MAX_SPLASH_MS;
+
+  let splashResolved = false;
+
+  // Safety timeout: never trap the user on the splash screen past the deadline,
+  // even if a fetch hangs on a slow/flaky mobile network.
+  const deadlineTimer = setTimeout(() => {
+    if (splashResolved) return;
+    splashResolved = true;
+    finishSplash();
+  }, Math.max(0, splashDeadline - Date.now()) + 1);
+
+  function finishSplash() {
+    clearTimeout(deadlineTimer);
+    if (splashEl) {
+      splashEl.classList.add('is-fading');
+      setTimeout(() => {
+        splashEl.classList.add('is-hidden');
+        splashEl.classList.remove('is-fading');
+        splashEl.setAttribute('aria-hidden', 'true');
+      }, 300);
+    }
+  }
+
+  // Wait for the minimum visibility window AND the data promise to settle, but
+  // never past the safety deadline. The data promise keeps running in the
+  // background so a slow fetch still populates the grid after the splash fades.
+  const waitForMin = new Promise(resolve => {
+    const tick = () => {
+      if (Date.now() >= splashReadyAt) return resolve();
+      setTimeout(tick, 40);
+    };
+    tick();
+  });
+
+  await Promise.race([
+    Promise.all([dataPromise, waitForMin.then(() => dataPromise)]),
+    new Promise(resolve => setTimeout(resolve, Math.max(0, splashDeadline - Date.now()) + 1)),
+  ]).then(() => { if (!splashResolved) { splashResolved = true; finishSplash(); } });
+
+  // Allow the fade-out animation to play before continuing initialization.
+  if (splashEl) {
+    await new Promise(resolve => setTimeout(resolve, 320));
+  }
+  // ---- end splash ----
+
   try {
     const _params = new URLSearchParams(window.location.search);
     const _hash = (window.location.hash || '').toLowerCase();
@@ -614,7 +684,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (e) {}
   await initPushNotifications();
-  await loadRestaurants();
   loadFavorites();
   startRestaurantsRefresh();
 
@@ -1800,24 +1869,6 @@ async function founderToggleQueue(restId) {
 // ==========================================
 
 // Client fallback guard: if the midnight IST cron is missed, the first active
-// session after 12:00 AM IST batch-deletes ghost records from previous IST dates
-// while leaving real walk-in/remote records untouched.
-async function ensureGhostCleanupGuard() {
-  try {
-    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const last = localStorage.getItem('wm_lastGhostCleanupDateIST');
-    if (last === todayKey) return;
-    const res = await fetch('/api/cleanup-ghosts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than_ist_date: todayKey }), cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.deleted > 0) console.log(`[ghost cleanup] removed ${data.deleted} ghost record(s) from before ${todayKey}`);
-      localStorage.setItem('wm_lastGhostCleanupDateIST', todayKey);
-    }
-  } catch (e) {
-    console.warn('[ghost cleanup guard] skipped:', e.message || e);
-  }
-}
 
 async function loadRestaurants() {
   try {
@@ -1855,14 +1906,13 @@ async function loadRestaurants() {
     populateHostDropdown();
     // Cards are already on screen; advance the simulation out-of-band.
     triggerBackgroundSimTick();
-    // Daily ghost-guest cleanup guard (runs after midnight IST if cron missed).
-    await ensureGhostCleanupGuard();
+
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
     const banner = document.getElementById('globalNetworkBanner');
     if (banner) banner.classList.add('hidden');
-    
+
     // Merge custom venues even in fallback mode
     const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
     if (customVenues.length > 0) {
@@ -1878,6 +1928,52 @@ async function loadRestaurants() {
     renderRestaurantsGrid();
     populateHostDropdown();
   }
+}
+
+// ---- Splash Screen Data Pre-Loading Helpers ----
+// These run in parallel with the splash overlay so the Customer grid and active
+// pass are fully populated the moment the splash fades out — no empty placeholders.
+
+// Cache of per-venue reviews keyed by venue id. Populated eagerly on load so
+// opening a venue detail card never shows a "Loading reviews..." flash.
+const preloadedReviews = {};
+let reviewsPreloadPromise = null;
+
+async function preloadVenueReviews() {
+  if (reviewsPreloadPromise) return reviewsPreloadPromise;
+  reviewsPreloadPromise = (async () => {
+    const ids = (allRestaurants && allRestaurants.length)
+      ? allRestaurants.slice(0, 6).map(r => r.id).filter(Boolean)
+      : [];
+    await Promise.all(ids.map(async (id) => {
+      if (preloadedReviews[id]) return;
+      try {
+        const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        preloadedReviews[id] = data.reviews || [];
+      } catch (err) { /* non-critical: reviews render lazily on demand */ }
+    }));
+  })();
+  return reviewsPreloadPromise;
+}
+
+// Active Pass (shared ticket deep-link) check: resolves quickly so a
+// ?passId=... or ?ticket=... link feels instant. No-op when no pass is present.
+async function loadActivePassData() {
+  const params = new URLSearchParams(window.location.search);
+  const passId = params.get('passId') || params.get('ticket');
+  if (!passId) return;
+  try {
+    const res = await fetch(`/api/queue/ticket/${encodeURIComponent(passId)}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      // Surface the shared pass to the UI if the friend-pass tracker is present.
+      if (typeof openFriendPassTracker === 'function') {
+        window.__wmPreloadedPass = { id: passId, data };
+      }
+    }
+  } catch (err) { /* non-critical: deep link will re-fetch on demand */ }
 }
 
 // City filter
@@ -3450,28 +3546,6 @@ function initFbStarRating() {
   });
 }
 
-function updateFbStarDisplay(rating) {
-  const starBtns = document.querySelectorAll('#fbStarRating .fb-star-btn');
-  const ratingDisplay = document.getElementById('fbStarDisplay');
-
-  starBtns.forEach(btn => {
-    const star = parseInt(btn.dataset.star);
-    if (star <= rating) {
-      btn.classList.remove('text-slate-300');
-      btn.classList.add('text-amber-400');
-    } else {
-      btn.classList.remove('text-amber-400');
-      btn.classList.add('text-slate-300');
-    }
-  });
-
-  if (rating > 0) {
-    ratingDisplay.textContent = `${rating} / 5`;
-  } else {
-    ratingDisplay.textContent = '';
-  }
-}
-
 function resetReviewWidget() {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
   const ratingInput = document.getElementById('reviewRatingInput');
@@ -3493,10 +3567,18 @@ async function fetchAndRenderReviews(venueId) {
   const container = document.getElementById('relRecentReviews');
   container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">Loading reviews...</p>`;
 
+  // Serve from the splash pre-load cache when available so the venue detail
+  // card never shows a "Loading reviews..." flash on a warm load.
+  if (preloadedReviews[venueId]) {
+    renderReviews(preloadedReviews[venueId]);
+    return;
+  }
+
   try {
     const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(venueId)}`);
     if (res.ok) {
       const data = await res.json();
+      preloadedReviews[venueId] = data.reviews || [];
       renderReviews(data.reviews || []);
     } else {
       container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">No reviews yet.</p>`;
@@ -3779,67 +3861,7 @@ function toggleHostGhostGuests(checked) {
   renderHostDashboard();
 }
 
-async function spawnGhostGuests() {
-  if (!currentHostVenueId) {
-    showToast("No venue selected. Open a Host Stand first.", "info");
-    return;
-  }
-  const btn = document.getElementById('hostSpawnGhostBtn');
-  const original = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i> <span>Spawning...</span>`;
-  lucide.createIcons();
-  try {
-    // Founder master password (prompt once per session). In DEMO_MODE the
-    // backend skips the password check entirely so a single click spawns ghosts.
-    let pwd = sessionStorage.getItem('wm_founder_password') || '';
-    let useFounderHeader = true;
-    try {
-      const probe = await fetch('/api/health/storage', { cache: 'no-store' });
-      if (probe.ok) {
-        const info = await probe.json();
-        if (info && info.demo_mode) {
-          useFounderHeader = false;
-          pwd = '';
-        }
-      }
-    } catch (_) { /* ignore probe errors */ }
 
-    if (!pwd && useFounderHeader) {
-      pwd = window.prompt("Founder verification required\nEnter the Founder Master Password to spawn AI ghost guests:");
-      if (pwd === null) return;
-      pwd = pwd.trim();
-      if (!pwd) { showToast("Founder password required.", "info"); return; }
-      sessionStorage.setItem('wm_founder_password', pwd);
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (useFounderHeader && pwd) headers['X-Founder-Password'] = pwd;
-
-    const res = await fetch('/api/queue/spawn-ghosts', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ restaurant_id: currentHostVenueId, count: 5 }),
-      cache: 'no-store'
-    });
-    if (res.status === 401) {
-      sessionStorage.removeItem('wm_founder_password');
-      showToast("Incorrect Founder Master Password.", "error");
-      return;
-    }
-    if (!res.ok) throw new Error('Spawn request failed');
-    const data = await res.json();
-    showToast(`Spawned ${data.spawned} AI ghost guest(s) at ${data.restaurant_id}.`, "success");
-    await loadHostStand();
-  } catch (err) {
-    console.warn("Spawn ghost guests error:", err);
-    showToast("Failed to spawn AI ghost guests.", "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = original;
-    lucide.createIcons();
-  }
-}
 
 async function loadHostStand() {
   if (isAnyPasswordModalOpen()) return;

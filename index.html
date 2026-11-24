@@ -53,6 +53,23 @@
 </head>
 <body class="bg-[#F8FAFC] text-slate-900 min-h-[100dvh] flex flex-col antialiased selection:bg-orange-600 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
 
+  <!-- App Launch Splash Screen -->
+  <div id="appSplash" class="splash-overlay" aria-live="polite" aria-busy="true">
+    <div class="splash-inner">
+      <img id="splashLogo" src="/logo.png?v=2" alt="WaitMate" class="splash-logo" width="96" height="96">
+      <div class="splash-brand">
+        <span class="splash-title">Wait<span class="splash-title-accent">Mate</span></span>
+        <span class="splash-badge">INDIA</span>
+      </div>
+      <p class="splash-tagline">Zero waiting, verified seating.</p>
+      <div class="splash-loader" aria-hidden="true">
+        <span class="splash-loader-dot"></span>
+        <span class="splash-loader-dot"></span>
+        <span class="splash-loader-dot"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- Top App Live Status Bar -->
   <div class="bg-slate-900 text-slate-200 text-xs py-2 px-4 border-b border-slate-800">
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
@@ -451,14 +468,6 @@
               <span class="text-xs text-slate-600">(Ranked by arrival / priority)</span>
             </div>
             <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
-                <input type="checkbox" id="hostGhostToggle" checked onchange="toggleHostGhostGuests(this.checked)" class="w-3.5 h-3.5 accent-purple-600">
-                Show AI Ghost Guests
-              </label>
-              <button onclick="spawnGhostGuests()" id="hostSpawnGhostBtn" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold transition flex items-center gap-1" title="Dev: manually spawn AI ghost guests for this venue (Founder auth required)">
-                <i data-lucide="plus-circle" class="w-3 h-3"></i>
-                <span>Spawn AI Ghosts</span>
-              </button>
               <span class="text-xs text-slate-600">Live queue sync</span>
             </div>
           </div>

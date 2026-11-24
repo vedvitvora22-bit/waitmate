@@ -1068,47 +1068,123 @@ function seededDraw(key, min, max) {
   return min + (h % (max - min + 1));
 }
 
-function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realWaitingGuests) {
-  const id = restaurant.id;
-  const profile = PROTO_PROFILES[id] || hashProfile(id);
-  const bucket = istBucket();
-  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const hour = istNow.getHours() + istNow.getMinutes() / 60;
-  const mealTimes = Array.isArray(restaurant.meal_times) && restaurant.meal_times.length ? restaurant.meal_times : null;
-  const rushWindows = mealTimes ? rushWindowsForMealTimes(mealTimes) : profile.rush;
-  const inRush = rushWindows.some(([s, e]) => (s <= e ? (hour >= s && hour < e) : (hour >= s || hour < e)));
-  const seed = String(id) + '|' + bucket;
-  const rand = (min, max) => seededDraw(seed, min, max);
-  const simulatedParties = inRush ? rand(profile.peakP[0], profile.peakP[1]) : rand(profile.offP[0], profile.offP[1]);
-  const simulatedWait = inRush ? rand(profile.peakW[0], profile.peakW[1]) : rand(profile.offW[0], profile.offP ? profile.offW[1] : profile.offW[1]);
-  const isOpen = Boolean(restaurant.is_queue_open);
-  const realP = Number(realWaitingParties || 0);
-  const realG = Number(realWaitingGuests || 0);
-  const totalActiveParties = isOpen ? (simulatedParties + realP) : 0;
-  const osc = (bucket % 3) - 1;
-  let estimated = 0;
-  if (isOpen) {
-    if (restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined) {
-      estimated = Math.min(60, Number(restaurant.manual_override_wait));
-    } else {
-      const basePrep = Number(restaurant.base_prep_time || 10);
-      const tables = Number(restaurant.total_tables || 1);
-      estimated = Math.max(0, Math.round((totalActiveParties * basePrep * 0.6) + simulatedWait * 0.4 + osc * 2));
-      if (totalActiveParties === 0) estimated = 0;
-      estimated = Math.min(estimated, 60);
+// Baseline active parties per IST meal slot (pure math, zero Firestore writes).
+const MEAL_SLOT_BASELINE_PARTIES = {
+  breakfast: [2, 5],
+  lunch: [6, 12],
+  snacks: [2, 6],
+  dinner: [8, 15],
+  late_night: [1, 4],
+  off_hours: [0, 1],
+};
+const MEAL_SLOT_BASELINE_WAIT = {
+  breakfast: [3, 8],
+  lunch: [10, 22],
+  snacks: [5, 12],
+  dinner: [15, 30],
+  late_night: [2, 10],
+  off_hours: [0, 3],
+};
+const AVG_PARTY_SIZE = 2.4;
+
+function istMealSlot() {
+  // Asia/Kolkata meal slots: Breakfast 7:00-11:00, Lunch 12:00-15:30,
+  // Snacks 16:00-19:00, Dinner 19:30-23:00, Late Night 23:00-3:00, Off 3:00-7:00
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const t = d.getHours() * 60 + d.getMinutes();
+  const slots = [
+    { name: 'breakfast', start: 7 * 60, end: 11 * 60 },
+    { name: 'lunch', start: 12 * 60, end: 15 * 60 + 30 },
+    { name: 'snacks', start: 16 * 60, end: 19 * 60 },
+    { name: 'dinner', start: 19 * 60 + 30, end: 23 * 60 },
+    { name: 'late_night', start: 23 * 60, end: 26 * 60 }, // wraps past midnight
+    { name: 'off_hours', start: 3 * 60, end: 7 * 60 },
+  ];
+  // late_night wraps past midnight (23:00-03:00)
+  for (const s of slots) {
+    if (s.name === 'late_night') {
+      if (t >= s.start || t < s.end - 24 * 60) return s.name;
+    } else if (t >= s.start && t < s.end) {
+      return s.name;
     }
   }
+  return 'off_hours';
+}
+
+function seededDrawRange(id, bucket, mn, mx) {
+  if (mx <= mn) return mn;
+  let h = 0;
+  const key = String(id) + '|' + bucket;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return mn + (h % (mx - mn + 1));
+}
+
+function restaurantMealTimes(restaurant) {
+  const mt = restaurant.meal_times;
+  return Array.isArray(mt) && mt.length ? mt : null;
+}
+
+function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realWaitingGuests) {
+  const id = restaurant.id;
+  const isOpen = Boolean(restaurant.is_queue_open);
+  const manual = restaurant.manual_override_wait;
+  const basePrep = Number(restaurant.base_prep_time || 10);
+  const realP = Number(realWaitingParties || 0);
+  const realG = Number(realWaitingGuests || 0);
+
+  const slot = istMealSlot();
+  const bucket = istBucket();
+  const mealTimes = restaurantMealTimes(restaurant);
+  const servesCurrent = !mealTimes || mealTimes.includes(capitalizeSlot(slot));
+
+  let baselineParties = 0;
+  let baselineDiners = 0;
+  let baselineWait = 0;
+  if (servesCurrent) {
+    const pr = MEAL_SLOT_BASELINE_PARTIES[slot] || [0, 1];
+    baselineParties = seededDrawRange(id, bucket, pr[0], pr[1]);
+    const wr = MEAL_SLOT_BASELINE_WAIT[slot] || [0, 3];
+    baselineWait = seededDrawRange(id, bucket, wr[0], wr[1]);
+    baselineDiners = Math.round(baselineParties * AVG_PARTY_SIZE);
+  }
+
+  const totalActiveParties = isOpen ? (baselineParties + realP) : 0;
+
+  let estimated = 0;
+  if (!isOpen) {
+    estimated = 0;
+  } else if (manual !== null && manual !== undefined) {
+    estimated = Math.min(60, Number(manual));
+  } else {
+    const totalTables = Number(restaurant.total_tables || 1);
+    const openTables = totalTables > 0 ? totalTables : 1;
+    const partiesAhead = Math.max(0, totalActiveParties - openTables);
+    estimated = Math.floor(partiesAhead * (basePrep * 0.6)) + baselineWait;
+    if (totalActiveParties === 0) estimated = servesCurrent ? baselineWait : 0;
+    estimated = Math.min(60, Math.max(0, estimated));
+  }
+
+  const activeDiners = baselineDiners + realG;
   return {
     queue_count: totalActiveParties,
-    total_waiting_people: totalActiveParties * 2 + realG,
+    total_waiting_people: realG,
     estimated_wait_mins: estimated,
     algorithmic_wait_mins: estimated,
-    has_manual_override: restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined,
+    has_manual_override: manual !== null && manual !== undefined,
     is_queue_open: isOpen,
     active_parties: totalActiveParties,
-    active_diners: totalActiveParties * 2 + realG
+    active_guests: activeDiners,
+    baseline_parties: baselineParties,
+    baseline_diners: baselineDiners,
+    meal_slot: slot,
+    serves_current_slot: servesCurrent,
   };
 }
+
+function capitalizeSlot(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_([a-z])/g, (_, c) => ' ' + c.toUpperCase());
+}
+
 
 async function getLiveStats(restaurant, queueEntries) {
   const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting", "notified", "delayed"].includes(entry.status));
@@ -1206,14 +1282,18 @@ async function route(request, response, pathParts) {
       const realParties = realActive.length;
       const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
       // Exact live sum of active diners (waiting + notified + seated) across all
-      // sources (walk-in, remote, ghost) currently in Firebase.
+      // sources (walk-in, remote) currently in Firebase.
       const activeDinerEntries = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","seated"].includes(entry.status));
-      const activeDiners = activeDinerEntries.reduce((s,e)=>s+Number(e.party_size||0),0);
+      const realActiveDiners = activeDinerEntries.reduce((s,e)=>s+Number(e.party_size||0),0);
       const liveStats = await getLiveStats(restaurant, queueEntries);
-      // Override queue_count and total_waiting_people with exact Firebase counts
+      // IST time-of-day meal-slot baseline (pure math, zero Firestore writes) with
+      // real Firebase testers added on top. Drives realistic wait times and the
+      // "X diners live" counter.
+      const metrics = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
+      liveStats.estimated_wait_mins = metrics.estimated_wait_mins;
       liveStats.queue_count = realParties;
       liveStats.total_waiting_people = realGuests;
-      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: activeDiners, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
+      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: metrics.baseline_diners + realActiveDiners, baseline_diners: metrics.baseline_diners, meal_slot: metrics.meal_slot, serves_current_slot: metrics.serves_current_slot, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
     }
     const body = { 
       restaurants: result,
@@ -1237,11 +1317,10 @@ async function route(request, response, pathParts) {
     const availableTables = Number(restaurant.available_tables || 0);
     const basePrep = Number(restaurant.base_prep_time || 12);
     const manual = restaurant.manual_override_wait;
-    let algorithmic = 0;
-    if (queueCount > 0 && availableTables > 0) {
-      const partiesAheadOfOpenTables = Math.max(0, queueCount - availableTables);
-      algorithmic = Math.floor((partiesAheadOfOpenTables / availableTables) * basePrep);
-    }
+    // IST time-of-day baseline (pure math, zero Firestore writes) layered on top
+    // of the real stored queue count for realistic wait times by meal window.
+    const metrics = computePrototypeRestaurantMetrics(restaurant, queueCount, totalWaitingPeople);
+    let algorithmic = metrics.estimated_wait_mins;
     const estimated = manual !== null && manual !== undefined ? Math.min(60, Number(manual)) : algorithmic;
     const liveStats = {
       queue_count: queueCount,
@@ -1265,37 +1344,24 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, cleared, restaurant_id: body.restaurant_id });
   }
 
-  // Platform-wide ghost maintenance: align live ghost count to the IST
-  // time-of-day target and advance the Waiting -> Notified -> Seated -> Cleared
-  // lifecycle. Throttled server-side (~55s).
+  // Ghost-guest endpoints are disabled: ENABLE_GHOST_GUESTS is false. The
+  // backend never creates, clones, or advances ghost documents in Firestore.
+  // These routes are kept as no-ops so existing callers do not break.
   if (request.method === "POST" && path === "/api/queue/maintain-ghosts") {
-    const mt = await maintainGhostPlatformTarget();
-    const lc = await advanceGhostLifecycle();
-    return send(response, 200, { success: true, ...mt, ...lc });
+    return send(response, 200, { success: true, ghost_guests_disabled: true, ghosts_spawned: 0, ghosts_advanced: 0 });
   }
 
-  // Daily ghost-guest cleanup (12:00 AM IST). Batch-deletes every queue_entries
-  // document whose source === "ghost" in chunks of up to 450 deletes per commit.
-  // Real walk-in/remote records are never touched. Used by Vercel Cron and by the
-  // client fallback guard when a midnight cron is missed.
+  // Purge-only: deletes existing ghost/cloned queue_entries documents so
+  // queue_entries contains only real walk-in and remote customers. Never
+  // creates or advances ghosts. Used for the one-time existing-ghost cleanup.
   if (request.method === "POST" && path === "/api/cleanup-ghosts") {
     const olderThan = body && body.older_than_ist_date ? String(body.older_than_ist_date) : null;
     const result = await cleanupGhostGuests({ olderThanIstDate: olderThan });
     return send(response, 200, { success: true, ...result, cleaned_at_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST' });
   }
 
-// Dev/demo: manually spawn AI ghost guests for a restaurant (bypasses peak-window
-// and zero-open-tables gating). Founder-only — requires X-Founder-Password header,
-// OR DEMO_MODE=true (set via env var) so anyone can trigger a demo spawn.
-if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
-    const demoMode = String(process.env.DEMO_MODE || "").toLowerCase() === "true";
-    if (!demoMode && !isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
-    const restaurant = await findRestaurantById(body.restaurant_id);
-    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    const count = Number(body.count || 5);
-    const result = await spawnGhostsForRestaurant(body.restaurant_id, restaurant, count);
-    return send(response, 200, { success: true, restaurant_id: body.restaurant_id, demo_mode: demoMode, ...result });
+  if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
+    return send(response, 200, { success: true, ghost_guests_disabled: true, spawned: 0, restaurant_id: body.restaurant_id || null });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
@@ -1499,7 +1565,9 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     let firestoreQueue = [];
     try { firestoreQueue = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queue = allQueueEntries(firestoreQueue);
-    const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+    // Host Stand is 100% real-guest only: exclude any ghost/synthetic entries.
+    const realQueue = queue.filter(entry => !(entry.is_ghost || entry.isGhost || entry.entry_type === 'ghost' || (entry.source || '').toLowerCase() === 'ghost'));
+    const entries = realQueue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
   }
 
@@ -1530,17 +1598,18 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
-    const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
-    const seated = queueEntries.filter(entry => entry.status === "seated");
+    const isGhostEntry = (e) => e.is_ghost || e.isGhost || e.entry_type === 'ghost' || (e.source || '').toLowerCase() === 'ghost';
+    const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status) && !isGhostEntry(entry));
+    const seated = queueEntries.filter(entry => entry.status === "seated" && !isGhostEntry(entry));
     const enriched = [];
     for (const restaurant of restaurants) {
-      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
+      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status) && !isGhostEntry(entry));
       const liveStats = await getLiveStats(restaurant, queueEntries);
       liveStats.queue_count = realActive.length;
       liveStats.total_waiting_people = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
       enriched.push({ ...restaurant, live_stats: liveStats, reliability: reliabilityFromRestaurant(restaurant) });
     }
-    return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });
+    return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.filter(q => !isGhostEntry(q)).slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });
   }
 
   if (request.method === "POST" && path === "/api/queue/action") {
@@ -2384,7 +2453,7 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const restaurants = await ensureRestaurants();
     const byId = {};
     for (const r of restaurants) byId[r.id] = r;
-    const active = entries.filter(e => ["waiting","notified","delayed"].includes(e.status));
+    const active = entries.filter(e => ["waiting","notified","delayed"].includes(e.status) && !(e.is_ghost || e.isGhost || e.entry_type === 'ghost' || (e.source || '').toLowerCase() === 'ghost'));
     const enriched = active.map(e => {
       const r = byId[e.restaurant_id];
       return {

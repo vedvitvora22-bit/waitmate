@@ -3,7 +3,7 @@ let pendingUnlockVenueId = null;
 let restaurantsRefreshTimer = null;
 let restaurantsRefreshing = false;
 let lastSimTriggerAt = 0;
-const SIM_TRIGGER_COOLDOWN_MS = 180000;
+const SIM_TRIGGER_COOLDOWN_MS = 110000;
 
 const PASSWORD_MODAL_IDS = [
   'ownerPasswordModal',
@@ -23,25 +23,19 @@ function isAnyPasswordModalOpen() {
 
 function togglePasswordVisibility(inputId) {
   const input = document.getElementById(inputId);
-  const btn = input ? input.parentElement.querySelector('button[onclick*="togglePasswordVisibility"]') : null;
-  const icon = btn ? btn.querySelector('i[data-lucide]') : null;
-  if (!input || !icon) return;
+  if (!input) return;
+  const btn = input.parentElement ? input.parentElement.querySelector('button[aria-label="Toggle password visibility"]') : null;
   if (input.type === 'password') {
     input.type = 'text';
-    icon.setAttribute('data-lucide', 'eye-off');
+    if (btn) btn.innerHTML = '<i data-lucide="eye-off" class="w-5 h-5"></i>';
   } else {
     input.type = 'password';
-    icon.setAttribute('data-lucide', 'eye');
+    if (btn) btn.innerHTML = '<i data-lucide="eye" class="w-5 h-5"></i>';
   }
   if (window.lucide) lucide.createIcons();
 }
 
-function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  return String(text == null ? '' : text).replace(/[&<>"']/g, (c) => map[c]);
-}
-
-// Refresh /api/restaurants every 30s so all open browsers stay in sync with the
+// Refresh /api/restaurants every 15s so all open browsers stay in sync with the
 // same server-computed waits and queue counts. Polling is skipped entirely while
 // the tab is hidden (document.hidden) to avoid wasting radio/battery in the
 // background.
@@ -52,23 +46,27 @@ function startRestaurantsRefresh() {
     restaurantsRefreshing = true;
     try { await loadRestaurants(); } catch (err) { console.warn('Restaurants background refresh failed:', err); }
     finally { restaurantsRefreshing = false; }
-  }, 30000);
+  }, 15000);
 }
 
-// Fire a non-blocking background POST to advance the simulation tick for ALL restaurants.
-// The GET /api/restaurants response renders instantly; this runs out-of-band and never
-// blocks the UI. Throttled client-side (and again server-side via the 180s
+// Fire a non-blocking background POST to advance the simulation tick. The GET
+// /api/restaurants response renders instantly; this runs out-of-band and never
+// blocks the UI. Throttled client-side (and again server-side via the 120s
 // LAST_SIM_CACHE cooldown) so back-to-back requests don't re-run ticks.
 function triggerBackgroundSimTick() {
   if (document.hidden) return;
   const now = Date.now();
   if (now - lastSimTriggerAt < SIM_TRIGGER_COOLDOWN_MS) return;
   lastSimTriggerAt = now;
-  fetch('/api/queue/simulate-all', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    keepalive: true
-  }).catch(() => {});
+  const ids = (allRestaurants || []).map(r => r.id).filter(Boolean);
+  ids.forEach(id => {
+    fetch('/api/queue/simulate-tick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurant_id: id }),
+      keepalive: true
+    }).catch(() => {});
+  });
 }
 
 function closeOwnerPasswordModal() {
@@ -221,8 +219,9 @@ async function renderUnlockedHostStand(venueId, pwd) {
   if (dashEl) dashEl.classList.remove('hidden');
   if (typeof populateHostDropdown === 'function') populateHostDropdown();
   if (typeof renderHostDashboard === 'function') renderHostDashboard();
-  // Advance the AI ghost-queue simulator for all venues in a single platform-wide call
-  fetch('/api/queue/simulate-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(() => {});
+  // Advance the AI ghost-queue simulator in the background so ghost guests
+  // are generated and persisted even when the owner never opens the customer page.
+  fetch('/api/queue/simulate-tick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restaurant_id: venueId }), keepalive: true }).catch(() => {});
 }
 
 
@@ -357,7 +356,7 @@ let selectedRestaurantId = null;
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
-let hostShowGhostGuests = true;
+let hostShowGhostGuests = false;
 
 // Seated-rating gating: a diner can only rate once they've been seated, and only once per visit
 let ratedTickets = new Set();
@@ -600,6 +599,76 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
+
+  // ---- App Launch Splash Screen: pre-load data while logo is centered ----
+  const splashEl = document.getElementById('appSplash');
+  const splashParams = new URLSearchParams(window.location.search);
+  const splashPath = (window.location.pathname || '/').toLowerCase();
+  const splashHash = (window.location.hash || '').toLowerCase();
+  const isDeepLink = splashPath === '/founder' || splashPath.endsWith('/founder')
+    || splashParams.get('founder') === '1' || splashHash === '#founder'
+    || splashParams.get('passId') || splashParams.get('ticket') || splashParams.get('venue');
+
+  // Fire initial data fetches immediately while the splash is visible.
+  const dataPromise = (async () => {
+    try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
+    try { await loadActivePassData(); } catch (err) { console.warn('Splash pre-load: active pass failed', err); }
+    // Reviews are fetched per-venue on demand, but seed the cache with the first
+    // venue so the Customer grid is populated without an extra round-trip.
+    try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
+  })();
+
+  // Minimum splash visibility (1500ms) AND wait for data to resolve, capped at 3500ms.
+  // Deep links (founder / passId / ticket / venue) shorten this to 400ms for snappy checks.
+  const MIN_SPLASH_MS = isDeepLink ? 400 : 1500;
+  const MAX_SPLASH_MS = isDeepLink ? 1200 : 3500;
+  const splashReadyAt = Date.now() + MIN_SPLASH_MS;
+  const splashDeadline = Date.now() + MAX_SPLASH_MS;
+
+  let splashResolved = false;
+
+  // Safety timeout: never trap the user on the splash screen past the deadline,
+  // even if a fetch hangs on a slow/flaky mobile network.
+  const deadlineTimer = setTimeout(() => {
+    if (splashResolved) return;
+    splashResolved = true;
+    finishSplash();
+  }, Math.max(0, splashDeadline - Date.now()) + 1);
+
+  function finishSplash() {
+    clearTimeout(deadlineTimer);
+    if (splashEl) {
+      splashEl.classList.add('is-fading');
+      setTimeout(() => {
+        splashEl.classList.add('is-hidden');
+        splashEl.classList.remove('is-fading');
+        splashEl.setAttribute('aria-hidden', 'true');
+      }, 300);
+    }
+  }
+
+  // Wait for the minimum visibility window AND the data promise to settle, but
+  // never past the safety deadline. The data promise keeps running in the
+  // background so a slow fetch still populates the grid after the splash fades.
+  const waitForMin = new Promise(resolve => {
+    const tick = () => {
+      if (Date.now() >= splashReadyAt) return resolve();
+      setTimeout(tick, 40);
+    };
+    tick();
+  });
+
+  await Promise.race([
+    Promise.all([dataPromise, waitForMin.then(() => dataPromise)]),
+    new Promise(resolve => setTimeout(resolve, Math.max(0, splashDeadline - Date.now()) + 1)),
+  ]).then(() => { if (!splashResolved) { splashResolved = true; finishSplash(); } });
+
+  // Allow the fade-out animation to play before continuing initialization.
+  if (splashEl) {
+    await new Promise(resolve => setTimeout(resolve, 320));
+  }
+  // ---- end splash ----
+
   try {
     const _params = new URLSearchParams(window.location.search);
     const _hash = (window.location.hash || '').toLowerCase();
@@ -615,7 +684,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (e) {}
   await initPushNotifications();
-  await loadRestaurants();
   loadFavorites();
   startRestaurantsRefresh();
 
@@ -635,6 +703,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
       if (activeTicketData && !terminalStates.includes(activeTicketData.status)) {
+        const pill = document.getElementById('activeTicketPill');
+        if (pill) {
+          pill.classList.remove('hidden');
+          pill.classList.add('flex');
+        }
         startTicketPolling();
       }
     } else if (saved && saved.id) {
@@ -668,11 +741,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   initFounderSecretTriggers();
   initFbStarRating();
-  updateRoleModeLabels();
-  window.matchMedia('(min-width: 768px)').addEventListener('change', () => {
-    updateRoleModeLabels();
-    if (activeTicketData) updateTicketUI();
-  });
   lucide.createIcons();
 });
 
@@ -1278,11 +1346,6 @@ function initFounderSecretTriggers() {
   }
 }
 
-function updateRoleModeLabels() {
-  const ownerLabel = document.getElementById('tabOwnerLabel');
-  if (ownerLabel) ownerLabel.textContent = window.innerWidth < 768 ? 'Owner' : 'Restaurant Owner';
-}
-
 function switchInterface(role) {
   // Founder view requires secret unlock; otherwise prompt for the Master Password.
   if (role === 'founder' && !isFounderUnlocked()) {
@@ -1513,20 +1576,42 @@ async function loadFounderDashboard() {
   } catch (err) {
     console.warn("Founder dashboard load failed:", err);
   }
-  renderFounderData(data || {
+  // Build the live summary from whichever source actually populated data, so the
+  // dashboard never stays blank when the analytics endpoint is slow or returns
+  // an error. Founder caches (dedicated endpoints) take priority.
+  const venues = (founderRestaurantsCache && founderRestaurantsCache.length)
+    ? founderRestaurantsCache
+    : (data && Array.isArray(data.restaurants) ? data.restaurants : []);
+  const queues = (founderQueuesCache && founderQueuesCache.length)
+    ? founderQueuesCache
+    : (data && Array.isArray(data.recent_queues) ? data.recent_queues : []);
+  const reviews = (founderReviewsCache && founderReviewsCache.length)
+    ? founderReviewsCache
+    : (data && Array.isArray(data.recent_reviews) ? data.recent_reviews : []);
+  const activeQueues = queues.filter(q => ["waiting","notified","delayed"].includes(q.status));
+  const waitingDiners = activeQueues.reduce((s, q) => s + Number(q.party_size || 0), 0);
+  const activeParties = activeQueues.length;
+  const totalRestaurants = venues.length;
+  const totalCities = [...new Set(venues.map(r => r.city || 'Mumbai'))].length;
+  const reliabilityScores = venues.map(r => Number((r.reliability || {}).score || 92)).filter(Number.isFinite);
+  const platformAvgReliability = reliabilityScores.length
+    ? Math.round(reliabilityScores.reduce((a, b) => a + b, 0) / reliabilityScores.length)
+    : 92;
+
+  renderFounderData({
     summary: {
-      total_restaurants: founderRestaurantsCache.length,
-      total_cities: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))].length,
-      cities_list: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))],
-      active_parties_in_queue: founderQueuesCache.length,
-      active_diners_in_queue: founderQueuesCache.reduce((s, q) => s + Number(q.party_size || 0), 0),
+      total_restaurants: totalRestaurants,
+      total_cities: totalCities,
+      cities_list: [...new Set(venues.map(r => r.city || 'Mumbai'))],
+      active_parties_in_queue: activeParties,
+      active_diners_in_queue: waitingDiners,
       total_seated_parties: 0,
       total_seated_diners: 0,
-      platform_avg_reliability: 92
+      platform_avg_reliability: platformAvgReliability
     },
-    restaurants: founderRestaurantsCache,
-    recent_queues: founderQueuesCache,
-    recent_reviews: founderReviewsCache
+    restaurants: venues,
+    recent_queues: queues,
+    recent_reviews: reviews
   });
 }
 
@@ -1784,24 +1869,6 @@ async function founderToggleQueue(restId) {
 // ==========================================
 
 // Client fallback guard: if the midnight IST cron is missed, the first active
-// session after 12:00 AM IST batch-deletes ghost records from previous IST dates
-// while leaving real walk-in/remote records untouched.
-async function ensureGhostCleanupGuard() {
-  try {
-    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const last = localStorage.getItem('wm_lastGhostCleanupDateIST');
-    if (last === todayKey) return;
-    const res = await fetch('/api/cleanup-ghosts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than_ist_date: todayKey }), cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.deleted > 0) console.log(`[ghost cleanup] removed ${data.deleted} ghost record(s) from before ${todayKey}`);
-      localStorage.setItem('wm_lastGhostCleanupDateIST', todayKey);
-    }
-  } catch (e) {
-    console.warn('[ghost cleanup guard] skipped:', e.message || e);
-  }
-}
 
 async function loadRestaurants() {
   try {
@@ -1839,14 +1906,13 @@ async function loadRestaurants() {
     populateHostDropdown();
     // Cards are already on screen; advance the simulation out-of-band.
     triggerBackgroundSimTick();
-    // Daily ghost-guest cleanup guard (runs after midnight IST if cron missed).
-    await ensureGhostCleanupGuard();
+
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
     const banner = document.getElementById('globalNetworkBanner');
     if (banner) banner.classList.add('hidden');
-    
+
     // Merge custom venues even in fallback mode
     const customVenues = JSON.parse(localStorage.getItem('waitmate_custom_venues') || '[]');
     if (customVenues.length > 0) {
@@ -1862,6 +1928,52 @@ async function loadRestaurants() {
     renderRestaurantsGrid();
     populateHostDropdown();
   }
+}
+
+// ---- Splash Screen Data Pre-Loading Helpers ----
+// These run in parallel with the splash overlay so the Customer grid and active
+// pass are fully populated the moment the splash fades out — no empty placeholders.
+
+// Cache of per-venue reviews keyed by venue id. Populated eagerly on load so
+// opening a venue detail card never shows a "Loading reviews..." flash.
+const preloadedReviews = {};
+let reviewsPreloadPromise = null;
+
+async function preloadVenueReviews() {
+  if (reviewsPreloadPromise) return reviewsPreloadPromise;
+  reviewsPreloadPromise = (async () => {
+    const ids = (allRestaurants && allRestaurants.length)
+      ? allRestaurants.slice(0, 6).map(r => r.id).filter(Boolean)
+      : [];
+    await Promise.all(ids.map(async (id) => {
+      if (preloadedReviews[id]) return;
+      try {
+        const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        preloadedReviews[id] = data.reviews || [];
+      } catch (err) { /* non-critical: reviews render lazily on demand */ }
+    }));
+  })();
+  return reviewsPreloadPromise;
+}
+
+// Active Pass (shared ticket deep-link) check: resolves quickly so a
+// ?passId=... or ?ticket=... link feels instant. No-op when no pass is present.
+async function loadActivePassData() {
+  const params = new URLSearchParams(window.location.search);
+  const passId = params.get('passId') || params.get('ticket');
+  if (!passId) return;
+  try {
+    const res = await fetch(`/api/queue/ticket/${encodeURIComponent(passId)}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      // Surface the shared pass to the UI if the friend-pass tracker is present.
+      if (typeof openFriendPassTracker === 'function') {
+        window.__wmPreloadedPass = { id: passId, data };
+      }
+    }
+  } catch (err) { /* non-critical: deep link will re-fetch on demand */ }
 }
 
 // City filter
@@ -1926,7 +2038,7 @@ function renderRestaurantsGrid() {
 
   // Update header live diners counter — exact live sum of active diners
   // (waiting + notified + seated across walk-in, remote, ghost) in Firebase.
-  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.active_diners || 0), 0);
+  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.live_stats?.active_diners || 0), 0);
   const topCountEl = document.getElementById('topLiveDinersCount');
   if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners live`;
 
@@ -2488,7 +2600,7 @@ async function submitJoinQueue(e) {
 function startTicketPolling() {
   if (pollTimer) clearInterval(pollTimer);
   fetchTicketStatus();
-  pollTimer = setInterval(fetchTicketStatus, 8000);
+  pollTimer = setInterval(fetchTicketStatus, 4000);
 }
 
 async function fetchTicketStatus() {
@@ -2590,22 +2702,17 @@ async function attemptTicketReSync() {
 }
 
 function updateTicketUI() {
-  const pill = document.getElementById('activeTicketPill');
-  const stripPill = document.getElementById('activeTicketStripPill');
-  const strip = document.getElementById('activeTicketStrip');
-  const pillEls = [pill, stripPill].filter(Boolean);
-
   if (!activeTicketData) {
-    pillEls.forEach((el) => { el.classList.add('hidden'); el.classList.remove('flex'); });
-    if (strip) strip.classList.add('hidden');
+    document.getElementById('activeTicketPill').classList.add('hidden');
     return;
   }
 
   const d = activeTicketData;
+  const pill = document.getElementById('activeTicketPill');
 
   // Always find the real restaurant name from allRestaurants (never fall back to "Partner Venue")
   const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
-  const venueName = escapeHtml(venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue'));
+  const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
 
   if (d.status === 'notified') {
     acknowledgedAlertForTicket = null;
@@ -2614,33 +2721,18 @@ function updateTicketUI() {
   if (graceUntil && Date.now() > graceUntil) graceUntil = null;
   lastTicketStatus = d.status;
 
-  const isTableReady = d.status === 'notified';
-  const pillLabel = isTableReady
-    ? 'Table Ready! Tap to View Pass →'
-    : `My Pass: <strong>${venueName}</strong> (#${d.position_in_line})`;
-  const pillInner = `<span class="w-2 h-2 rounded-full bg-white live-pulse"></span><span class="font-semibold">${pillLabel}</span>`;
-
-  pillEls.forEach((el) => {
-    el.innerHTML = pillInner;
-    if (isTableReady) {
-      el.classList.add('emerald-pulse');
-      el.classList.remove('bg-orange-500');
-      el.classList.add('bg-emerald-500');
-    } else {
-      el.classList.remove('emerald-pulse');
-      el.classList.remove('bg-emerald-500');
-      el.classList.add('bg-orange-500');
-    }
-  });
-
-  const isDesktop = window.innerWidth >= 768;
-  if (isDesktop) {
-    pillEls.forEach((el) => { el.classList.remove('hidden'); el.classList.add('flex'); });
-    if (strip) strip.classList.add('hidden');
+  if (d.status === 'notified') {
+    pill.classList.add('emerald-pulse');
+    pill.classList.remove('bg-orange-500');
+    pill.classList.add('bg-emerald-500');
+    pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-white live-pulse"></span><span>Table Ready! Tap to View Pass →</span>`;
   } else {
-    pillEls.forEach((el) => { el.classList.add('hidden'); el.classList.remove('flex'); });
-    if (strip) strip.classList.remove('hidden');
+    pill.classList.remove('emerald-pulse');
+    pill.classList.remove('bg-emerald-500');
+    pill.classList.add('bg-orange-500');
   }
+  pill.classList.remove('hidden');
+  pill.classList.add('flex');
 
   if (d.status === 'seated' || d.status === 'cancelled') {
     localStorage.removeItem('waitmate_active_ticket');
@@ -2853,8 +2945,6 @@ function clearCurrentTicket() {
   if (pollTimer) clearInterval(pollTimer);
   document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   document.getElementById('activeTicketPill').classList.add('hidden');
-  const activeStrip = document.getElementById('activeTicketStrip');
-  if (activeStrip) activeStrip.classList.add('hidden');
   closeTicketModal();
 }
 
@@ -2902,111 +2992,90 @@ async function sharePass() {
     showToast("No active pass to share yet. Join a queue first!", "info");
     return;
   }
-  const ticketId = currentTicketId || activeTicketData.id;
-  const link = buildShareLink(ticketId);
-  const message = buildShareMessage(activeTicketData || {});
-  const shareData = { title: 'My WaitMate Live Pass', text: message, url: link };
+  const td = activeTicketData || {};
+  const restaurantName = (td.restaurant && td.restaurant.name) || td.restaurant_name || 'restaurant';
+  const tokenNumber = td.token_number || td.position_in_line || td.ticket_id || currentTicketId;
+  const partySize = td.party_size || 1;
+  const ticketId = currentTicketId || td.id;
+  const passUrl = buildShareLink(ticketId);
+  const shareMessage = `I'm in line at ${restaurantName} on WaitMate! Token #${tokenNumber} for ${partySize} guests. Track our live table status here:`;
+  const shareData = { title: `WaitMate Pass – ${restaurantName}`, text: shareMessage, url: passUrl };
 
-  // Mobile native share first (Android, iOS Safari, Chrome), clean clipboard fallback on desktop
-  if (navigator.share) {
-    try {
-      await navigator.share(shareData);
-      showToast("Pass shared!", "success");
-      return;
-    } catch (err) {
-      // User cancelled or share failed — fall through to clipboard copy
-    }
-  }
-  try {
-    await writeTextFallback(link);
-    showToast("Link copied to share!", "success");
-  } catch (err) {
-    window.prompt("Copy this link to share your live pass:", link);
-  }
-}
-
-const SHARE_APP_URL = 'https://waitmate-weld.vercel.app';
-const SHARE_APP_TEXT = 'Skip restaurant waiting lines in Mumbai! Check live wait times and join queues remotely on WaitMate:';
-
-async function shareApp() {
-  const shareData = { title: 'WaitMate India', text: SHARE_APP_TEXT, url: SHARE_APP_URL };
   if (navigator.share) {
     try {
       await navigator.share(shareData);
       return;
     } catch (err) {}
   }
-  showShareAppModal();
+  showSharePassModal(restaurantName, shareMessage, passUrl);
 }
 
-function showShareAppModal() {
-  let modal = document.getElementById('shareAppModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'shareAppModal';
-    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
-    modal.innerHTML = `
-      <div class="bg-white rounded-2xl p-5 w-[92%] max-w-sm shadow-xl">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-bold text-slate-900">Share WaitMate</h3>
-          <button onclick="closeShareAppModal()" class="text-slate-500 hover:text-slate-900">✕</button>
-        </div>
-        <div class="grid grid-cols-3 gap-3 text-center text-xs">
-          <a target="_blank" href="https://wa.me/?text=${encodeURIComponent(SHARE_APP_TEXT + ' ' + SHARE_APP_URL)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-            WhatsApp
-          </a>
-          <a target="_blank" href="https://t.me/share/url?url=${encodeURIComponent(SHARE_APP_URL)}&text=${encodeURIComponent(SHARE_APP_TEXT)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-            Telegram
-          </a>
-          <button onclick="shareInstagram()" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-            Instagram
-          </button>
-          <a target="_blank" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_APP_TEXT)}&url=${encodeURIComponent(SHARE_APP_URL)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            X
-          </a>
-          <a href="sms:?body=${encodeURIComponent(SHARE_APP_TEXT + ' ' + SHARE_APP_URL)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            SMS
-          </a>
-          <a href="mailto:?subject=${encodeURIComponent('Check out WaitMate India')}&body=${encodeURIComponent(SHARE_APP_TEXT + '\n\n' + SHARE_APP_URL)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            Email
-          </a>
-          <button onclick="copyShareAppLink()" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
-            <svg id="copyShareIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy Link
-          </button>
-        </div>
+function showSharePassModal(restaurantName, shareMessage, passUrl) {
+  let modal = document.getElementById('sharePassModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'sharePassModal';
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-5 w-[92%] max-w-sm shadow-xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-slate-900">Share Pass</h3>
+        <button onclick="closeSharePassModal()" class="text-slate-500 hover:text-slate-900">✕</button>
       </div>
-    `;
-    document.body.appendChild(modal);
-  }
-  modal.classList.remove('hidden');
+      <div class="grid grid-cols-3 gap-3 text-center text-xs">
+        <a target="_blank" href="https://wa.me/?text=${encodeURIComponent(shareMessage + ' ' + passUrl)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp
+        </a>
+        <a target="_blank" href="https://t.me/share/url?url=${encodeURIComponent(passUrl)}&text=${encodeURIComponent(shareMessage)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+          Telegram
+        </a>
+        <button onclick="sharePassInstagram('${shareMessage.replace(/'/g,"\\'")} ${passUrl}')" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          Instagram
+        </button>
+        <a target="_blank" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}&url=${encodeURIComponent(passUrl)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          X
+        </a>
+        <a href="sms:?body=${encodeURIComponent(shareMessage + ' ' + passUrl)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          SMS
+        </a>
+        <a href="mailto:?subject=${encodeURIComponent('Join our table at ' + restaurantName)}&body=${encodeURIComponent(shareMessage + '\n\n' + passUrl)}" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Email
+        </a>
+        <button onclick="copyPassLink('${passUrl}')" class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100">
+          <svg id="copyPassIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy Pass Link
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
 }
 
-function closeShareAppModal() {
-  const m = document.getElementById('shareAppModal');
-  if (m) m.classList.add('hidden');
+function closeSharePassModal() {
+  const m = document.getElementById('sharePassModal');
+  if (m) m.remove();
 }
 
-async function shareInstagram() {
-  try { await navigator.clipboard.writeText(SHARE_APP_TEXT + ' ' + SHARE_APP_URL); } catch(e){}
+async function sharePassInstagram(text) {
+  try { await navigator.clipboard.writeText(text); } catch(e){}
   showToast('Copied! Opening Instagram...', 'info');
   setTimeout(() => window.open('https://www.instagram.com/', '_blank'), 600);
-  closeShareAppModal();
+  closeSharePassModal();
 }
 
-async function copyShareAppLink() {
-  try { await navigator.clipboard.writeText(SHARE_APP_URL); } catch(e){}
-  const icon = document.getElementById('copyShareIcon');
-  if (icon) icon.outerHTML = '<svg id="copyShareIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+async function copyPassLink(url) {
+  try { await navigator.clipboard.writeText(url); } catch(e){}
+  const icon = document.getElementById('copyPassIcon');
+  if (icon) icon.outerHTML = '<svg id="copyPassIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   setTimeout(() => {
-    const i = document.getElementById('copyShareIcon');
-    if (i) i.outerHTML = '<svg id="copyShareIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    const i = document.getElementById('copyPassIcon');
+    if (i) i.outerHTML = '<svg id="copyPassIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   }, 2000);
 }
 
@@ -3035,14 +3104,14 @@ async function copySharePassLink() {
     const icon = document.getElementById('copyShareIcon');
     const label = document.getElementById('copyShareLabel');
     if (icon) {
-      icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+      icon.innerHTML = '<polyline points="20 12 14 18 8 12"></polyline><path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12"></path>';
       icon.setAttribute('data-copied', '1');
     }
     if (label) label.textContent = 'Copied!';
     showToast("Link copied to clipboard", "success");
     setTimeout(() => {
       if (icon) {
-        icon.innerHTML = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>';
+        icon.innerHTML = '<rect width="16" height="12" x="2" y="7" rx="2"></rect><path d="M16 7h-2V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2z"></path>';
         icon.removeAttribute('data-copied');
       }
       if (label) label.textContent = 'Copy Link';
@@ -3068,7 +3137,7 @@ async function openFriendPassTracker(ticketId) {
   if (modal) modal.classList.remove('hidden');
   await fetchFriendTicketStatus();
   if (friendPollTimer) clearInterval(friendPollTimer);
-  friendPollTimer = setInterval(fetchFriendTicketStatus, 10000);
+  friendPollTimer = setInterval(fetchFriendTicketStatus, 5000);
 }
 
 async function fetchFriendTicketStatus() {
@@ -3477,28 +3546,6 @@ function initFbStarRating() {
   });
 }
 
-function updateFbStarDisplay(rating) {
-  const starBtns = document.querySelectorAll('#fbStarRating .fb-star-btn');
-  const ratingDisplay = document.getElementById('fbStarDisplay');
-
-  starBtns.forEach(btn => {
-    const star = parseInt(btn.dataset.star);
-    if (star <= rating) {
-      btn.classList.remove('text-slate-300');
-      btn.classList.add('text-amber-400');
-    } else {
-      btn.classList.remove('text-amber-400');
-      btn.classList.add('text-slate-300');
-    }
-  });
-
-  if (rating > 0) {
-    ratingDisplay.textContent = `${rating} / 5`;
-  } else {
-    ratingDisplay.textContent = '';
-  }
-}
-
 function resetReviewWidget() {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
   const ratingInput = document.getElementById('reviewRatingInput');
@@ -3520,10 +3567,18 @@ async function fetchAndRenderReviews(venueId) {
   const container = document.getElementById('relRecentReviews');
   container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">Loading reviews...</p>`;
 
+  // Serve from the splash pre-load cache when available so the venue detail
+  // card never shows a "Loading reviews..." flash on a warm load.
+  if (preloadedReviews[venueId]) {
+    renderReviews(preloadedReviews[venueId]);
+    return;
+  }
+
   try {
     const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(venueId)}`);
     if (res.ok) {
       const data = await res.json();
+      preloadedReviews[venueId] = data.reviews || [];
       renderReviews(data.reviews || []);
     } else {
       container.innerHTML = `<p class="text-slate-400 text-xs italic text-center py-4">No reviews yet.</p>`;
@@ -3563,8 +3618,12 @@ function renderReviews(reviews) {
 
 function formatTimeAgo(timestamp) {
   const now = Date.now();
-  const diff = now - Number(timestamp);
+  let ms = Number(timestamp);
+  if (!Number.isFinite(ms) || ms <= 0) return 'Just now';
+  if (ms < 1e12) ms = ms * 1000; // seconds -> ms
+  const diff = now - ms;
   const mins = Math.floor(diff / 60000);
+  if (!Number.isFinite(mins) || mins < 0 || mins > 1440) return 'Just now';
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
@@ -3802,67 +3861,7 @@ function toggleHostGhostGuests(checked) {
   renderHostDashboard();
 }
 
-async function spawnGhostGuests() {
-  if (!currentHostVenueId) {
-    showToast("No venue selected. Open a Host Stand first.", "info");
-    return;
-  }
-  const btn = document.getElementById('hostSpawnGhostBtn');
-  const original = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i> <span>Spawning...</span>`;
-  lucide.createIcons();
-  try {
-    // Founder master password (prompt once per session). In DEMO_MODE the
-    // backend skips the password check entirely so a single click spawns ghosts.
-    let pwd = sessionStorage.getItem('wm_founder_password') || '';
-    let useFounderHeader = true;
-    try {
-      const probe = await fetch('/api/health/storage', { cache: 'no-store' });
-      if (probe.ok) {
-        const info = await probe.json();
-        if (info && info.demo_mode) {
-          useFounderHeader = false;
-          pwd = '';
-        }
-      }
-    } catch (_) { /* ignore probe errors */ }
 
-    if (!pwd && useFounderHeader) {
-      pwd = window.prompt("Founder verification required\nEnter the Founder Master Password to spawn AI ghost guests:");
-      if (pwd === null) return;
-      pwd = pwd.trim();
-      if (!pwd) { showToast("Founder password required.", "info"); return; }
-      sessionStorage.setItem('wm_founder_password', pwd);
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (useFounderHeader && pwd) headers['X-Founder-Password'] = pwd;
-
-    const res = await fetch('/api/queue/spawn-ghosts', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ restaurant_id: currentHostVenueId, count: 5 }),
-      cache: 'no-store'
-    });
-    if (res.status === 401) {
-      sessionStorage.removeItem('wm_founder_password');
-      showToast("Incorrect Founder Master Password.", "error");
-      return;
-    }
-    if (!res.ok) throw new Error('Spawn request failed');
-    const data = await res.json();
-    showToast(`Spawned ${data.spawned} AI ghost guest(s) at ${data.restaurant_id}.`, "success");
-    await loadHostStand();
-  } catch (err) {
-    console.warn("Spawn ghost guests error:", err);
-    showToast("Failed to spawn AI ghost guests.", "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = original;
-    lucide.createIcons();
-  }
-}
 
 async function loadHostStand() {
   if (isAnyPasswordModalOpen()) return;
@@ -3874,7 +3873,7 @@ async function loadHostStand() {
   await renderUnlockedHostStand(currentHostVenueId, savedPwd);
 }
 
-// Auto-poll the Host Stand queue every 15s while the owner tab is active so new
+// Auto-poll the Host Stand queue every 5s while the owner tab is active so new
 // customer joins appear automatically and fire a single alert without page reloads.
 function startHostStandPolling() {
   if (hostStandPollTimer) clearInterval(hostStandPollTimer);
@@ -3882,7 +3881,7 @@ function startHostStandPolling() {
     if (currentInterface === 'owner' && currentHostVenueId) {
       loadHostStand();
     }
-  }, 15000);
+  }, 5000);
 }
 
 function stopHostStandPolling() {
@@ -3926,9 +3925,13 @@ async function updateHostAnnouncement(announcement = null) {
 // Host Stand waitlist rows.
 function hostJoinInfo(q) {
   const raw = q.joined_at_ms !== undefined && q.joined_at_ms !== null ? q.joined_at_ms : (q.joined_at !== undefined && q.joined_at !== null ? q.joined_at : Date.now());
-  const ms = Number(raw) > 1e12 ? Number(raw) : Number(raw) * 1000;
-  const ist = isNaN(ms) ? '--:--' : new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
-  const mins = isNaN(ms) ? 0 : Math.floor((Date.now() - ms) / 60000);
+  let ms = Number(raw);
+  if (!Number.isFinite(ms) || ms <= 0) ms = Date.now();
+  else if (ms < 1e12) ms = ms * 1000; // seconds -> ms
+  const now = Date.now();
+  let mins = Math.floor((now - ms) / 60000);
+  if (!Number.isFinite(mins) || mins < 0 || mins > 1440) mins = 0;
+  const ist = new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
   const relative = mins < 1 ? 'just now' : `${mins}m ago`;
   return { ist, relative, ms };
 }

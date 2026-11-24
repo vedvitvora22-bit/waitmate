@@ -252,7 +252,166 @@ body {
 /* Cards/tables: keep borders visible while allowing inner scroll */
 .overflow-x-auto { -webkit-overflow-scrolling: touch; }
 
-/* Hide the "INDIA" brand tag on very small mobile screens (< 480px) to save horizontal space */
-@media (max-width: 479px) {
-  .hide-below-480 { display: none !important; }
+/* Password reveal toggle */
+input[type="password"], input[type="text"].pw-reveal {
+  padding-right: 44px;
+}
+input::-ms-reveal, input::-ms-clear {
+  display: none;
+}
+button[aria-label="Toggle password visibility"] {
+  z-index: 20;
+  cursor: pointer;
+  pointer-events: auto;
+}
+button[aria-label="Toggle password visibility"] svg,
+button[aria-label="Toggle password visibility"] i {
+  pointer-events: none;
+}
+
+/* ==========================================
+   App Launch Splash Screen
+   ========================================== */
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: #FAFAFA;
+  color: #0f172a;
+  transition: opacity 0.3s ease;
+  -webkit-transition: opacity 0.3s ease;
+  will-change: opacity;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.splash-overlay.is-fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-overlay.is-hidden {
+  display: none;
+}
+
+.splash-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: center;
+  padding: 1.5rem;
+  max-width: 90vw;
+}
+
+.splash-logo {
+  width: 96px;
+  height: 96px;
+  max-width: 96px;
+  max-height: 96px;
+  display: block;
+  border-radius: 22px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(15, 23, 42, 0.18));
+  animation: splashLogoPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes splashLogoPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.92;
+  }
+}
+
+.splash-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.splash-title {
+  font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.splash-title-accent {
+  color: #15803d;
+}
+
+.splash-badge {
+  display: inline-block;
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid #6ee7b7;
+  text-transform: uppercase;
+}
+
+.splash-tagline {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: 0.01em;
+}
+
+.splash-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.splash-loader-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #F97316;
+  animation: splashBounce 1.2s ease-in-out infinite;
+}
+
+.splash-loader-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.splash-loader-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes splashBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-7px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-logo,
+  .splash-loader-dot {
+    animation: none !important;
+  }
 }

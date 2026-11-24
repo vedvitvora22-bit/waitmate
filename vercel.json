@@ -9,11 +9,11 @@
       "destination": "/index.html"
     }
   ],
+  "outputDirectory": "dist",
   "crons": [
     {
       "path": "/api/cleanup-ghosts",
       "schedule": "30 18 * * *"
     }
-  ],
-  "outputDirectory": "dist"
+  ]
 }
