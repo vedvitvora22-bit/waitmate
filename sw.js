@@ -1,6 +1,6 @@
-// cache-bust-20261124-customer-clean-v27
+// cache-bust-20261124-logo-asset-fix-v28
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-customer-clean-v27';
+const CACHE_NAME = 'waitmate-v20261124-logo-asset-fix-v28';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -49,8 +49,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'WaitMate India 🇮🇳';
   const options = {
     body: data.body || 'Your table update is ready.',
-    icon: data.icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
-    badge: data.badge || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⏳</text></svg>',
+    icon: data.icon || '/logo.png',
+    badge: data.badge || '/logo.png',
     tag: data.tag || 'waitmate-queue',
     renotify: true,
     vibrate: [200, 100, 200, 100, 400],

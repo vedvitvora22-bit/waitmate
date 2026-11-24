@@ -510,8 +510,8 @@ async function sendPushNotification({ title, body, tag = 'waitmate', actions = [
     body,
     tag,
     renotify: true,
-    icon: icon || '/logo.jpg',
-    badge: '/logo.jpg',
+    icon: icon || '/logo.png',
+    badge: '/logo.png',
     vibrate: [200, 100, 200, 100, 400],
     data: { url: '/' }
   };
