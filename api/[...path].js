@@ -168,6 +168,24 @@ async function findRestaurantById(id) {
 // passes through toNumberedEntry() (which emits the clean 22-field document).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Guest source/type standardization. Every guest record saved to Firebase
+// (Firestore/Realtime Database) MUST explicitly store a `source` field with
+// one of three exact values: "walk-in", "remote", or "ghost".
+// Legacy values like "ai-ghost" are normalized down to "ghost" on read.
+// ---------------------------------------------------------------------------
+function normalizeSource(source, isGhost, channel) {
+  if (source) {
+    const s = String(source).trim().toLowerCase();
+    if (s === "ghost" || s === "ai-ghost" || s === "ai_ghost" || s === "is_ghost") return "ghost";
+    if (s === "walk-in" || s === "walkin" || s === "walk_in") return "walk-in";
+    if (s === "remote" || s === "remote_join" || s === "online") return "remote";
+  }
+  if (isGhost) return "ghost";
+  if (channel === "walk_in" || channel === "walkin" || channel === "walk-in") return "walk-in";
+  return "remote";
+}
+
 // Map an unprefixed/numbered queue entry to the canonical unprefixed shape the
 // frontend consumes. Accepts both new (01_…) and legacy documents seamlessly.
 function normalizeQueueEntry(raw) {
@@ -205,7 +223,7 @@ function normalizeQueueEntry(raw) {
     special_requests: pick("08_special_requests", "special_requests") || "",
     channel,
     entry_type: channel,
-    source: pick("source") || (Boolean(pick("is_ghost", "isGhost")) ? 'ai-ghost' : channel),
+    source: normalizeSource(pick("source"), pick("is_ghost", "isGhost"), channel),
     status: pick("10_status", "status") || "waiting",
     has_arrived: Boolean(pick("11_has_arrived", "has_arrived")),
     is_ghost: Boolean(pick("is_ghost", "isGhost")),
@@ -265,7 +283,7 @@ function toNumberedEntry(entry) {
     "10_status": e.status || "waiting",
     "11_has_arrived": Boolean(e.has_arrived),
     "12_promised_wait_mins": Number(promised || 0),
-    "source": e.source || (e.entry_type === 'ghost' ? 'ai-ghost' : channel),
+    "source": normalizeSource(e.source, e.is_ghost || e.isGhost || e.entry_type === 'ghost', channel),
     "13_joined_time_ist": e.joined_time_ist || ist(joinedMs) || "",
     "14_arrived_time_ist": e.arrived_time_ist || ist(e.arrived_at) || null,
     "15_notified_time_ist": e.notified_time_ist || ist(e.notified_at) || null,
@@ -541,7 +559,7 @@ async function spawnGhostsForRestaurant(restaurantId, restaurant, count = 5) {
       special_requests: '',
       channel: 'remote',
       entry_type: 'ghost',
-      source: 'ai-ghost',
+      source: 'ghost',
       '09_channel': 'remote',
       status: 'waiting',
       estimated_wait_mins: 1 + Math.floor(Math.random() * 45),
@@ -639,7 +657,7 @@ async function runSimulationTick(restaurantId) {
           special_requests: '',
           channel: 'remote',
           entry_type: 'ghost',
-          source: 'ai-ghost',
+          source: 'ghost',
           '09_channel': 'remote',
           status: 'waiting',
           estimated_wait_mins: 1 + Math.floor(Math.random() * 45), // max 45 minutes
@@ -865,16 +883,18 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, cleared, restaurant_id: body.restaurant_id });
   }
 
-  // Dev/demo: manually spawn AI ghost guests for a restaurant (bypasses peak-window
-  // and zero-open-tables gating). Founder-only — requires X-Founder-Password header.
-  if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
-    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+// Dev/demo: manually spawn AI ghost guests for a restaurant (bypasses peak-window
+// and zero-open-tables gating). Founder-only — requires X-Founder-Password header,
+// OR DEMO_MODE=true (set via env var) so anyone can trigger a demo spawn.
+if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
+    const demoMode = String(process.env.DEMO_MODE || "").toLowerCase() === "true";
+    if (!demoMode && !isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
     const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const count = Number(body.count || 5);
     const result = await spawnGhostsForRestaurant(body.restaurant_id, restaurant, count);
-    return send(response, 200, { success: true, restaurant_id: body.restaurant_id, ...result });
+    return send(response, 200, { success: true, restaurant_id: body.restaurant_id, demo_mode: demoMode, ...result });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
@@ -1437,7 +1457,7 @@ async function route(request, response, pathParts) {
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
     const now = Date.now();
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2),     seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
       } catch (error) {

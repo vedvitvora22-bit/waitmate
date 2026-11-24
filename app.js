@@ -1607,10 +1607,12 @@ function renderFounderData(data) {
         if (q.status === 'seated') statusBadge = `<span class="badge-tag bg-blue-100 text-blue-800">Seated</span>`;
         if (q.status === 'waiting') statusBadge = `<span class="badge-tag bg-orange-100 text-orange-800 font-bold">Waiting</span>`;
         if (q.status === 'delayed') statusBadge = `<span class="badge-tag bg-amber-100 text-amber-800">Delayed</span>`;
-        const channel = q.channel || q.entry_type || 'remote';
-        const isWalkIn = channel === 'walk_in' || channel === 'walkin' || channel === 'walk-in';
-        const channelLabel = isWalkIn ? '🚶 Walk-In' : '📱 Remote';
-        const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+        const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
+        const source = (q.source || '').toLowerCase();
+        const isGhost = source === 'ghost' || q.is_ghost || q.isGhost || q.entry_type === 'ghost';
+        const isWalkIn = source === 'walk-in' || channel === 'walk_in';
+        const channelLabel = isWalkIn ? '🚶 Walk-In' : (isGhost ? '👻 Ghost' : '📱 Remote');
+        const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : (isGhost ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-indigo-100 text-indigo-700 border border-indigo-200');
         const id = q.id || q.ticket_number;
         const nameJs = jsEscape(q.customer_name || '');
         const venueJs = jsEscape(q.restaurant_name || '');
@@ -3623,9 +3625,22 @@ async function spawnGhostGuests() {
   btn.innerHTML = `<i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i> <span>Spawning...</span>`;
   lucide.createIcons();
   try {
-    // Founder master password (prompt once per session)
+    // Founder master password (prompt once per session). In DEMO_MODE the
+    // backend skips the password check entirely so a single click spawns ghosts.
     let pwd = sessionStorage.getItem('wm_founder_password') || '';
-    if (!pwd) {
+    let useFounderHeader = true;
+    try {
+      const probe = await fetch('/api/health/storage', { cache: 'no-store' });
+      if (probe.ok) {
+        const info = await probe.json();
+        if (info && info.demo_mode) {
+          useFounderHeader = false;
+          pwd = '';
+        }
+      }
+    } catch (_) { /* ignore probe errors */ }
+
+    if (!pwd && useFounderHeader) {
       pwd = window.prompt("Founder verification required\nEnter the Founder Master Password to spawn AI ghost guests:");
       if (pwd === null) return;
       pwd = pwd.trim();
@@ -3633,9 +3648,12 @@ async function spawnGhostGuests() {
       sessionStorage.setItem('wm_founder_password', pwd);
     }
 
+    const headers = { 'Content-Type': 'application/json' };
+    if (useFounderHeader && pwd) headers['X-Founder-Password'] = pwd;
+
     const res = await fetch('/api/queue/spawn-ghosts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Founder-Password': pwd },
+      headers,
       body: JSON.stringify({ restaurant_id: currentHostVenueId, count: 5 }),
       cache: 'no-store'
     });
@@ -3787,10 +3805,12 @@ function renderHostDashboard() {
     }
 
     const join = hostJoinInfo(q);
+    const source = (q.source || q['source'] || '').toLowerCase();
+    const isGhost = source === 'ghost' || q.is_ghost || q.isGhost || q.entry_type === 'ghost';
+    const isWalkIn = source === 'walk-in' || q.channel === 'walk_in' || q['09_channel'] === 'walk_in';
     const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
-    const isWalkIn = channel === 'walk_in';
-    const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
-    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+    const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : (isGhost ? '👻 Ghost' : '🌐 Remote Join');
+    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : (isGhost ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-indigo-100 text-indigo-700 border border-indigo-200');
 
     return `
       <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
@@ -3805,7 +3825,7 @@ function renderHostDashboard() {
         </td>
 
         <td class="py-3 px-4">
-          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}${(q.is_ghost || q.isGhost || q.entry_type === 'ghost') ? '<span class="badge-tag bg-purple-100 text-purple-800 border border-purple-300">🤖 AI Ghost</span>' : ''}</div>
+          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}${isGhost ? '<span class="badge-tag bg-purple-100 text-purple-800 border border-purple-300">Ghost</span>' : ''}</div>
           ${q.special_requests ? `<div class="text-[10px] text-amber-700 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
