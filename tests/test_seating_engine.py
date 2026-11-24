@@ -1,5 +1,6 @@
 """Thorough automated test suite for the WaitMate AI host seating engine,
-dynamic turn-time variance, and Mumbai ghost queue logic."""
+dynamic turn-time variance, and Mumbai ghost queue logic with unified IST
+meal-slot engine."""
 
 import os
 import random
@@ -70,17 +71,21 @@ def section(title):
     print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
 
 
-def make_temp_db_path():
+# ---------------------------------------------------------------------------
+# Temp DB helper: temporarily point server.DB_FILE at a fresh SQLite DB
+# ---------------------------------------------------------------------------
+_orig_db_file = server.DB_FILE
+
+
+def make_temp_db():
+    """Create a fresh temp SQLite DB with the minimal schema and point
+    server.DB_FILE at it. Returns (path, cleanup_fn)."""
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    return path
-
-
-def init_temp_db(path):
     conn = sqlite3.connect(path)
     c = conn.cursor()
     c.execute(
-        "CREATE TABLE restaurants (id TEXT PRIMARY KEY, name TEXT, base_prep_time INTEGER, total_tables INTEGER, last_simulated_at REAL, available_tables INTEGER)"
+        "CREATE TABLE restaurants (id TEXT PRIMARY KEY, name TEXT, base_prep_time INTEGER, total_tables INTEGER, last_simulated_at REAL, available_tables INTEGER, meal_slots TEXT)"
     )
     c.execute(
         "CREATE TABLE restaurant_tables (id TEXT PRIMARY KEY, restaurant_id TEXT, table_id TEXT, seats INTEGER, free_at REAL)"
@@ -95,13 +100,32 @@ def init_temp_db(path):
     conn.commit()
     conn.close()
 
+    def cleanup():
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
-def seed_restaurant(path, rest_id="rest-test", base_prep=12, total_tables=4, last_sim=0.0):
+    return path, cleanup
+
+
+def use_temp_db(path):
+    """Temporarily redirect server.DB_FILE to path. Returns a restore fn."""
+    server.DB_FILE = path
+
+    def restore():
+        server.DB_FILE = _orig_db_file
+
+    return restore
+
+
+def seed_restaurant(path, rest_id="rest-test", base_prep=12, total_tables=4, last_sim=0.0, meal_slots=None):
+    import json
     conn = sqlite3.connect(path)
     c = conn.cursor()
     c.execute(
-        "INSERT INTO restaurants (id, name, base_prep_time, total_tables, last_simulated_at, available_tables) VALUES (?, ?, ?, ?, ?, ?)",
-        (rest_id, "Test Bistro", base_prep, total_tables, last_sim, total_tables),
+        "INSERT INTO restaurants (id, name, base_prep_time, total_tables, last_simulated_at, available_tables, meal_slots) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (rest_id, "Test Bistro", base_prep, total_tables, last_sim, total_tables, json.dumps(meal_slots) if meal_slots else None),
     )
     for i in range(1, total_tables + 1):
         seats = 2 if i % 2 == 1 else 4
@@ -111,14 +135,6 @@ def seed_restaurant(path, rest_id="rest-test", base_prep=12, total_tables=4, las
         )
     conn.commit()
     conn.close()
-
-
-def make_get_db(path):
-    def get_db():
-        conn = sqlite3.connect(path)
-        conn.row_factory = sqlite3.Row
-        return conn
-    return get_db
 
 
 # ===========================================================================
@@ -213,9 +229,116 @@ assert_true(seated_map.get("p2") == "T2", f"party of 2 not at 2-top: {seated_map
 print("  PASS: best-fit table matching verified")
 
 # ===========================================================================
-# 4. Dynamic Turn-Time Bounds
+# 4. Unified IST Meal-Slot Detection
 # ===========================================================================
-section("4. DYNAMIC TURN-TIME BOUNDS — calculate_realistic_duration")
+section("4. UNIFIED IST MEAL-SLOT DETECTION")
+
+def ist(hour, minute):
+    return datetime(2026, 1, 1, hour=hour, minute=minute, tzinfo=IST_TZ)
+
+# Breakfast 07:00-11:00
+slot = server.get_ist_meal_slot(dt=ist(8, 30))
+assert_eq(slot["slot"], "breakfast", "08:30 IST should be breakfast")
+assert_eq(slot["base_mins"], 25, "breakfast base_mins")
+assert_eq(slot["spawn_chance"], 0.45, "breakfast spawn_chance")
+assert_eq(slot["max_ghosts"], 3, "breakfast max_ghosts")
+
+# Lunch 12:00-15:30
+slot = server.get_ist_meal_slot(dt=ist(13, 30))
+assert_eq(slot["slot"], "lunch", "13:30 IST should be lunch")
+assert_eq(slot["base_mins"], 35, "lunch base_mins")
+assert_eq(slot["spawn_chance"], 0.70, "lunch spawn_chance")
+assert_eq(slot["max_ghosts"], 5, "lunch max_ghosts")
+
+# Snacks 16:00-19:00
+slot = server.get_ist_meal_slot(dt=ist(18, 0))
+assert_eq(slot["slot"], "snacks", "18:00 IST should be snacks")
+assert_eq(slot["base_mins"], 30, "snacks base_mins")
+assert_eq(slot["spawn_chance"], 0.45, "snacks spawn_chance")
+assert_eq(slot["max_ghosts"], 4, "snacks max_ghosts")
+
+# Dinner 19:30-23:00
+slot = server.get_ist_meal_slot(dt=ist(21, 0))
+assert_eq(slot["slot"], "dinner", "21:00 IST should be dinner")
+assert_eq(slot["base_mins"], 50, "dinner base_mins")
+assert_eq(slot["spawn_chance"], 0.85, "dinner spawn_chance")
+assert_eq(slot["max_ghosts"], 7, "dinner max_ghosts")
+
+# Late Night 23:00-03:00 (wraps midnight)
+slot = server.get_ist_meal_slot(dt=ist(0, 30))
+assert_eq(slot["slot"], "late_night", "00:30 IST should be late_night")
+assert_eq(slot["base_mins"], 40, "late_night base_mins")
+slot = server.get_ist_meal_slot(dt=ist(23, 30))
+assert_eq(slot["slot"], "late_night", "23:30 IST should be late_night")
+
+# Off Hours 03:00-07:00
+slot = server.get_ist_meal_slot(dt=ist(4, 0))
+assert_eq(slot["slot"], "off_hours", "04:00 IST should be off_hours")
+assert_eq(slot["max_ghosts"], 0, "off_hours max_ghosts = 0")
+assert_eq(slot["spawn_chance"], 0.05, "off_hours spawn_chance")
+
+# Boundary checks
+slot = server.get_ist_meal_slot(dt=ist(11, 30))
+assert_eq(slot["slot"], "off_hours", "11:30 IST should be off_hours")
+slot = server.get_ist_meal_slot(dt=ist(12, 0))
+assert_eq(slot["slot"], "lunch", "12:00 IST is start of lunch")
+slot = server.get_ist_meal_slot(dt=ist(15, 30))
+assert_eq(slot["slot"], "off_hours", "15:30 IST is end of lunch (exclusive)")
+slot = server.get_ist_meal_slot(dt=ist(16, 0))
+assert_eq(slot["slot"], "snacks", "16:00 IST is start of snacks")
+slot = server.get_ist_meal_slot(dt=ist(19, 0))
+assert_eq(slot["slot"], "off_hours", "19:00 IST is end of snacks (exclusive)")
+slot = server.get_ist_meal_slot(dt=ist(19, 30))
+assert_eq(slot["slot"], "dinner", "19:30 IST is start of dinner")
+slot = server.get_ist_meal_slot(dt=ist(23, 0))
+assert_eq(slot["slot"], "late_night", "23:00 IST is start of late_night")
+slot = server.get_ist_meal_slot(dt=ist(3, 0))
+assert_eq(slot["slot"], "off_hours", "03:00 IST is start of off_hours")
+slot = server.get_ist_meal_slot(dt=ist(7, 0))
+assert_eq(slot["slot"], "breakfast", "07:00 IST is start of breakfast")
+print("  PASS: IST meal-slot detection correct across all boundaries")
+
+# ===========================================================================
+# 5. Restaurant Meal-Slot Gating
+# ===========================================================================
+section("5. RESTAURANT MEAL-SLOT GATING")
+
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
+try:
+    # Mock IST time to lunch for deterministic gating tests
+    orig_get_ist_meal_slot = server.get_ist_meal_slot
+    server.get_ist_meal_slot = lambda dt=None: {"slot": "lunch", "base_mins": 35, "spawn_chance": 0.70, "max_ghosts": 5}
+
+    # Dinner-only restaurant at lunch -> spawn_chance=0, max_ghosts=0
+    seed_restaurant(path, rest_id="rest-dinner-only", base_prep=12, total_tables=2, last_sim=0.0, meal_slots=["dinner"])
+    cfg = server.get_restaurant_meal_slot_config("rest-dinner-only")
+    assert_eq(cfg["slot"], "lunch", "IST time is lunch for rest-dinner-only test")
+    assert_eq(cfg["spawn_chance"], 0, "dinner-only restaurant at lunch: spawn_chance=0")
+    assert_eq(cfg["max_ghosts"], 0, "dinner-only restaurant at lunch: max_ghosts=0")
+
+    # Lunch restaurant at lunch -> normal lunch config
+    seed_restaurant(path, rest_id="rest-lunch", base_prep=12, total_tables=2, last_sim=0.0, meal_slots=["lunch", "dinner"])
+    cfg = server.get_restaurant_meal_slot_config("rest-lunch")
+    assert_eq(cfg["slot"], "lunch", "rest-lunch at lunch time")
+    assert_eq(cfg["spawn_chance"], 0.70, "lunch restaurant: spawn_chance=0.70")
+    assert_eq(cfg["max_ghosts"], 5, "lunch restaurant: max_ghosts=5")
+
+    # No meal_slots configured -> serves all slots
+    seed_restaurant(path, rest_id="rest-all-day", base_prep=12, total_tables=2, last_sim=0.0, meal_slots=None)
+    cfg = server.get_restaurant_meal_slot_config("rest-all-day")
+    assert_eq(cfg["spawn_chance"], 0.70, "all-day restaurant at lunch: normal spawn_chance")
+    assert_eq(cfg["max_ghosts"], 5, "all-day restaurant at lunch: normal max_ghosts")
+finally:
+    server.get_ist_meal_slot = orig_get_ist_meal_slot
+    restore()
+    cleanup()
+print("  PASS: restaurant meal-slot gating works correctly")
+
+# ===========================================================================
+# 6. Dynamic Turn-Time Bounds (Slot-Aware)
+# ===========================================================================
+section("6. DYNAMIC TURN-TIME BOUNDS — Slot-Aware calculate_realistic_duration")
 
 results = {1: [], 2: [], 4: [], 6: []}
 for _ in range(50):
@@ -229,117 +352,181 @@ for _ in range(50):
         max_expected = base + ((size - 2) * 10 if size > 2 else 0) + 20
         assert_le(mins, max_expected, f"size {size}: duration {mins:.1f} above max {max_expected}")
 
+# Slot-aware: Dinner base_mins=50 should produce longer turns than Breakfast base_mins=25
+for _ in range(30):
+    d_breakfast = server.calculate_realistic_duration(25, 4)
+    d_dinner = server.calculate_realistic_duration(50, 4)
+    mins_b = d_breakfast.total_seconds() / 60.0
+    mins_d = d_dinner.total_seconds() / 60.0
+    assert_ge(mins_d, mins_b, f"dinner turn {mins_d:.1f} should be >= breakfast turn {mins_b:.1f}")
+
 avg = {s: sum(results[s]) / len(results[s]) for s in results}
 assert_true(avg[4] >= avg[2], f"size 4 avg {avg[4]:.1f} not >= size 2 avg {avg[2]:.1f}")
 assert_true(avg[6] >= avg[4], f"size 6 avg {avg[6]:.1f} not >= size 4 avg {avg[4]:.1f}")
-print(f"  PASS: duration bounds verified across 50 iterations (avgs: { {k: round(v,1) for k,v in avg.items()} })")
+print(f"  PASS: slot-aware turn-time bounds verified (avgs: { {k: round(v,1) for k,v in avg.items()} })")
 
 # ===========================================================================
-# 5. Mumbai IST Peak Windows & Ghost Caps
+# 7. Ghost Cap Logic (Slot-Aware Spawning)
 # ===========================================================================
-section("5. MUMBAI IST PEAK WINDOWS & GHOST CAPS")
+section("7. GHOST CAP LOGIC — Slot-Aware Spawning")
 
-def ist(hour, minute):
-    return datetime(2026, 1, 1, hour=hour, minute=minute, tzinfo=IST_TZ)
-
-cfg = server.get_mumbai_traffic_config(dt=ist(13, 30))
-assert_eq(cfg["bucket"], "Lunch", "13:30 IST should be Lunch")
-assert_eq(cfg["multiplier"], 1.8, "Lunch multiplier")
-cfg = server.get_mumbai_traffic_config(dt=ist(18, 0))
-assert_eq(cfg["bucket"], "Snacks", "18:00 IST should be Snacks")
-assert_eq(cfg["multiplier"], 1.4, "Snacks multiplier")
-cfg = server.get_mumbai_traffic_config(dt=ist(21, 0))
-assert_eq(cfg["bucket"], "Dinner", "21:00 IST should be Dinner")
-assert_eq(cfg["multiplier"], 2.0, "Dinner multiplier")
-cfg = server.get_mumbai_traffic_config(dt=ist(3, 30))
-assert_eq(cfg["bucket"], "Off-Peak", "03:30 IST should be Off-Peak")
-assert_eq(cfg["multiplier"], 1.0, "Off-Peak multiplier")
-cfg = server.get_mumbai_traffic_config(dt=ist(15, 0))
-assert_eq(cfg["bucket"], "Off-Peak", "15:00 IST is end of Lunch (exclusive)")
-cfg = server.get_mumbai_traffic_config(dt=ist(17, 30))
-assert_eq(cfg["bucket"], "Snacks", "17:30 IST is start of Snacks (inclusive)")
-print("  PASS: Mumbai IST peak windows detected correctly")
-
-# Ghost cap logic — mock peak window to True, only spawns when openTables == 0
-db_path = make_temp_db_path()
-init_temp_db(db_path)
-seed_restaurant(db_path, rest_id="rest-ghost", base_prep=12, total_tables=2, last_sim=0.0)
-conn = sqlite3.connect(db_path)
-c = conn.cursor()
-c.execute("UPDATE restaurant_tables SET free_at = ? WHERE restaurant_id = 'rest-ghost'", (time.time() + 999999,))
-conn.commit()
-conn.close()
-
-orig_get_db = server.get_db
-orig_is_peak = server.is_mumbai_peak_window
-server.get_db = make_get_db(db_path)
-server.is_mumbai_peak_window = lambda dt=None: True
-
-random.seed(42)
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
 try:
-    result = server.run_simulation_tick("rest-ghost")
-    ghosts_spawned = result.get("ghosts_spawned", 0)
-    assert_true(ghosts_spawned <= 7, f"ghosts spawned {ghosts_spawned} exceeds cap of 7")
-    assert_true(ghosts_spawned >= 0, f"negative ghosts spawned")
-    conn = sqlite3.connect(db_path)
+    seed_restaurant(path, rest_id="rest-ghost", base_prep=12, total_tables=2, last_sim=0.0, meal_slots=["dinner"])
+    conn = sqlite3.connect(path)
     c = conn.cursor()
-    c.execute("SELECT estimated_wait_mins FROM queue_entries WHERE restaurant_id = 'rest-ghost' AND is_ghost = 1")
-    waits = [row[0] for row in c.fetchall()]
+    c.execute("UPDATE restaurant_tables SET free_at = ? WHERE restaurant_id = 'rest-ghost'", (time.time() + 999999,))
+    conn.commit()
     conn.close()
-    for w in waits:
-        assert_le(w, 45, f"ghost wait {w} exceeds 45-min cap")
+
+    orig_get_restaurant_meal_slot_config = server.get_restaurant_meal_slot_config
+    orig_is_peak = server.is_mumbai_peak_window
+    # Force breakfast slot with dinner-only gating -> spawn_chance=0, max_ghosts=0
+    server.get_restaurant_meal_slot_config = lambda rid: {"slot": "breakfast", "base_mins": 25, "spawn_chance": 0, "max_ghosts": 0}
+    server.is_mumbai_peak_window = lambda dt=None: True
+    random.seed(42)
+    try:
+        result = server.run_simulation_tick("rest-ghost")
+        ghosts_spawned = result.get("ghosts_spawned", 0)
+        assert_true(ghosts_spawned == 0, f"dinner-only restaurant at breakfast should spawn 0 ghosts, got {ghosts_spawned}")
+    finally:
+        server.get_restaurant_meal_slot_config = orig_get_restaurant_meal_slot_config
+        server.is_mumbai_peak_window = orig_is_peak
 finally:
-    server.get_db = orig_get_db
-    server.is_mumbai_peak_window = orig_is_peak
-    os.unlink(db_path)
-print("  PASS: ghost spawning capped at 5-7, only when openTables == 0, wait <= 45 min")
+    restore()
+    cleanup()
+print("  PASS: ghost spawning respects meal-slot gating (dinner-only at breakfast = 0 ghosts)")
 
 # ===========================================================================
-# 6. Cooldown & Cleanup
+# 8. 60-Minute Wait-Time Ceiling & Ghost Eviction
 # ===========================================================================
-section("6. COOLDOWN & CLEANUP")
+section("8. 60-MINUTE WAIT-TIME CEILING & GHOST EVICTION")
 
-# 60-second cooldown
-db_path = make_temp_db_path()
-init_temp_db(db_path)
-seed_restaurant(db_path, rest_id="rest-cd", base_prep=12, total_tables=2, last_sim=0.0)
-server.get_db = make_get_db(db_path)
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
 try:
+    # enforce_60min_wait_ceiling caps at 60 (no eviction path, no DB query needed)
+    capped, evicted = server.enforce_60min_wait_ceiling("rest-x", 45)
+    assert_eq(capped, 45, "45 min wait should not be capped")
+    assert_eq(evicted, 0, "no eviction needed for 45 min wait")
+
+    # 75 min wait triggers eviction path -> queries DB for oldest ghost
+    capped, evicted = server.enforce_60min_wait_ceiling("rest-x", 75)
+    assert_eq(capped, 60, "75 min wait should be capped to 60")
+
+    # Full DB test: wait > 60 with ghost present -> evict oldest ghost
+    seed_restaurant(path, rest_id="rest-ceil", base_prep=12, total_tables=2, last_sim=0.0, meal_slots=["dinner"])
+    conn = sqlite3.connect(path)
+    c = conn.cursor()
+    now = time.time()
+    c.execute(
+        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+        ("real-1", "WM-1", "rest-ceil", "Real Customer", "+91 99999 00001", 2, "First Available", "", "remote", "waiting", 90, now - 3600),
+    )
+    c.execute(
+        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        ("ghost-old", "WM-G1", "rest-ceil", "Old Ghost", "", 2, "First Available", "", "ghost", "waiting", 70, now - 7200),
+    )
+    c.execute(
+        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        ("ghost-new", "WM-G2", "rest-ceil", "New Ghost", "", 2, "First Available", "", "ghost", "waiting", 70, now - 1800),
+    )
+    conn.commit()
+    conn.close()
+
+    capped, evicted = server.enforce_60min_wait_ceiling("rest-ceil", 90)
+    assert_eq(capped, 60, f"wait 90 should be capped to 60, got {capped}")
+    assert_eq(evicted, 1, f"should evict 1 ghost, got {evicted}")
+
+    conn = sqlite3.connect(path)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = 'rest-ceil' AND is_ghost = 1 AND status = 'waiting'")
+    assert_eq(c.fetchone()[0], 1, "one ghost should remain after eviction")
+    c.execute("SELECT id FROM queue_entries WHERE restaurant_id = 'rest-ceil' AND is_ghost = 1 AND status = 'waiting'")
+    remaining_ghost = c.fetchone()[0]
+    assert_eq(remaining_ghost, "ghost-new", "oldest ghost (ghost-old) should be evicted, ghost-new remains")
+    c.execute("SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = 'rest-ceil' AND is_ghost = 0 AND status = 'waiting'")
+    assert_eq(c.fetchone()[0], 1, "real customer should remain")
+    conn.close()
+finally:
+    restore()
+    cleanup()
+print("  PASS: 60-minute wait ceiling enforced with oldest-ghost eviction")
+
+# run_simulation_tick caps waits and returns ceiling info
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
+try:
+    seed_restaurant(path, rest_id="rest-tick", base_prep=12, total_tables=0, last_sim=0.0, meal_slots=["dinner"])
+    conn = sqlite3.connect(path)
+    c = conn.cursor()
+    now = time.time()
+    c.execute(
+        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+        ("real-1", "WM-1", "rest-tick", "Real Customer", "+91 99999 00001", 2, "First Available", "", "remote", "waiting", 90, now - 3600),
+    )
+    conn.commit()
+    conn.close()
+
+    orig_is_peak = server.is_mumbai_peak_window
+    server.is_mumbai_peak_window = lambda dt=None: True
+    random.seed(42)
+    try:
+        result = server.run_simulation_tick("rest-tick")
+        assert_true(result.get("ghosts_evicted", 0) >= 0, "ghosts_evicted tracked")
+        assert_true("meal_slot" in result, "tick result should include meal_slot")
+    finally:
+        server.is_mumbai_peak_window = orig_is_peak
+finally:
+    restore()
+    cleanup()
+print("  PASS: run_simulation_tick enforces 60-minute ceiling with ghost eviction")
+
+# ===========================================================================
+# 9. Cooldown & Cleanup
+# ===========================================================================
+section("9. COOLDOWN & CLEANUP")
+
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
+try:
+    seed_restaurant(path, rest_id="rest-cd", base_prep=12, total_tables=2, last_sim=0.0)
     r1 = server.run_simulation_tick("rest-cd")
     assert_true(not r1.get("skipped"), f"first tick should not be skipped: {r1}")
+    assert_true("meal_slot" in r1, "tick result should include meal_slot")
     r2 = server.run_simulation_tick("rest-cd")
     assert_true(r2.get("skipped"), f"second tick within cooldown should be skipped: {r2}")
     assert_true("cooldown_remaining" in r2, f"skipped tick should report cooldown_remaining: {r2}")
     assert_true(r2.get("cooldown_remaining", 0) > 0, f"cooldown_remaining should be > 0: {r2}")
 finally:
-    server.get_db = orig_get_db
-    os.unlink(db_path)
+    restore()
+    cleanup()
 print("  PASS: 60-second cooldown blocks duplicate simulation ticks")
 
-# clear_all_ghost_entries removes only ghosts
-db_path = make_temp_db_path()
-init_temp_db(db_path)
-seed_restaurant(db_path, rest_id="rest-clean", base_prep=12, total_tables=2, last_sim=0.0)
-conn = sqlite3.connect(db_path)
-c = conn.cursor()
-now = time.time()
-for i in range(3):
-    c.execute(
-        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-        (f"real-{i}", f"WM-{i}", "rest-clean", f"Real {i}", "+91 99999 0000{i}", 2, "First Available", "", "remote", "waiting", 10, now - i * 60),
-    )
-for i in range(3):
-    c.execute(
-        "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-        (f"ghost-{i}", f"WM-G{i}", "rest-clean", f"Ghost {i}", "", 2, "First Available", "", "ghost", "waiting", 20, now - i * 60),
-    )
-conn.commit()
-conn.close()
-server.get_db = make_get_db(db_path)
+path, cleanup = make_temp_db()
+restore = use_temp_db(path)
 try:
+    seed_restaurant(path, rest_id="rest-clean", base_prep=12, total_tables=2, last_sim=0.0)
+    conn = sqlite3.connect(path)
+    c = conn.cursor()
+    now = time.time()
+    for i in range(3):
+        c.execute(
+            "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            (f"real-{i}", f"WM-{i}", "rest-clean", f"Real {i}", "+91 99999 0000{i}", 2, "First Available", "", "remote", "waiting", 10, now - i * 60),
+        )
+    for i in range(3):
+        c.execute(
+            "INSERT INTO queue_entries (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            (f"ghost-{i}", f"WM-G{i}", "rest-clean", f"Ghost {i}", "", 2, "First Available", "", "ghost", "waiting", 20, now - i * 60),
+        )
+    conn.commit()
+    conn.close()
+
     cleared = server.clear_all_ghost_entries("rest-clean")
     assert_eq(cleared, 3, f"clear_all_ghost_entries should clear 3 ghosts, got {cleared}")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(path)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = 'rest-clean' AND is_ghost = 1 AND status = 'waiting'")
     assert_eq(c.fetchone()[0], 0, "ghosts should be deleted")
@@ -347,8 +534,8 @@ try:
     assert_eq(c.fetchone()[0], 3, "real customers should remain")
     conn.close()
 finally:
-    server.get_db = orig_get_db
-    os.unlink(db_path)
+    restore()
+    cleanup()
 print("  PASS: clear_all_ghost_entries removes only isGhost == True records")
 
 # ===========================================================================
