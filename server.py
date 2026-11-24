@@ -181,6 +181,10 @@ RESTAURANT_PWD_CACHE = {}
 # cache entry is verified without even touching Firestore.
 RESTAURANT_PWD_CACHE_TTL_SECONDS = 300
 
+# Sentinel returned by _firestore_read_restaurant_password when the
+# Firestore document does not exist (Firestore reachable, restaurant unknown).
+_FIRESTORE_MISSING = object()
+
 
 def _parse_fallback_passwords(raw):
     """Parse FALLBACK_RESTAURANT_PASSWORDS env var: JSON map of
@@ -256,6 +260,8 @@ def _firestore_read_restaurant_password(rest_id):
     if db is None:
         raise ConnectionError("firestore client unavailable")
     doc = db.collection("restaurants").document(str(rest_id)).get()
+    if not doc.exists:
+        return _FIRESTORE_MISSING
     data = doc.to_dict() or {}
     return data.get("password_hash") or None
 
@@ -331,13 +337,23 @@ def verify_host_password(rest_id, password):
     # 2. Firestore read wrapped in try/except; quota/connection errors are
     #    swallowed and never returned as a 500 to the frontend.
     fs_hash = None
+    fs_failed = False
+    fs_missing = False
     try:
-        fs_hash = _firestore_read_restaurant_password(rest_id)
+        result = _firestore_read_restaurant_password(rest_id)
+        if result is _FIRESTORE_MISSING:
+            fs_missing = True
+        else:
+            fs_hash = result
     except Exception as exc:
         print(f"[verify-password] Firestore read failed for {rest_id}: {type(exc).__name__}: {exc}")
-        fs_hash = None
+        fs_failed = True
 
-    if fs_hash is not None:
+    if fs_missing:
+        # Firestore was reachable and has no such restaurant document.
+        return 404, {"success": False, "error": "Restaurant not found"}
+
+    if not fs_failed and fs_hash is not None:
         RESTAURANT_PWD_CACHE[rest_id] = {"hash": fs_hash, "cached_at": now}
         if _check_password_hash(password, fs_hash):
             return 200, {"success": True, "message": "Unlocked."}
@@ -349,19 +365,10 @@ def verify_host_password(rest_id, password):
     if _verify_password_against_sqlite(rest_id, password):
         return 200, {"success": True, "message": "Unlocked."}
 
-    # Unknown restaurant (not even in local SQLite) -> 404; wrong password for
-    # a known restaurant -> 401 Incorrect password (never "Quota exceeded").
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT id FROM restaurants WHERE id = ?", (rest_id,))
-        exists = c.fetchone() is not None
-        conn.close()
-    except Exception:
-        exists = False
-    if exists:
-        return 401, {"success": False, "error": "Incorrect password"}
-    return 404, {"success": False, "error": "Restaurant not found"}
+    # A password was submitted but matched nothing we can verify offline.
+    # We cannot confirm non-existence while Firestore is down, so this is an
+    # auth failure (401 Incorrect password), never "Quota exceeded" / 500.
+    return 401, {"success": False, "error": "Incorrect password"}
 
 
 
