@@ -53,6 +53,11 @@ def verify_founder_password(password):
 
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
+# When False, the backend NEVER creates, clones, or advances "ghost" documents
+# in SQLite/Firestore queue_entries. queue_entries holds only real customer
+# entries (walk-in and remote). Diner simulation is pure IST time-of-day math.
+ENABLE_GHOST_GUESTS = False
+
 
 def format_ist(ts):
     try:
@@ -753,30 +758,32 @@ def run_simulation_tick(restaurant_id):
 
     # 3. Slot-aware ghost spawn when no tables are open (gated by meal slot,
     #    restaurant meal_slots, spawn_chance probability, and max_ghosts cap).
-    open_count = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
+    #    Disabled entirely when ENABLE_GHOST_GUESTS is False.
     ghosts_spawned = 0
     ghosts_evicted = 0
-    if open_count == 0 and random.random() < spawn_chance and max_ghosts > 0:
-        c.execute(
-            "SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
-            (restaurant_id,),
-        )
-        existing_ghosts = c.fetchone()[0]
-        to_spawn = max(0, int(max_ghosts) - int(existing_ghosts))
-        for _ in range(to_spawn):
-            ghost_id = f"ghost-{uuid.uuid4().hex[:8]}"
-            ticket_number = f"WM-G{int(now * 1000) % 100000:05d}"
-            name = random.choice(GHOST_NAMES)
-            party_size = random.randint(2, 4)
-            wait_mins = min(MAX_WAIT_MINS, random.randint(5, 45))
-            phone = f"+91 {random.randint(7000, 9999)} {random.randint(70000, 99999)}"
+    if ENABLE_GHOST_GUESTS:
+        open_count = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
+        if open_count == 0 and random.random() < spawn_chance and max_ghosts > 0:
             c.execute(
-                "INSERT INTO queue_entries "
-                "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at, is_ghost) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "ai-ghost", "waiting", wait_mins, now),
+                "SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
+                (restaurant_id,),
             )
-            ghosts_spawned += 1
+            existing_ghosts = c.fetchone()[0]
+            to_spawn = max(0, int(max_ghosts) - int(existing_ghosts))
+            for _ in range(to_spawn):
+                ghost_id = f"ghost-{uuid.uuid4().hex[:8]}"
+                ticket_number = f"WM-G{int(now * 1000) % 100000:05d}"
+                name = random.choice(GHOST_NAMES)
+                party_size = random.randint(2, 4)
+                wait_mins = min(MAX_WAIT_MINS, random.randint(5, 45))
+                phone = f"+91 {random.randint(7000, 9999)} {random.randint(70000, 99999)}"
+                c.execute(
+                    "INSERT INTO queue_entries "
+                    "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at, is_ghost) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                    (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "ai-ghost", "waiting", wait_mins, now),
+                )
+                ghosts_spawned += 1
 
     # 4. Enforce 60-minute wait ceiling: if any wait exceeds 60 mins and ghosts
     #    exist in line, evict the oldest ghost entry.
@@ -916,6 +923,7 @@ def init_db():
         id TEXT PRIMARY KEY,
         restaurant_id TEXT NOT NULL,
         restaurant_name TEXT NOT NULL,
+        customer_name TEXT,
         rating INTEGER NOT NULL, -- 1-5 stars
         comment TEXT,
         ticket_id TEXT,
@@ -1027,6 +1035,10 @@ def init_db():
     }
     for rest_id, cover in mumbai_covers.items():
         c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
+
+    # Startup purge: delete any existing ghost / cloned queue entries so
+    # queue_entries contains only real walk-in and remote customers.
+    c.execute("DELETE FROM queue_entries WHERE entry_type = 'ghost' OR is_ghost = 1 OR source IN ('ghost', 'ai-ghost')")
 
     # Startup migration: INSERT OR IGNORE new Mumbai venues so existing local SQLite databases pick them up automatically
     now = time.time()
@@ -1772,66 +1784,110 @@ def format_time_ago(ts):
     else:
         return f"{diff // 86400}d ago"
 
+# Baseline active parties per IST meal slot (pure math, zero Firestore writes).
+# Used to estimate active diners and baseline table occupancy from a
+# restaurant's allocated meal slots. Real Firebase testers are added on top.
+MEAL_SLOT_BASELINE_PARTIES = {
+    "breakfast": (2, 5),
+    "lunch": (6, 12),
+    "snacks": (2, 6),
+    "dinner": (8, 15),
+    "late_night": (1, 4),
+    "off_hours": (0, 1),
+}
+MEAL_SLOT_BASELINE_WAIT = {
+    "breakfast": (3, 8),
+    "lunch": (10, 22),
+    "snacks": (5, 12),
+    "dinner": (15, 30),
+    "late_night": (2, 10),
+    "off_hours": (0, 3),
+}
+AVG_PARTY_SIZE = 2.4
+
+
+def _ist_bucket():
+    return int(time.time() // 300)
+
+
+def _seeded_in_range(rid, bucket, mn, mx):
+    """Deterministic draw in [mn, mx] keyed by restaurant + 5-minute IST bucket."""
+    if mx <= mn:
+        return mn
+    seed = (bucket + sum(ord(c) for c in str(rid))) % 1000
+    return mn + (seed % (mx - mn + 1))
+
+
+def _load_restaurant_meal_slots(restaurant):
+    """Return the restaurant's allocated meal slots (list), or None (all slots)."""
+    raw = restaurant.get("meal_slots")
+    if not raw:
+        return None
+    import json as _json
+    try:
+        return _json.loads(raw)
+    except Exception:
+        return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
 def compute_prototype_restaurant_metrics(restaurant, real_waiting_parties, real_waiting_guests):
     rid = restaurant['id']
-    profiles = {
-        "rest-1": {"rush": [(8,11),(18,22)], "peakP": (4,7), "peakW": (22,34), "offP": (2,3), "offW": (12,18)},
-        "rest-2": {"rush": [(12,15),(19,23)], "peakP": (5,8), "peakW": (28,42), "offP": (2,2), "offW": (14,14)},
-        "rest-3": {"rush": [(19,25)], "peakP": (6,9), "peakW": (20,32), "offP": (0,1), "offW": (0,6)},
-        "rest-4": {"rush": [(17,24)], "peakP": (4,7), "peakW": (30,48), "offP": (0,0), "offW": (0,0)},
-        "rest-5": {"rush": [(9,11),(16,20)], "peakP": (3,6), "peakW": (10,18), "offP": (1,1), "offW": (5,5)},
-        "rest-6": {"rush": [(13,15),(20,22.5)], "peakP": (3,5), "peakW": (24,36), "offP": (0,0), "offW": (0,0)},
-        "rest-7": {"rush": [(12,15.5)], "peakP": (6,9), "peakW": (32,45), "offP": (1,2), "offW": (8,12)},
-        "rest-8": {"rush": [(8,11.5),(16,19)], "peakP": (3,5), "peakW": (12,20), "offP": (0,0), "offW": (0,0)},
-        "rest-9": {"rush": [(17,22)], "peakP": (5,8), "peakW": (25,38), "offP": (2,2), "offW": (10,10)},
-        "rest-10": {"rush": [(18,24)], "peakP": (5,8), "peakW": (16,26), "offP": (0,0), "offW": (0,0)},
-        "rest-11": {"rush": [(17,22)], "peakP": (4,7), "peakW": (12,20), "offP": (0,1), "offW": (3,8)},
-        "rest-12": {"rush": [(18,23)], "peakP": (3,6), "peakW": (18,30), "offP": (1,2), "offW": (8,14)},
-    }
-    p = profiles.get(rid)
-    if not p:
-        h = sum(ord(c) for c in str(rid))
-        p = {"rush": [(8,11),(18,22)], "peakP": (3,6), "peakW": (18,30), "offP": (1,2), "offW": (6,12)}
-    import datetime
-    ist = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
-    hour = ist.hour + ist.minute/60.0
-    in_rush = False
-    for s,e in p['rush']:
-        if s <= e:
-            if hour >= s and hour < e: in_rush = True
-        else:
-            if hour >= s or hour < e: in_rush = True
-    bucket = int(time.time()//300)
-    seed = (bucket + sum(ord(c) for c in str(rid))) % 1000
-    def rnd(mn,mx): return mn + (seed % (mx-mn+1))
-    if in_rush:
-        sim_p = rnd(*p['peakP']); sim_w = rnd(*p['peakW'])
-    else:
-        sim_p = rnd(*p['offP']); sim_w = rnd(*p['offW'])
     is_open = bool(restaurant.get('is_queue_open', True))
+    manual = restaurant.get('manual_override_wait')
+    base_prep = int(restaurant.get('base_prep_time') or 10)
     rp = int(real_waiting_parties or 0)
     rg = int(real_waiting_guests or 0)
-    total = (sim_p + rp) if is_open else 0
-    manual = restaurant.get('manual_override_wait')
+
+    slot_info = get_ist_meal_slot()
+    current_slot = slot_info["slot"]
+    restaurant_meal_slots = _load_restaurant_meal_slots(restaurant)
+    serves_current = (restaurant_meal_slots is None) or (current_slot in restaurant_meal_slots)
+
+    bucket = _ist_bucket()
+    if not serves_current:
+        baseline_parties = 0
+        baseline_diners = 0
+        baseline_wait = 0
+    else:
+        mn, mx = MEAL_SLOT_BASELINE_PARTIES.get(current_slot, (0, 1))
+        baseline_parties = _seeded_in_range(rid, bucket, mn, mx)
+        wn, wx = MEAL_SLOT_BASELINE_WAIT.get(current_slot, (0, 3))
+        baseline_wait = _seeded_in_range(rid, bucket, wn, wx)
+        baseline_diners = int(round(baseline_parties * AVG_PARTY_SIZE))
+
+    total_active_parties = (baseline_parties + rp) if is_open else 0
+
     if not is_open:
         est = 0
     elif manual is not None:
         est = int(manual)
     else:
-        base_prep = int(restaurant.get('base_prep_time') or 10)
-        osc = (bucket % 3) - 1
-        est = max(0, int(total * base_prep * 0.6 + sim_w * 0.4 + osc*2))
-        if total == 0: est = 0
+        avail_tables = int(restaurant.get('available_tables') or 0)
+        total_tables = int(restaurant.get('total_tables') or 1)
+        open_tables = avail_tables if avail_tables > 0 else max(1, total_tables)
+        parties_ahead = max(0, total_active_parties - open_tables)
+        est = int(parties_ahead * (base_prep * 0.6)) + baseline_wait
+        if total_active_parties == 0:
+            est = baseline_wait if serves_current else 0
+        est = min(MAX_WAIT_MINS, max(0, est))
+
+    total_waiting_people = rg
+    active_diners = baseline_diners + rg
     return {
-        "queue_count": total,
-        "total_waiting_people": total*2 + rg,
+        "queue_count": total_active_parties,
+        "total_waiting_people": total_waiting_people,
         "estimated_wait_mins": est,
         "algorithmic_wait_mins": est,
         "has_manual_override": manual is not None,
         "is_queue_open": is_open,
-        "active_parties": total,
-        "active_guests": total*2 + rg
+        "active_parties": total_active_parties,
+        "active_diners": active_diners,
+        "baseline_parties": baseline_parties,
+        "baseline_diners": baseline_diners,
+        "meal_slot": current_slot,
+        "serves_current_slot": serves_current,
     }
+
 
 def get_restaurant_live_stats(restaurant_id):
     import sqlite3
@@ -1843,7 +1899,7 @@ def get_restaurant_live_stats(restaurant_id):
     rest = c.fetchone()
     conn.close()
     if not rest:
-        return {"queue_count":0,"total_waiting_people":0,"estimated_wait_mins":0,"algorithmic_wait_mins":0,"has_manual_override":False,"is_queue_open":False,"active_parties":0,"active_guests":0}
+        return {"queue_count":0,"total_waiting_people":0,"estimated_wait_mins":0,"algorithmic_wait_mins":0,"has_manual_override":False,"is_queue_open":False,"active_parties":0,"active_diners":0}
     rest = dict(rest)
     return compute_prototype_restaurant_metrics(rest, q['queue_count'] or 0, q['total_people'] or 0)
     conn = get_db()
@@ -2782,11 +2838,14 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 comment = str(data.get("comment", "") or "")
                 c.execute('UPDATE queue_entries SET rated = 1, rating = ?, comment = ?, rated_at = ? WHERE id = ?', (stars, comment, time.time(), real_id))
                 rest_id = q["restaurant_id"] if q["restaurant_id"] else "rest-1"
-                rest_name = q["customer_name"] if q["customer_name"] else "Restaurant"
+                c.execute('SELECT name FROM restaurants WHERE id = ?', (rest_id,))
+                rest_row = c.fetchone()
+                rest_name = rest_row["name"] if rest_row else "Restaurant"
+                customer_name = q["customer_name"] if q["customer_name"] else "Guest"
                 c.execute('''
-                    INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, ticket_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (f"rev-{int(time.time() * 1000)}", rest_id, rest_name, stars, comment, real_id, time.time()))
+                    INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (f"rev-{int(time.time() * 1000)}", rest_id, rest_name, customer_name, stars, comment, real_id, time.time()))
                 msg = "Thanks! Your rating has been saved."
             else:
                 conn.close()
@@ -3195,9 +3254,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     return
 
             c.execute('''
-                INSERT INTO reviews (id, restaurant_id, restaurant_name, rating, comment, ticket_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (review_id, restaurant_id, restaurant_name, rating_int, comment, data.get("ticket_id", ""), time.time()))
+                INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (review_id, restaurant_id, restaurant_name, data.get("customerName", "Guest"), rating_int, comment, data.get("ticket_id", ""), time.time()))
             conn.commit()
             conn.close()
 

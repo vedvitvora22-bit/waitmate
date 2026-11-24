@@ -1507,20 +1507,42 @@ async function loadFounderDashboard() {
   } catch (err) {
     console.warn("Founder dashboard load failed:", err);
   }
-  renderFounderData(data || {
+  // Build the live summary from whichever source actually populated data, so the
+  // dashboard never stays blank when the analytics endpoint is slow or returns
+  // an error. Founder caches (dedicated endpoints) take priority.
+  const venues = (founderRestaurantsCache && founderRestaurantsCache.length)
+    ? founderRestaurantsCache
+    : (data && Array.isArray(data.restaurants) ? data.restaurants : []);
+  const queues = (founderQueuesCache && founderQueuesCache.length)
+    ? founderQueuesCache
+    : (data && Array.isArray(data.recent_queues) ? data.recent_queues : []);
+  const reviews = (founderReviewsCache && founderReviewsCache.length)
+    ? founderReviewsCache
+    : (data && Array.isArray(data.recent_reviews) ? data.recent_reviews : []);
+  const activeQueues = queues.filter(q => ["waiting","notified","delayed"].includes(q.status));
+  const waitingDiners = activeQueues.reduce((s, q) => s + Number(q.party_size || 0), 0);
+  const activeParties = activeQueues.length;
+  const totalRestaurants = venues.length;
+  const totalCities = [...new Set(venues.map(r => r.city || 'Mumbai'))].length;
+  const reliabilityScores = venues.map(r => Number((r.reliability || {}).score || 92)).filter(Number.isFinite);
+  const platformAvgReliability = reliabilityScores.length
+    ? Math.round(reliabilityScores.reduce((a, b) => a + b, 0) / reliabilityScores.length)
+    : 92;
+
+  renderFounderData({
     summary: {
-      total_restaurants: founderRestaurantsCache.length,
-      total_cities: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))].length,
-      cities_list: [...new Set((founderRestaurantsCache || []).map(r => r.city || 'Mumbai'))],
-      active_parties_in_queue: founderQueuesCache.length,
-      active_diners_in_queue: founderQueuesCache.reduce((s, q) => s + Number(q.party_size || 0), 0),
+      total_restaurants: totalRestaurants,
+      total_cities: totalCities,
+      cities_list: [...new Set(venues.map(r => r.city || 'Mumbai'))],
+      active_parties_in_queue: activeParties,
+      active_diners_in_queue: waitingDiners,
       total_seated_parties: 0,
       total_seated_diners: 0,
-      platform_avg_reliability: 92
+      platform_avg_reliability: platformAvgReliability
     },
-    restaurants: founderRestaurantsCache,
-    recent_queues: founderQueuesCache,
-    recent_reviews: founderReviewsCache
+    restaurants: venues,
+    recent_queues: queues,
+    recent_reviews: reviews
   });
 }
 
@@ -1920,7 +1942,7 @@ function renderRestaurantsGrid() {
 
   // Update header live diners counter — exact live sum of active diners
   // (waiting + notified + seated across walk-in, remote, ghost) in Firebase.
-  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.active_diners || 0), 0);
+  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.live_stats?.active_diners || 0), 0);
   const topCountEl = document.getElementById('topLiveDinersCount');
   if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners live`;
 
@@ -3514,8 +3536,12 @@ function renderReviews(reviews) {
 
 function formatTimeAgo(timestamp) {
   const now = Date.now();
-  const diff = now - Number(timestamp);
+  let ms = Number(timestamp);
+  if (!Number.isFinite(ms) || ms <= 0) return 'Just now';
+  if (ms < 1e12) ms = ms * 1000; // seconds -> ms
+  const diff = now - ms;
   const mins = Math.floor(diff / 60000);
+  if (!Number.isFinite(mins) || mins < 0 || mins > 1440) return 'Just now';
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
@@ -3877,9 +3903,13 @@ async function updateHostAnnouncement(announcement = null) {
 // Host Stand waitlist rows.
 function hostJoinInfo(q) {
   const raw = q.joined_at_ms !== undefined && q.joined_at_ms !== null ? q.joined_at_ms : (q.joined_at !== undefined && q.joined_at !== null ? q.joined_at : Date.now());
-  const ms = Number(raw) > 1e12 ? Number(raw) : Number(raw) * 1000;
-  const ist = isNaN(ms) ? '--:--' : new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
-  const mins = isNaN(ms) ? 0 : Math.floor((Date.now() - ms) / 60000);
+  let ms = Number(raw);
+  if (!Number.isFinite(ms) || ms <= 0) ms = Date.now();
+  else if (ms < 1e12) ms = ms * 1000; // seconds -> ms
+  const now = Date.now();
+  let mins = Math.floor((now - ms) / 60000);
+  if (!Number.isFinite(mins) || mins < 0 || mins > 1440) mins = 0;
+  const ist = new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
   const relative = mins < 1 ? 'just now' : `${mins}m ago`;
   return { ist, relative, ms };
 }

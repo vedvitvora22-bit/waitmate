@@ -24,6 +24,11 @@ global._customRestaurants = global._customRestaurants || [];
 global._deletedRestaurantIds = global._deletedRestaurantIds || [];
 global._pwdMap = global._pwdMap || {};
 
+// When False, the backend NEVER creates, clones, or advances "ghost" documents
+// in Firestore queue_entries. queue_entries holds only real customer entries
+// (walk-in and remote). Diner simulation is pure IST time-of-day math.
+const ENABLE_GHOST_GUESTS = false;
+
 function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
 }
@@ -474,9 +479,11 @@ function normalizeMealTimes(mealTimes) {
 // ---------------------------------------------------------------------------
 
 const GHOST_NAMES_JS = [
-  "Aarav Patel", "Diya Sharma", "Vihaan Singh", "Ananya Reddy", "Kabir Nair",
-  "Myra Desai", "Ishaan Mehta", "Zoya Khan", "Reyansh Iyer", "Aanya Joshi",
-  "Arjun Malhotra", "Kiara Verma", "Advait Rao", "Saanvi Pillai", "Raghav Menon",
+  "Aarav Patel", "Diya Sharma", "Rohan Verma", "Ananya Reddy", "Kabir Nair",
+  "Meera Desai", "Vikram Singh", "Sneha Iyer", "Aditya Joshi", "Pooja Menon",
+  "Vihaan Singh", "Myra Desai", "Ishaan Mehta", "Zoya Khan", "Reyansh Iyer",
+  "Aanya Joshi", "Arjun Malhotra", "Kiara Verma", "Advait Rao", "Saanvi Pillai",
+  "Raghav Menon", "Kavya Nair", "Dev Patel", "Tanya Shah", "Samar Kulkarni"
 ];
 
 // Mumbai IST peak windows: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
@@ -694,13 +701,15 @@ async function maintainGhostPlatformTarget() {
           party_size: partySize,
           seating_pref: 'First Available',
           special_requests: '',
-          channel: 'remote',
+          notes: '',
+          channel: 'ghost',
           entry_type: 'ghost',
           source: 'ghost',
-          '09_channel': 'remote',
+          '09_channel': 'ghost',
           status: 'waiting',
           estimated_wait_mins: randRange(waitBand[0], waitBand[1]),
           actual_wait_mins: 0,
+          createdAt: now,
           joined_at: now,
           joined_time_ist: formatIST(now),
           is_ghost: true,
@@ -874,10 +883,10 @@ async function spawnGhostsForRestaurant(restaurantId, restaurant, count = 5) {
       party_size: partySize,
       seating_pref: 'First Available',
       special_requests: '',
-      channel: 'remote',
+      channel: 'ghost',
       entry_type: 'ghost',
       source: 'ghost',
-      '09_channel': 'remote',
+      '09_channel': 'ghost',
       status: 'waiting',
       estimated_wait_mins: 1 + Math.floor(Math.random() * 45),
       actual_wait_mins: 0,
@@ -951,10 +960,11 @@ async function runSimulationTick(restaurantId) {
       seatedResults.push({ ticket_id: customer.id, ticket_number: entry.ticket_number, table_id: table.id, actual_wait_mins: actualWait });
     }
 
-    // 3. Mumbai peak-hour ghost spawn when no tables are open
+    // 3. Mumbai peak-hour ghost spawn when no tables are open.
+    //    Disabled entirely when ENABLE_GHOST_GUESTS is false.
     const openCount = tables.filter((t) => !t.freeAt).length;
     let ghostsSpawned = 0;
-    if (isMumbaiPeakWindow() && openCount === 0) {
+    if (ENABLE_GHOST_GUESTS && isMumbaiPeakWindow() && openCount === 0) {
       const existingGhosts = entries.filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost')).length;
       const target = 5 + Math.floor(Math.random() * 3); // 5-7
       const toSpawn = Math.max(0, target - existingGhosts);
@@ -974,13 +984,15 @@ async function runSimulationTick(restaurantId) {
           party_size: partySize,
           seating_pref: 'First Available',
           special_requests: '',
-          channel: 'remote',
+          notes: '',
+          channel: 'ghost',
           entry_type: 'ghost',
           source: 'ghost',
-          '09_channel': 'remote',
+          '09_channel': 'ghost',
           status: 'waiting',
           estimated_wait_mins: 1 + Math.floor(Math.random() * 45), // max 45 minutes
           actual_wait_mins: 0,
+          createdAt: now,
           joined_at: now,
           joined_time_ist: formatIST(now),
           is_ghost: true,
@@ -1010,14 +1022,17 @@ async function runSimulationTick(restaurantId) {
 
     // Platform-wide ghost maintenance (once per IST minute bucket): adjust the
     // live ghost count to the time-of-day target and advance ghost lifecycle.
-    const ghostMinute = Math.floor(now / 60000);
-    if (Number(global._platformGhostMinute || 0) !== ghostMinute) {
-      global._platformGhostMinute = ghostMinute;
-      try {
-        await maintainGhostPlatformTarget();
-        await advanceGhostLifecycle();
-      } catch (e) {
-        console.warn('platform ghost maintenance failed:', e.message || e);
+    // Disabled entirely when ENABLE_GHOST_GUESTS is false.
+    if (ENABLE_GHOST_GUESTS) {
+      const ghostMinute = Math.floor(now / 60000);
+      if (Number(global._platformGhostMinute || 0) !== ghostMinute) {
+        global._platformGhostMinute = ghostMinute;
+        try {
+          await maintainGhostPlatformTarget();
+          await advanceGhostLifecycle();
+        } catch (e) {
+          console.warn('platform ghost maintenance failed:', e.message || e);
+        }
       }
     }
 
@@ -1091,7 +1106,7 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
     has_manual_override: restaurant.manual_override_wait !== null && restaurant.manual_override_wait !== undefined,
     is_queue_open: isOpen,
     active_parties: totalActiveParties,
-    active_guests: totalActiveParties * 2 + realG
+    active_diners: totalActiveParties * 2 + realG
   };
 }
 
@@ -1322,6 +1337,34 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const entries = allQueueEntries(firestoreEntries);
 
+    // Strict 60-second deduplication on real customer joins:
+    // restaurantId + guestName + partySize. Prevents accidental double-submits
+    // from creating duplicate queue entries.
+    const DEDUP_WINDOW_MS = 60 * 1000;
+    const dedupNow = Date.now();
+    const dedupName = String(body.name || "").trim().toLowerCase();
+    const dedupParty = Number(body.party_size || 2);
+    const duplicateEntry = entries.find(entry =>
+      entry.restaurant_id === body.restaurant_id &&
+      ["waiting", "notified", "delayed"].includes(entry.status) &&
+      String(entry.customer_name || entry.guest_name || "").trim().toLowerCase() === dedupName &&
+      Number(entry.party_size || 0) === dedupParty &&
+      Number(entry.joined_at || 0) > 0 &&
+      dedupNow - Number(entry.joined_at) <= DEDUP_WINDOW_MS
+    );
+    if (duplicateEntry) {
+      return send(response, 200, {
+        success: true,
+        duplicate: true,
+        ticket_id: duplicateEntry.id,
+        ticket_number: duplicateEntry.ticket_number,
+        estimated_wait_mins: duplicateEntry.estimated_wait_mins ?? 10,
+        parties_ahead: duplicateEntry.parties_ahead ?? 0,
+        position_in_line: (duplicateEntry.parties_ahead ?? 0) + 1,
+        message: "You already have an active spot for this party."
+      });
+    }
+
     // Compute the exact same baseline + live queue calculation that the
     // restaurant discovery card (GET /api/restaurants) shows, so the Digital
     // Boarding Pass starts at the promised wait time instead of snapping down
@@ -1358,6 +1401,7 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
       status: "waiting",
       estimated_wait_mins: estWait,
       actual_wait_mins: 0,
+      createdAt: joinedAt,
       joined_at: joinedAt,
       joined_time_ist: new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
       notified_at: null,
@@ -1845,7 +1889,7 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
     const now = Date.now();
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
         // Update aggregates after adding walk-in guest
