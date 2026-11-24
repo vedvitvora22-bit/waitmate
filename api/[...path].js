@@ -507,7 +507,7 @@ async function clearAllGhostEntriesJs(restaurantId) {
   let entries = [];
   try { entries = await fetchQueueEntries(); } catch (error) { entries = Object.values(global._tickets || {}); }
   const targets = entries.filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost'));
-  const deletes = targets.map((e) => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+  const deletes = targets.map((e) => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
   if (deletes.length) await safeCommit(deletes);
   for (const e of targets) delete global._tickets[e.id];
   return targets.length;
