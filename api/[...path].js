@@ -2145,19 +2145,22 @@ async function route(request, response, pathParts) {
     }
 
     const ticketId = body.ticket_id;
+    const customerName = String(body.customer_name || body.guest_name || body.name || body.customerName || 'Guest').trim();
     const delta = {5:2,4:0.5,3:-0.5,2:-2,1:-3}[Number(rating)] || 0;
     const now = Date.now();
     const review = {
       id: ticketId || `rev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       restaurant_id: restaurantId,
       restaurant_name: restaurantName,
+      customer_name: customerName,
+      guest_name: customerName,
       rating: Number(rating),
       stars: Number(rating),
       review_comment: String(comment || '').trim(),
       comment: String(comment || '').trim(),
-      guest_name: String(body.guest_name || body.name || 'Guest').trim(),
       ticket_id: ticketId || null,
       accuracy_tag: body.accuracy_tag || null,
+      is_sample: body.isSample ? 1 : 0,
       rated: true,
       rated_at: now,
       rated_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
@@ -2234,6 +2237,68 @@ async function route(request, response, pathParts) {
     uniqueReviews.sort((a, b) => Number(b.created_at) - Number(a.created_at));
 
     return send(response, 200, { reviews: uniqueReviews });
+  }
+
+  // POST /api/reviews/seed - One-time sample reviews for all 12 Mumbai restaurants
+  if (request.method === "POST" && path === "/api/reviews/seed") {
+    const restaurants = await ensureRestaurants();
+    const now = Date.now();
+    const SAMPLE_NAMES = [
+      "Rohan Mehta", "Sneha Kulkarni", "Vikram Singh", "Ananya Reddy",
+      "Kabir Nair", "Meera Desai", "Aditya Joshi", "Pooja Menon",
+      "Aarav Patel", "Diya Sharma", "Raghav Menon", "Saanvi Pillai",
+      "Kavya Nair", "Tanya Shah", "Samar Kulkarni", "Dev Patel",
+    ];
+    const SAMPLE_COMMENTS = {
+      "rest-1": ["Token called exactly when estimated. Sizzling hot ghee dosa ready!", "Got in earlier than expected, host service was super efficient.", "Filter coffee and podi idli was ready right on cue!"],
+      "rest-2": ["Slight wait for family AC booth, but Andhra biryani was phenomenal.", "Host bumped us up as our party of 2 fit a high table immediately.", "Boneless chicken biryani was worth every minute of the wait."],
+      "rest-3": ["Rolls were piping hot and handed over as soon as token showed #1.", "Best seekh kebab rolls in Colaba, buttery rumali roti on point.", "Late-night charcoal flavor beats everything else in Mumbai."],
+      "rest-4": ["Table held up due to lingering group, but host kept us updated.", "Tint-in-Wit and woodfired pizza made the Friday wait worth it.", "Host seated us earlier than the quoted 30-min wait."],
+      "rest-5": ["Fresh chai and bun maska handed over in 4 mins flat!", "Best kulhad chai on Juhu Tara Road, students' favorite.", "Samosas arrived hot and the queue moved lightning fast."],
+      "rest-6": ["Quoted 35 mins, took nearly an hour during Saturday 9 PM rush.", "Dal Makhani was slow-simmered perfection, worth the delay.", "Tandoori platters arrived on time despite the Palladium crowd."],
+      "rest-7": ["Mutton Berry Pulao arrived right on token time.", "Sali Boti table ready earlier than quoted. Caramel custard divine.", "Legendary 1923 Parsi cafe never disappoints, spot-on service."],
+      "rest-8": ["Bun maska and Irani chai served piping hot on cue.", "Mawa Cake was fresh, Keema Pav demolished in minutes.", "Ultra-rapid turnover at Marine Lines, exactly as estimated."],
+      "rest-9": ["Irish Coffee and paratha arrived right when promised.", "Weekend brunch crowd ran about 3 minutes late.", "Bamboo courtyard vibe + Suleimani Chai = perfect Juhu stop."],
+      "rest-10": ["Lunch rush pav bhaji took 2 extra minutes, worth the wait.", "Extra-butter Pav Bhaji and Masala Tawa Pulao hit the spot.", "Street food counter turnover was faster than the quoted wait."],
+      "rest-11": ["Pav bhaji arrived right on time, butter was fresh!", "Tawa pulao ready quicker than quoted. Great beach snack.", "Chowpatty sunset + loaded pav bhaji = Mumbai magic."],
+      "rest-12": ["Pizza needed extra wood-fire time for perfect crust char.", "Margherita came out early! Hot honey drizzle is a game changer.", "Neapolitan crust was worth the slight delay on a busy Bandra night."],
+    };
+
+    let seeded = 0;
+    const writes = [];
+    for (const restaurant of restaurants) {
+      const restId = restaurant.id;
+      let firestoreReviews = [];
+      try { firestoreReviews = await listCollection("reviews"); } catch (e) {}
+      const existingSample = firestoreReviews.filter(r => r.restaurant_id === restId && r.is_sample === 1).length
+        + (global._reviews || []).filter(r => r.restaurant_id === restId && r.is_sample === 1).length;
+      if (existingSample >= 3) continue;
+
+      const comments = SAMPLE_COMMENTS[restId] || ["Arrived exactly when the token said. Great food!", "Service was quick and the food was delicious.", "Fair wait estimate, solid neighborhood spot."];
+      for (let i = 0; i < 3; i++) {
+        const rating = [5, 4, 5][i % 3];
+        const reviewId = `seed-${restId}-${i}-${String(now).slice(-9)}`;
+        const review = {
+          id: reviewId,
+          restaurant_id: restId,
+          restaurant_name: restaurant.name,
+          customer_name: SAMPLE_NAMES[(seeded + i) % SAMPLE_NAMES.length],
+          guest_name: SAMPLE_NAMES[(seeded + i) % SAMPLE_NAMES.length],
+          rating,
+          stars: rating,
+          comment: comments[i % comments.length],
+          review_comment: comments[i % comments.length],
+          ticket_id: "",
+          is_sample: 1,
+          created_at: now - (3 - i) * 3600,
+        };
+        writes.push(setDocument("reviews", reviewId, review));
+        (global._reviews = global._reviews || []).push(review);
+        seeded++;
+      }
+    }
+    if (writes.length) await safeCommit(writes);
+    return send(response, 200, { success: true, message: `Seeded ${seeded} sample reviews across ${restaurants.length} restaurants.`, seeded });
   }
 
   // -----------------------------------------------------------------------

@@ -335,7 +335,6 @@ let currentCategory = 'all';
 let currentCity = 'all';
 let currentArea = 'all';
 let currentSort = 'reliability';
-let currentMealTime = 'all';
 let currentSearch = '';
 let openOnly = true;
 
@@ -1804,14 +1803,15 @@ function renderFounderData(data) {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            ${reviews.map(rev => {
+${reviews.map(rev => {
               const stars = '★'.repeat(Number(rev.rating || 0)) + '☆'.repeat(5 - Number(rev.rating || 0));
               const ts = rev.rated_time_ist || rev.created_at || rev.reviewed_at || '';
               const id = rev.id || rev.review_id;
-              const restJs = jsEscape(rev.restaurant_name || '');
+              const restJs = jsEscape(rev.restaurant_id || '');
+              const reviewer = rev.customer_name || rev.guest_name || 'Guest';
               return `
                 <tr class="hover:bg-slate-50 transition">
-                  <td class="py-2 px-2 text-slate-800 font-medium">${escapeHtml(rev.guest_name || rev.customer_name || 'Guest')}</td>
+                  <td class="py-2 px-2 text-slate-800 font-medium">${escapeHtml(reviewer)}</td>
                   <td class="py-2 px-2 text-slate-800">${escapeHtml(rev.restaurant_name)}</td>
                   <td class="py-2 px-2 text-center text-amber-700 font-bold">${stars}</td>
                   <td class="py-2 px-2 text-slate-600 italic max-w-[34px] overflow-hidden text-overflow-ellipsis whitespace-nowrap" title="${escapeHtml(rev.review_comment || rev.comment || '')}">${escapeHtml(rev.review_comment || rev.comment || '—')}</td>
@@ -2012,40 +2012,14 @@ function areaMatches(r, area) {
   return true;
 }
 
-// Meal Time Filter Pills
-function setMealTimeFilter(meal) {
-  currentMealTime = meal;
-  document.querySelectorAll('.meal-pill').forEach(btn => {
-    if (btn.dataset.meal === meal) {
-      btn.className = "meal-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs";
-    } else {
-      btn.className = "meal-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
-    }
-  });
-  renderRestaurantsGrid();
-}
-
-function mealTimesMatch(r, meal) {
-  if (meal === 'all') return true;
-  const times = r.meal_times || [];
-  return Array.isArray(times) && times.includes(meal);
-}
-
 // Render Discovery Cards
 function renderRestaurantsGrid() {
   const container = document.getElementById('restaurantsGrid');
   if (!container) return;
 
-  // Update header live diners counter — exact live sum of active diners
-  // (waiting + notified + seated across walk-in, remote, ghost) in Firebase.
-  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.live_stats?.active_diners || 0), 0);
-  const topCountEl = document.getElementById('topLiveDinersCount');
-  if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners live`;
-
   let filtered = allRestaurants.filter(r => {
     if (currentCity !== 'all' && (r.city || 'Mumbai') !== currentCity) return false;
     if (!areaMatches(r, currentArea)) return false;
-    if (!mealTimesMatch(r, currentMealTime)) return false;
     if (currentCategory !== 'all' && r.type !== currentCategory) return false;
     if (openOnly && r.live_stats && !r.live_stats.is_queue_open) return false;
     if (currentCategory === 'saved' && !favorites.has(r.id)) return false;
@@ -2059,6 +2033,11 @@ function renderRestaurantsGrid() {
     }
     return true;
   });
+
+  // Top-right badge = EXACT sum of guests in line across all rendered restaurant cards
+  const totalGuestsInLine = filtered.reduce((sum, r) => sum + (Number(r.live_stats?.total_waiting_people ?? r.total_waiting_people) || 0), 0);
+  const topCountEl = document.getElementById('topLiveDinersCount');
+  if (topCountEl) topCountEl.textContent = `${totalGuestsInLine} active diners`;
 
   // Sorting — favorited spots are pinned to the top of the default discovery grid
   const isDefaultGrid = currentCategory === 'all' && !currentSearch && currentCity === 'all' && currentArea === 'all';
@@ -2284,7 +2263,6 @@ function resetFilters() {
   document.getElementById('openOnlyCheckbox').checked = true;
   setCategoryFilter('all');
   setCityFilter('all');
-  setMealTimeFilter('all');
   applyFilters();
 }
 
@@ -3600,6 +3578,7 @@ function renderReviews(reviews) {
   container.innerHTML = reviews.map(review => {
     const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
     const timeAgo = formatTimeAgo(review.created_at);
+    const reviewer = review.customer_name || review.guest_name || 'Guest';
 
     return `
       <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
@@ -3609,6 +3588,9 @@ function renderReviews(reviews) {
             <span class="text-slate-600 font-medium">${review.rating} / 5</span>
           </div>
           <span class="text-slate-600 text-[10px]">${timeAgo}</span>
+        </div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-slate-700 font-semibold text-[11px]">👤 ${escapeHtml(reviewer)}</span>
         </div>
         ${review.comment ? `<p class="text-slate-700 font-medium italic">"${review.comment}"</p>` : ''}
       </div>
@@ -5072,11 +5054,25 @@ async function founderDeleteReview(reviewId, restaurantId) {
   if (!confirm("Delete this review? The restaurant's Reliability Score will be recalculated from the remaining reviews.")) return;
   try {
     const res = await fetch(`/api/founder/reviews/${reviewId}`, {
-      method: 'DELETE', headers: { ...founderHeaders() }
+      method: "DELETE", headers: { ...founderHeaders() }
     });
     if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
     if (!res.ok) throw new Error('Delete failed');
     showToast('Review deleted. Reliability Score recalculated.', 'success');
     await loadFounderDashboard();
   } catch (err) { showToast('Error deleting review', 'error'); }
+}
+
+async function founderSeedReviews() {
+  if (!confirm("Seed 3 realistic sample reviews per restaurant (12 venues x 3 = 36)? Existing seeded batches are skipped so this is idempotent.")) return;
+  try {
+    const res = await fetch('/api/reviews/seed', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() }
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Seed failed');
+    showToast(data.message || 'Sample reviews seeded.', 'success');
+    await loadFounderDashboard();
+  } catch (err) { showToast(err.message || 'Error seeding reviews', 'error'); }
 }

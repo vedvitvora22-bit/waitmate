@@ -1,4 +1,6 @@
 {
+  "buildCommand": "mkdir -p public && cp index.html style.css app.js sw.js manifest.json logo.png logo.svg favicon.svg public/ 2>/dev/null; cp -r api public/ 2>/dev/null; echo 'Static files copied to public'",
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -9,7 +11,6 @@
       "destination": "/index.html"
     }
   ],
-  "outputDirectory": "dist",
   "crons": [
     {
       "path": "/api/cleanup-ghosts",

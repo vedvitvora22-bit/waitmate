@@ -415,3 +415,41 @@ button[aria-label="Toggle password visibility"] i {
     animation: none !important;
   }
 }
+
+/* ==========================================
+   Mobile Top Navbar (max-width 767px)
+   ========================================== */
+@media (max-width: 767px) {
+  header > .max-w-7xl {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+}
+
+/* Keep toggle buttons on a single line everywhere */
+#tabCustomer,
+#tabOwner {
+  white-space: nowrap;
+}
+
+/* Mumbai Area pills: single horizontal scrollable row */
+.area-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.area-pill-row::-webkit-scrollbar {
+  display: none;
+}
+.area-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

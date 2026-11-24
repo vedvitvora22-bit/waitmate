@@ -927,6 +927,7 @@ def init_db():
         rating INTEGER NOT NULL, -- 1-5 stars
         comment TEXT,
         ticket_id TEXT,
+        is_sample INTEGER DEFAULT 0, -- 1 = seeded sample review (bulk-delete before launch)
         created_at REAL NOT NULL
     )
     ''')
@@ -972,6 +973,18 @@ def init_db():
     # Migrate: add ticket_id to reviews for existing databases
     try:
         c.execute('ALTER TABLE reviews ADD COLUMN ticket_id TEXT')
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Migrate: add customer_name to reviews for existing databases
+    try:
+        c.execute('ALTER TABLE reviews ADD COLUMN customer_name TEXT')
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Migrate: add is_sample flag to reviews for existing databases (1 = seeded sample)
+    try:
+        c.execute('ALTER TABLE reviews ADD COLUMN is_sample INTEGER DEFAULT 0')
     except sqlite3.OperationalError:
         pass  # column already exists
 
@@ -2842,10 +2855,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 rest_row = c.fetchone()
                 rest_name = rest_row["name"] if rest_row else "Restaurant"
                 customer_name = q["customer_name"] if q["customer_name"] else "Guest"
+                is_sample = 1 if data.get("isSample") else 0
                 c.execute('''
-                    INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (f"rev-{int(time.time() * 1000)}", rest_id, rest_name, customer_name, stars, comment, real_id, time.time()))
+                    INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, is_sample, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (f"rev-{int(time.time() * 1000)}", rest_id, rest_name, customer_name, stars, comment, real_id, is_sample, time.time()))
                 msg = "Thanks! Your rating has been saved."
             else:
                 conn.close()
@@ -3253,10 +3267,12 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     self.send_json({"success": True, "message": "Ticket already rated. Duplicate submission ignored."})
                     return
 
+            customer_name = str(data.get("customerName", "") or data.get("guest_name", "") or data.get("name", "") or "").strip() or "Guest"
+            is_sample = 1 if data.get("isSample") else 0
             c.execute('''
-                INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (review_id, restaurant_id, restaurant_name, data.get("customerName", "Guest"), rating_int, comment, data.get("ticket_id", ""), time.time()))
+                INSERT INTO reviews (id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, is_sample, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (review_id, restaurant_id, restaurant_name, customer_name, rating_int, comment, data.get("ticket_id", ""), is_sample, time.time()))
             conn.commit()
             conn.close()
 
@@ -3267,11 +3283,22 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     "id": review_id,
                     "restaurant_id": restaurant_id,
                     "restaurant_name": restaurant_name,
+                    "customer_name": customer_name,
                     "rating": rating_int,
                     "comment": comment,
+                    "ticket_id": data.get("ticket_id", ""),
+                    "is_sample": is_sample,
                     "created_at": time.time()
                 }
             })
+            return
+
+        # ------------------------------------------------------------------
+        # SEED: One-time sample reviews for all 12 Mumbai restaurants
+        # ------------------------------------------------------------------
+        if path == "/api/reviews/seed":
+            seeded, message = seed_sample_reviews()
+            self.send_json({"success": True, "message": message, "seeded": seeded})
             return
 
         # ------------------------------------------------------------------
@@ -3608,6 +3635,142 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         self.send_cors_headers()
         self.end_headers()
         self.wfile.write(content)
+
+# ------------------------------------------------------------------
+# SEED: One-time sample reviews for all 12 Mumbai restaurants
+#
+# Each venue gets 3 realistic, venue-specific sample reviews so the Customer
+# grid and Founder Reliability Audit Watchdog show live social proof on a fresh
+# deploy. Every seeded row carries is_sample = 1 so it can be bulk-deleted
+# before launch without touching real diner reviews.
+# ------------------------------------------------------------------
+
+SAMPLE_REVIEW_NAMES = [
+    "Rohan Mehta", "Sneha Kulkarni", "Vikram Singh", "Ananya Reddy",
+    "Kabir Nair", "Meera Desai", "Aditya Joshi", "Pooja Menon",
+    "Aarav Patel", "Diya Sharma", "Raghav Menon", "Saanvi Pillai",
+    "Kavya Nair", "Tanya Shah", "Samar Kulkarni", "Dev Patel",
+]
+
+SAMPLE_REVIEW_COMMENTS = {
+    "rest-1": [
+        "Token called exactly when estimated. Sizzling hot ghee dosa ready!",
+        "Got in earlier than expected, host service was super efficient.",
+        "Filter coffee and podi idli was ready right on cue!",
+    ],
+    "rest-2": [
+        "Slight wait for family AC booth, but Andhra biryani was phenomenal.",
+        "Host bumped us up as our party of 2 fit a high table immediately.",
+        "Boneless chicken biryani was worth every minute of the wait.",
+    ],
+    "rest-3": [
+        "Rolls were piping hot and handed over as soon as token showed #1.",
+        "Best seekh kebab rolls in Colaba, buttery rumali roti on point.",
+        "Late-night charcoal flavor beats everything else in Mumbai.",
+    ],
+    "rest-4": [
+        "Table held up due to lingering group, but host kept us updated.",
+        "Tint-in-Wit and woodfired pizza made the Friday wait worth it.",
+        "Host seated us earlier than the quoted 30-min wait.",
+    ],
+    "rest-5": [
+        "Fresh chai and bun maska handed over in 4 mins flat!",
+        "Best kulhad chai on Juhu Tara Road, students' favorite.",
+        "Samosas arrived hot and the queue moved lightning fast.",
+    ],
+    "rest-6": [
+        "Quoted 35 mins, took nearly an hour during Saturday 9 PM rush.",
+        "Dal Makhani was slow-simmered perfection, worth the delay.",
+        "Tandoori platters arrived on time despite the Palladium crowd.",
+    ],
+    "rest-7": [
+        "Mutton Berry Pulao arrived right on token time.",
+        "Sali Boti table ready earlier than quoted. Caramel custard divine.",
+        "Legendary 1923 Parsi cafe never disappoints, spot-on service.",
+    ],
+    "rest-8": [
+        "Bun maska and Irani chai served piping hot on cue.",
+        "Mawa Cake was fresh, Keema Pav demolished in minutes.",
+        "Ultra-rapid turnover at Marine Lines, exactly as estimated.",
+    ],
+    "rest-9": [
+        "Irish Coffee and paratha arrived right when promised.",
+        "Weekend brunch crowd ran about 3 minutes late.",
+        "Bamboo courtyard vibe + Suleimani Chai = perfect Juhu stop.",
+    ],
+    "rest-10": [
+        "Lunch rush pav bhaji took 2 extra minutes, worth the wait.",
+        "Extra-butter Pav Bhaji and Masala Tawa Pulao hit the spot.",
+        "Street food counter turnover was faster than the quoted wait.",
+    ],
+    "rest-11": [
+        "Pav bhaji arrived right on time, butter was fresh!",
+        "Tawa pulao ready quicker than quoted. Great beach snack.",
+        "Chowpatty sunset + loaded pav bhaji = Mumbai magic.",
+    ],
+    "rest-12": [
+        "Pizza needed extra wood-fire time for perfect crust char.",
+        "Margherita came out early! Hot honey drizzle is a game changer.",
+        "Neapolitan crust was worth the slight delay on a busy Bandra night.",
+    ],
+}
+
+
+def seed_sample_reviews():
+    """Insert 3 venue-specific sample reviews per restaurant (12 restaurants x 3).
+
+    Idempotent: skips a venue's batch if that venue already has >= 3 sample
+    reviews, so re-running the seed (e.g. after a bulk-delete) never
+    duplicates rows. Returns (seeded_count, message).
+    """
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM restaurants")
+    rest_ids = [row[0] for row in c.fetchall()]
+
+    seeded = 0
+    now = time.time()
+    for rest_id in rest_ids:
+        # Skip venues that already carry a seeded batch (idempotent re-runs).
+        c.execute(
+            "SELECT COUNT(*) FROM reviews WHERE restaurant_id = ? AND is_sample = 1",
+            (rest_id,),
+        )
+        existing = c.fetchone()[0]
+        if existing >= 3:
+            continue
+
+        comments = SAMPLE_REVIEW_COMMENTS.get(rest_id, [
+            "Arrived exactly when the token said. Great food!",
+            "Service was quick and the food was delicious.",
+            "Fair wait estimate, solid neighborhood spot.",
+        ])
+        names = SAMPLE_REVIEW_NAMES
+        for i in range(3):
+            rating = [5, 4, 5][i % 3]
+            review_id = f"seed-{rest_id}-{i}-{int(now * 1000) % 100000}"
+            c.execute(
+                "INSERT INTO reviews "
+                "(id, restaurant_id, restaurant_name, customer_name, rating, comment, ticket_id, is_sample, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    review_id,
+                    rest_id,
+                    rest_id,
+                    names[(seeded + i) % len(names)],
+                    rating,
+                    comments[i % len(comments)],
+                    "",
+                    1,
+                    now - (3 - i) * 3600,
+                ),
+            )
+            seeded += 1
+
+    conn.commit()
+    conn.close()
+    return seeded, f"Seeded {seeded} sample reviews across {len(rest_ids)} restaurants."
+
 
 def run():
     init_db()
