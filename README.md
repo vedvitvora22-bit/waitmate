@@ -1,86 +1,59 @@
-# ⏳ WaitMate India 🇮🇳
+# 🍽️ WaitMate — Smart Restaurant Queue & Waitlist Management
 
-> **Less time waiting, more time enjoying food.**  
-> A transparent restaurant queue management platform powered by remote waitlists and crowd-verified **Reliability Scores™**, tailored for busy dining hubs across India (Bengaluru, Mumbai, Delhi NCR, Pune).
+**WaitMate** is a real-time restaurant queue and waitlist web application built as part of the **9th Edition of the Young Innovators Internship Challenge (YIIC 9)** by **Scaler School of Technology**. 
 
----
+It eliminates the guesswork and physical crowding at busy restaurants by giving diners live queue tracking and giving restaurant hosts a streamlined digital dashboard.
 
-## 💡 The Problem WaitMate Solves in India
-
-Anyone who has craved weekend breakfast at **The Rameshwaram Cafe** in Indiranagar, biryani at **Meghana Foods**, or late-night street rolls at **Bademiya** knows the ordeal:
-- **The Sidewalk Bottleneck**: Diners battle traffic, spend 15 minutes finding parking, and then get told *"Sir, 35–45 minutes wait."* Diners are trapped outside on dusty sidewalks, afraid to explore nearby shops.
-- **The "15-Minute" Myth**: Host desks frequently underestimate queue times to prevent walk-ins from going to neighboring spots.
-- **Lost Tokens Due to Noise & Parking**: Host numbers are shouted through noisy crowds. Diners parking or walking over arrive 2 minutes late only to find their token was cancelled or given away.
-- **Zero Predatory Commissions**: Unlike aggregator apps that charge high per-diner fees or heavy platform cuts, WaitMate is pure, transparent queue management for high-turnover dining spots and street food trucks.
+🔗 **Live Demo:** [waitmate-weld.vercel.app](https://vercel.app)
 
 ---
 
-## 🏛️ Tri-Interface Architecture
+## ✨ Key Features
 
-WaitMate is built with three live, dedicated interfaces accessible right from the top navigation bar:
+### 👤 For Diners (Customer Experience)
+* **Browse & Join Queues:** View participating restaurants and join the digital waitlist in seconds.
+* **Dynamic Wait-Time Estimates:** Real-time wait calculations based on current queue size and table turnover (capped realistically to keep expectations transparent).
+* **Live Digital Boarding Pass:** Track your live queue position, confirm arrival to notify the host, and share a read-only live pass with friends via WhatsApp or a direct link.
 
-### 1. 🍽️ Customer Interface
-- **City Switcher**: Select between All India, Bengaluru, Mumbai, Delhi NCR, and Pune.
-- **Smart Discovery**: Live waiting times, active queue sizes, pricing tiers (`₹`, `₹₹`, `₹₹₹`), and category filters (Restaurants vs. Food Trucks).
-- **Remote Queue Pass**: Join the queue from up to 5 km away with Indian `+91` mobile numbers.
-- **Digital Boarding Pass**: Live rank tracking, progress ring, dynamic remaining time, and verified arrival check-in.
-- **Enhanced "Table is Near" System**:
-  - High-urgency alert when rank $\le 2$ or wait $\le 7$ mins.
-  - Walking distance countdown guidance.
-  - Realistic WhatsApp alert card with 5-minute table hold notice.
-  - Synthesized dual-tone audio chime and "+5m Grace" buffer for Indian metro parking delays.
-- **Crowd-Verified Accuracy**: 1-tap post-seating check-in directly updates the venue's live Reliability Score™.
+### 🏪 For Restaurant Owners (Host Stand)
+* **Password-Protected Dashboard:** Secure, restaurant-specific host stand access to prevent unauthorized edits.
+* **Live Queue Management:** View incoming guests, party sizes, and arrival confirmations in real time.
+* **One-Click Seating & Turnover:** Mark guests as seated or manage queue flow seamlessly without manual paper logs.
 
-### 2. 🏪 Restaurant Owner Interface
-- **Add New Restaurant to WaitMate**:
-  - Live self-serve registration form for restaurant and food truck owners.
-  - Input brand name, cuisine category, venue type, city, price tier, street address, owner contact (`+91`), table capacity, dining pace, and cover photo.
-  - Instant live activation on the WaitMate India network.
-- **Live Host Stand & Queue Manager**:
-  - Manage any registered restaurant from a unified host console.
-  - Live waitlist sorted by priority rank with arrival indicators (`✓ At Entrance`).
-  - 1-click **Notify** (WhatsApp/SMS chime), **Seat**, and **Mark No-Show**.
-  - Add walk-in guests with `+91` phone numbers.
-  - Manual wait time override with **Anti-Overpromising Warnings** to protect accuracy scores.
-  - Instant Pause/Open Queue toggle.
-
-### 3. 🛡️ Founder Command Center
-- **Executive Platform Surveillance**:
-  - Live platform KPIs: Total registered venues across Indian hubs, active diners in queues, total seated throughput today, and platform average reliability score.
-- **Registered Restaurant Network Directory**:
-  - Live operational table with queue load, pricing, and 1-click Founder emergency Pause/Open controls.
-- **Live Cross-Platform Queue Stream**:
-  - Real-time audit log of diners joining across India via Remote App vs. Walk-in.
-- **Reliability Audit Watchdog**:
-  - Live feed of diner-verified check-ins comparing promised wait vs. actual seated wait to flag restaurants underestimating queue times.
+### 🛡️ Platform & Founder Controls
+* **Role-Based Access:** Dedicated founder controls to onboard and manage registered restaurants cleanly.
 
 ---
 
-## 🍽️ Featured Mumbai Partner Venues
-1. **The Rameshwaram Cafe** (Linking Road, Bandra West, Mumbai) — *Iconic Ghee Podi Dosa & Filter Coffee, 96% Reliability (Grade A+), ₹*
-2. **Meghana Foods** (Senapati Bapat Marg, Lower Parel, Mumbai) — *Spicy Andhra Biryani & Thalis, 92% Reliability (Grade A), ₹₹*
-3. **Bademiya Street Kebab Truck & Rolls** (Tulloch Road, Colaba, Mumbai) — *Late-Night Charcoal Kebabs & Baida Roti, 94% Reliability (Grade A), ₹₹*
-4. **Toit Brewpub & Kitchen** (Mathuradas Mill Compound, Lower Parel, Mumbai) — *Craft Microbrewery & Woodfired Pizza, 84% Reliability (Grade B), ₹₹₹*
-5. **Chai Sutta Bar & Bun Maska Express** (Juhu Tara Road, Juhu, Mumbai) — *Kulhad Chai, Bun Maska & Hot Samosas, 97% Reliability (Grade A+), ₹*
-6. **Punjab Grill & Royal Tandoor** (Palladium Mall, Lower Parel, Mumbai) — *North Indian, Dal Makhani & Kebabs, 72% Reliability (Grade C), ₹₹₹*
-7. **Britannia & Co. Restaurant** (Wakefield House, Ballard Estate, Fort, Mumbai) — *Legendary 1923 Parsi cafe: Mutton Berry Pulao, Sali Boti & Caramel Custard, 95% Reliability (Grade A+), ₹₹*
-8. **Kyani & Co. Bakery & Cafe** (Jer Mahal Estate, Dhobi Talao, Marine Lines, Mumbai) — *Iconic Irani bakery: Bun Maska, Keema Pav, Mawa Cake & Irani Chai, 94% Reliability (Grade A), ₹*
-9. **Prithvi Cafe** (Janki Kutir, Juhu Church Road, Juhu, Mumbai) — *Bamboo-shaded theatre courtyard cafe: Irish Coffee, Suleimani Chai & Amritsari Paratha, 91% Reliability (Grade A), ₹₹*
-10. **Sardar Pav Bhaji Express Truck** (Tardeo Road Junction, Mumbai Central, Mumbai) — *Extra-butter Pav Bhaji & Masala Tawa Pulao, 89% Reliability (Grade B), ₹*
+## 🛠️ Tech Stack
+
+* **Frontend:** HTML5, CSS3, JavaScript *(or React/Next.js — update to match your exact setup)*
+* **Backend & Real-Time Database:** Firebase / Firestore
+* **Deployment:** Vercel
 
 ---
 
-## 🏃 Running the Application
+## 🚀 Getting Started (Run Locally)
 
-The application runs with zero external package dependencies on standard Python 3.
+To run a local copy of this project on your machine:
 
-```bash
-python3 server.py
-```
-Open **`http://localhost:8080`** in your browser.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com
+   cd YOUR-REPO-NAME
+   ```
 
-- Direct file links:
-  - Frontend: [`index.html`](file:///Users/vedvitvora/.gemini/antigravity/scratch/waitmate/index.html)
-  - Client Application Logic: [`app.js`](file:///Users/vedvitvora/.gemini/antigravity/scratch/waitmate/app.js)
-  - Backend Server & SQLite Store: [`server.py`](file:///Users/vedvitvora/.gemini/antigravity/scratch/waitmate/server.py)
-  - Styling: [`style.css`](file:///Users/vedvitvora/.gemini/antigravity/scratch/waitmate/style.css)
+2. **Configure Firebase**
+   * Create a project in the [Firebase Console](https://google.com).
+   * Enable **Cloud Firestore** and set up your security rules.
+   * Add your Firebase configuration keys to your config file or `.env` file.
+
+3. **Launch the App**
+   * If using plain HTML/JS: Open `index.html` with VS Code Live Server (or run `python3 -m http.server`).
+   * If using Node/React: Run `npm install` followed by `npm run dev`.
+
+---
+
+## 🏆 Built For
+**Young Innovators Internship Challenge — 9th Edition (YIIC 9)**  
+Organized by **Scaler School of Technology**
