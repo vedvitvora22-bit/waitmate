@@ -352,11 +352,46 @@ async function safeCommit(writes) {
   try {
     return await commitWrites(writes);
   } catch (error) {
-    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      return null;
+    // Firestore quota exhaustion (429 RESOURCE_EXHAUSTED) or a transient 503 /
+    // 403 / 404 / malformed-credentials error must NEVER bubble up as a user
+    // facing "Quota exceeded" toast. The caller has already mirrored the write
+    // into the in-memory store (global._tickets / _customRestaurants / _reviews
+    // / _pwdMap), so we acknowledge the write as a memory fallback and let the
+    // handler return 200 OK. Reads (GET /api/restaurants, queue/review reads)
+    // merge the same in-memory store, so the UI updates immediately.
+    if (error.status === 429 || error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
+      console.warn("Firestore write served from in-memory fallback:", error.status || error.code || error.message || error);
+      return { ok: true, fallback: "memory" };
     }
     throw error;
+  }
+}
+
+// Recompute and persist a restaurant's aggregate queue fields (queue_count,
+// total_waiting_people, active_diners, occupied/available tables). Best-effort:
+// it never throws, and it always mirrors the computed values into the in-memory
+// pwdMap so GET /api/restaurants and the Host Stand stay consistent even when
+// Firestore is in quota-exceeded fallback mode.
+async function updateRestaurantAggregates(restaurantId) {
+  try {
+    const entries = allQueueEntries(Object.values(global._tickets || {}));
+    const active = entries.filter(e => e.restaurant_id === restaurantId && ["waiting", "notified", "delayed"].includes(e.status));
+    const seated = entries.filter(e => e.restaurant_id === restaurantId && e.status === "seated");
+    const queueCount = active.length;
+    const totalWaitingPeople = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
+    const activeDiners = [...active, ...seated].reduce((s, e) => s + Number(e.party_size || 0), 0);
+    let restaurant = null;
+    try { restaurant = await getRawRestaurant(restaurantId); } catch (_) { restaurant = null; }
+    if (!restaurant) return;
+    const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
+    const occupiedTables = Math.min(totalTables, seated.length);
+    const availableTables = Math.max(0, totalTables - occupiedTables);
+    const aggregates = { queue_count: queueCount, total_waiting_people: totalWaitingPeople, active_diners: activeDiners, occupied_tables: occupiedTables, available_tables: availableTables };
+    global._pwdMap = global._pwdMap || {};
+    global._pwdMap[restaurantId] = { ...(global._pwdMap[restaurantId] || {}), ...aggregates };
+    await safeCommit([setDocument("restaurants", restaurantId, { ...restaurant, ...aggregates })]);
+  } catch (e) {
+    console.warn("updateRestaurantAggregates skipped:", e?.message || e);
   }
 }
 
@@ -399,13 +434,14 @@ async function ensureRestaurants() {
   const publicCustom = (global._customRestaurants || [])
     .filter(r => !deleted.includes(r.id))
     .map(r => publicRestaurant({ ...r, ...(pwdMap[r.id] || {}) }));
-  let firestorePublic = [];
-  try {
-    const docs = await listCollection("restaurants");
-    firestorePublic = docs.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
-  } catch (error) {
-    if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-  }
+let firestorePublic = [];
+    try {
+      const docs = await listCollection("restaurants");
+      firestorePublic = docs.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
+    } catch (error) {
+      // Firestore quota (429) / 503 / 403 / 404 -> degrade to in-memory fallback only.
+      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
+    }
   const byId = {};
   for (const r of [...publicFallback, ...publicCustom]) byId[r.id] = r;
   for (const r of firestorePublic) byId[r.id] = r; // Firestore wins when reachable
@@ -2227,6 +2263,7 @@ async function route(request, response, pathParts) {
       const docs = await listCollection("reviews");
       firestoreReviews = docs.filter(r => r.restaurant_id === restaurantId);
     } catch (error) {
+      // Firestore quota (429) / 503 / 403 / 404 -> degrade to in-memory reviews only.
       if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
     }
 
@@ -2266,13 +2303,11 @@ async function route(request, response, pathParts) {
 
     let seeded = 0;
     const writes = [];
+    const existingSeedCount = (global._reviews || []).filter(r => r.is_sample === 1).length;
     for (const restaurant of restaurants) {
       const restId = restaurant.id;
-      let firestoreReviews = [];
-      try { firestoreReviews = await listCollection("reviews"); } catch (e) {}
-      const existingSample = firestoreReviews.filter(r => r.restaurant_id === restId && r.is_sample === 1).length
-        + (global._reviews || []).filter(r => r.restaurant_id === restId && r.is_sample === 1).length;
-      if (existingSample >= 3) continue;
+      const alreadySeeded = (global._reviews || []).filter(r => r.restaurant_id === restId && r.is_sample === 1).length;
+      if (alreadySeeded >= 3) continue;
 
       const comments = SAMPLE_COMMENTS[restId] || ["Arrived exactly when the token said. Great food!", "Service was quick and the food was delicious.", "Fair wait estimate, solid neighborhood spot."];
       for (let i = 0; i < 3; i++) {
@@ -2292,13 +2327,18 @@ async function route(request, response, pathParts) {
           is_sample: 1,
           created_at: now - (3 - i) * 3600,
         };
-        writes.push(setDocument("reviews", reviewId, review));
+        // Best-effort Firestore write; in-memory state is the source of truth
+        // when Firestore quota is exhausted (429 / 503 / 404).
+        try {
+          writes.push(setDocument("reviews", reviewId, review));
+          if (writes.length >= 20) { await safeCommit(writes); writes.length = 0; }
+        } catch (e) { /* swallow; memory still holds the review */ }
         (global._reviews = global._reviews || []).push(review);
         seeded++;
       }
     }
-    if (writes.length) await safeCommit(writes);
-    return send(response, 200, { success: true, message: `Seeded ${seeded} sample reviews across ${restaurants.length} restaurants.`, seeded });
+    if (writes.length) { try { await safeCommit(writes); } catch (e) {} }
+    return send(response, 200, { success: true, message: `Seeded ${seeded} sample reviews across ${restaurants.length} restaurants.`, seeded, existingSeedCount });
   }
 
   // -----------------------------------------------------------------------

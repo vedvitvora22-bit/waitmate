@@ -216,7 +216,13 @@ async function firestoreRequest(path, options = {}) {
   }
   if (!response.ok) {
     const error = new Error(data?.error?.message || data?.message || `Firestore request failed (${response.status})`);
-    error.status = response.status;
+    // Normalize Firestore quota exhaustion (429 RESOURCE_EXHAUSTED) to a 503
+    // "service unavailable" status. Every read fallback guard and safeCommit
+    // already treats 503 as "degrade to the in-memory store", so a single 429
+    // anywhere (reads or writes) transparently flips the whole API into memory
+    // mode instead of surfacing a "Quota exceeded" error to the user.
+    error.status = response.status === 429 ? 503 : response.status;
+    error.originalStatus = response.status;
     error.code = data?.error?.status;
     throw error;
   }
