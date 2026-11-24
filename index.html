@@ -450,7 +450,13 @@
               <h3 class="font-bold text-slate-900 text-sm">Live Waitlist Queue</h3>
               <span class="text-xs text-slate-600">(Ranked by arrival / priority)</span>
             </div>
-            <span class="text-xs text-slate-600">Live queue sync</span>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                <input type="checkbox" id="hostGhostToggle" checked onchange="toggleHostGhostGuests(this.checked)" class="w-3.5 h-3.5 accent-purple-600">
+                Show AI Ghost Guests
+              </label>
+              <span class="text-xs text-slate-600">Live queue sync</span>
+            </div>
           </div>
 
           <div class="overflow-x-auto">

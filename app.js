@@ -220,6 +220,9 @@ async function renderUnlockedHostStand(venueId, pwd) {
   if (dashEl) dashEl.classList.remove('hidden');
   if (typeof populateHostDropdown === 'function') populateHostDropdown();
   if (typeof renderHostDashboard === 'function') renderHostDashboard();
+  // Advance the AI ghost-queue simulator in the background so ghost guests
+  // are generated and persisted even when the owner never opens the customer page.
+  fetch('/api/queue/simulate-tick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restaurant_id: venueId }), keepalive: true }).catch(() => {});
 }
 
 
@@ -353,6 +356,7 @@ let selectedRestaurantId = null;
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
+let hostShowGhostGuests = true;
 
 // Seated-rating gating: a diner can only rate once they've been seated, and only once per visit
 let ratedTickets = new Set();
@@ -592,6 +596,7 @@ async function sendTableReadyNotification(ticketData) {
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
+  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   await initPushNotifications();
   await loadRestaurants();
   loadFavorites();
@@ -2753,6 +2758,7 @@ function clearCurrentTicket() {
   graceUntil = null;
   localStorage.removeItem('waitmate_ticket_id');
   if (pollTimer) clearInterval(pollTimer);
+  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   document.getElementById('activeTicketPill').classList.add('hidden');
   closeTicketModal();
 }
@@ -3591,6 +3597,11 @@ async function switchHostVenue(venueId) {
   await loadHostStand();
 }
 
+function toggleHostGhostGuests(checked) {
+  hostShowGhostGuests = !!checked;
+  renderHostDashboard();
+}
+
 async function loadHostStand() {
   if (isAnyPasswordModalOpen()) return;
   const savedPwd = getSavedHostPassword(currentHostVenueId);
@@ -3666,6 +3677,7 @@ function renderHostDashboard() {
   const stats = hostData.live_stats;
   const rel = hostData.reliability;
   const queue = hostData.queue || [];
+  const visibleQueue = hostShowGhostGuests ? queue : queue.filter(q => !(q && (q.is_ghost || q.isGhost || q.entry_type === 'ghost')));
 
   document.getElementById('hostVenueName').textContent = r.name;
   document.getElementById('hostVenueLocationSub').textContent = `${r.address} • Host Stand Dashboard`;
@@ -3693,7 +3705,7 @@ function renderHostDashboard() {
 
   // Host table rows
   const tbody = document.getElementById('hostQueueTableBody');
-  if (queue.length === 0) {
+  if (visibleQueue.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" class="py-8 text-center text-slate-600">
@@ -3706,7 +3718,7 @@ function renderHostDashboard() {
     return;
   }
 
-  tbody.innerHTML = queue.map((q, idx) => {
+  tbody.innerHTML = visibleQueue.map((q, idx) => {
     let statusPill = `<span class="badge-tag bg-slate-100 text-slate-700">Waiting</span>`;
     if (q.status === 'notified') {
       statusPill = `<span class="badge-tag bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse font-bold">Table Ready</span>`;
@@ -3737,7 +3749,7 @@ function renderHostDashboard() {
         </td>
 
         <td class="py-3 px-4">
-          <div class="font-bold text-slate-900">${q.customer_name}</div>
+          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}${(q.is_ghost || q.isGhost || q.entry_type === 'ghost') ? '<span class="badge-tag bg-purple-100 text-purple-800 border border-purple-300">🤖 AI Ghost</span>' : ''}</div>
           ${q.special_requests ? `<div class="text-[10px] text-amber-700 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
