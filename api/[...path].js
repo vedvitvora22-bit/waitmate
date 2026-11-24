@@ -200,6 +200,8 @@ function normalizeQueueEntry(raw) {
     entry_type: channel,
     status: pick("10_status", "status") || "waiting",
     has_arrived: Boolean(pick("11_has_arrived", "has_arrived")),
+    is_ghost: Boolean(pick("is_ghost", "isGhost")),
+    isGhost: Boolean(pick("is_ghost", "isGhost")),
     promised_wait_mins: Number(promisedRaw || 0),
     estimated_wait_mins: Number(promisedRaw || 0),
     joined_time_ist: pick("13_joined_time_ist", "joined_time_ist") || (joinedMs ? formatIST(joinedMs) : null),
@@ -242,7 +244,7 @@ function toNumberedEntry(entry) {
   const ist = (ms) => (ms === undefined || ms === null || ms === "" ? null : formatIST(ms));
   const promised = e.promised_wait_mins !== undefined ? e.promised_wait_mins : (e.estimated_wait_mins || 0);
 
-  return {
+  const numbered = {
     "01_ticket_number": e.ticket_number || "",
     "02_restaurant_id": e.restaurant_id || "",
     "03_restaurant_name": e.restaurant_name || "",
@@ -266,6 +268,12 @@ function toNumberedEntry(entry) {
     "21_rated_time_ist": e.rated_time_ist || ist(e.rated_at) || null,
     "22_joined_at_ms": joinedMs
   };
+  if (e.is_ghost || e.isGhost || e.entry_type === 'ghost') {
+    numbered.is_ghost = true;
+    numbered.isGhost = true;
+    numbered.entry_type = 'ghost';
+  }
+  return numbered;
 }
 
 // Read helpers that normalize on the way out so callers always get the
@@ -434,6 +442,185 @@ function normalizeMealTimes(mealTimes) {
   return cleaned.length ? cleaned : ["Lunch", "Dinner"];
 }
 
+// ---------------------------------------------------------------------------
+// AI host seating engine (mirror of server.py) + Mumbai ghost-queue simulator
+// ---------------------------------------------------------------------------
+
+const GHOST_NAMES_JS = [
+  "Aarav Patel", "Diya Sharma", "Vihaan Singh", "Ananya Reddy", "Kabir Nair",
+  "Myra Desai", "Ishaan Mehta", "Zoya Khan", "Reyansh Iyer", "Aanya Joshi",
+  "Arjun Malhotra", "Kiara Verma", "Advait Rao", "Saanvi Pillai", "Raghav Menon",
+];
+
+// Mumbai IST peak windows: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
+function isMumbaiPeakWindow() {
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const t = d.getHours() * 60 + d.getMinutes();
+  return [[13 * 60, 15 * 60], [17 * 60 + 30, 19 * 60], [20 * 60, 22 * 60 + 30]].some(([s, e]) => t >= s && t < e);
+}
+
+function calculateRealisticDuration(baseMinutes, partySize) {
+  const sizeBuffer = partySize > 2 ? (partySize - 2) * 10 : 0;
+  const variance = Math.floor(Math.random() * 31) - 10; // -10 .. +20
+  return Math.max(30, baseMinutes + sizeBuffer + variance);
+}
+
+function defaultTables(n) {
+  n = Math.max(1, Number(n || 1));
+  const out = [];
+  for (let i = 1; i <= n; i++) out.push({ id: `T${i}`, seats: i % 2 === 1 ? 2 : 4, freeAt: null });
+  return out;
+}
+
+// Seat waiting customers into open tables without mutating the inputs. Real
+// customers (is_ghost falsy) are sorted ahead of ghost entries; arrival order
+// is preserved within each group. Returns { seated: [...], remaining: [...] }.
+function processLiveQueue(queue, availableTables) {
+  const ordered = [...queue].sort((a, b) => {
+    const ghostA = Number(!!a.is_ghost || !!a.isGhost || a.entry_type === 'ghost');
+    const ghostB = Number(!!b.is_ghost || !!b.isGhost || b.entry_type === 'ghost');
+    if (ghostA !== ghostB) return ghostA - ghostB;
+    return Number(a.joined_at || a.joinedAt || 0) - Number(b.joined_at || b.joinedAt || 0);
+  });
+  const remaining = [...ordered];
+  const seated = [];
+  for (const table of [...availableTables].sort((a, b) => a.seats - b.seats)) {
+    const i = remaining.findIndex((c) => Number(c.size || 2) <= Number(table.seats));
+    if (i !== -1) {
+      seated.push({ customer: remaining[i], table });
+      remaining.splice(i, 1);
+    }
+  }
+  return { seated, remaining };
+}
+
+async function clearAllGhostEntriesJs(restaurantId) {
+  let entries = [];
+  try { entries = await fetchQueueEntries(); } catch (error) { entries = Object.values(global._tickets || {}); }
+  const targets = entries.filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost'));
+  const deletes = targets.map((e) => ({ delete: { name: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+  if (deletes.length) await safeCommit(deletes);
+  for (const e of targets) delete global._tickets[e.id];
+  return targets.length;
+}
+
+async function runSimulationTick(restaurantId) {
+  try {
+    const now = Date.now();
+    const restaurant = await getRawRestaurant(restaurantId);
+    if (!restaurant) return { skipped: true, error: 'restaurant not found' };
+    const last = Number(restaurant.last_simulated_at || 0);
+    if (now - last < 60000) {
+      return { skipped: true, cooldown_remaining: Math.ceil((60000 - (now - last)) / 1000) };
+    }
+
+    // 1. Free expired tables (freeAt <= now)
+    const tables = Array.isArray(restaurant.tables) && restaurant.tables.length ? restaurant.tables : defaultTables(restaurant.total_tables || 1);
+    let freed = 0;
+    for (const t of tables) {
+      if (t.freeAt && now >= t.freeAt) { t.freeAt = null; freed++; }
+    }
+
+    // 2. Open tables + waiting real customers
+    const openTables = tables.filter((t) => !t.freeAt);
+    let entries = [];
+    try { entries = await fetchQueueEntries(); } catch (error) { entries = Object.values(global._tickets || {}); }
+    const waiting = entries
+      .filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && !e.is_ghost && !e.isGhost && e.entry_type !== 'ghost')
+      .sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+
+    const queue = waiting.map((e) => ({ id: e.id, size: Number(e.party_size || 2), is_ghost: false }));
+    const available = openTables.map((t) => ({ id: t.id, seats: Number(t.seats) }));
+    const { seated, remaining } = processLiveQueue(queue, available);
+
+    const byId = {};
+    for (const e of waiting) byId[e.id] = e;
+    const seatedResults = [];
+    const basePrep = Number(restaurant.base_prep_time || 12);
+    const writes = [];
+    for (const { customer, table } of seated) {
+      const entry = byId[customer.id];
+      const seatedAt = now;
+      const actualWait = Math.max(1, Math.floor((seatedAt - Number(entry.joined_at || now)) / 60000));
+      const merged = { ...entry, status: 'seated', seated_at: seatedAt, seated_time_ist: formatIST(seatedAt), has_arrived: true, actual_wait_mins: actualWait };
+      writes.push(setDocument('queue_entries', customer.id, toNumberedEntry(merged)));
+      const t = tables.find((x) => x.id === table.id);
+      if (t) t.freeAt = seatedAt + calculateRealisticDuration(basePrep, Number(customer.size)) * 60000;
+      seatedResults.push({ ticket_id: customer.id, ticket_number: entry.ticket_number, table_id: table.id, actual_wait_mins: actualWait });
+    }
+
+    // 3. Mumbai peak-hour ghost spawn when no tables are open
+    const openCount = tables.filter((t) => !t.freeAt).length;
+    let ghostsSpawned = 0;
+    if (isMumbaiPeakWindow() && openCount === 0) {
+      const existingGhosts = entries.filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost')).length;
+      const target = 5 + Math.floor(Math.random() * 3); // 5-7
+      const toSpawn = Math.max(0, target - existingGhosts);
+      for (let i = 0; i < toSpawn; i++) {
+        const ghostId = `ghost-${String(now * 1000 + i).slice(-8)}`;
+        const ticketNumber = `WM-G${String(Math.floor(now / 1000) % 100000).padStart(5, '0')}`;
+        const partySize = 2 + Math.floor(Math.random() * 3);
+        const ghostName = GHOST_NAMES_JS[i % GHOST_NAMES_JS.length];
+        const ghost = {
+          id: ghostId,
+          ticket_number: ticketNumber,
+          restaurant_id: restaurantId,
+          restaurant_name: restaurant.name || '',
+          guest_name: ghostName,
+          customer_name: ghostName,
+          phone: '',
+          party_size: partySize,
+          seating_pref: 'First Available',
+          special_requests: '',
+          channel: 'remote',
+          entry_type: 'ghost',
+          '09_channel': 'remote',
+          status: 'waiting',
+          estimated_wait_mins: 1 + Math.floor(Math.random() * 45), // max 45 minutes
+          actual_wait_mins: 0,
+          joined_at: now,
+          joined_time_ist: formatIST(now),
+          is_ghost: true,
+          isGhost: true,
+          notified_at: null,
+          seated_at: null,
+          has_arrived: false,
+          delay_mins: 0,
+        };
+        writes.push(setDocument('queue_entries', ghostId, toNumberedEntry(ghost)));
+        global._tickets[ghostId] = { ...ghost };
+        ghostsSpawned++;
+      }
+    }
+
+    // 4. Persist restaurant state (tables + cooldown) to Firestore
+    writes.push(setDocument('restaurants', restaurantId, { ...restaurant, tables, available_tables: openCount, last_simulated_at: now }));
+    if (writes.length) await safeCommit(writes);
+
+    // Mirror into the memory cache so Host Stand reads stay consistent
+    global._pwdMap = global._pwdMap || {};
+    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
+    global._pwdMap[restaurantId].tables = tables;
+    global._pwdMap[restaurantId].available_tables = openCount;
+    global._pwdMap[restaurantId].last_simulated_at = now;
+
+    return {
+      skipped: false,
+      restaurant_id: restaurantId,
+      freed_tables: freed,
+      open_tables: openCount,
+      seated: seatedResults,
+      seated_count: seatedResults.length,
+      remaining_count: remaining.length,
+      ghosts_spawned: ghostsSpawned,
+      simulated_at: now,
+    };
+  } catch (error) {
+    console.error(`simulation tick failed for ${restaurantId}:`, error);
+    return { skipped: true, error: String(error.message || error) };
+  }
+}
+
 // Current 5-minute IST time bucket. Every request within the same bucket
 // shares the same bucket key, so all browsers see identical simulated waits.
 function istBucket() {
@@ -561,6 +748,11 @@ async function route(request, response, pathParts) {
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
+    // Trigger the simulation tick on page loads (60-second cooldown per
+    // restaurant is enforced inside runSimulationTick).
+    await Promise.all(restaurants.map(async (restaurant) => {
+      try { await runSimulationTick(restaurant.id); } catch { /* keep response intact */ }
+    }));
     let globalAnnouncement = "";
     try {
       const g = await getDocument("settings", "global_announcement");
@@ -588,9 +780,21 @@ async function route(request, response, pathParts) {
     const id = normalized[normalized.length - 1];
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    try { await runSimulationTick(id); } catch { /* keep response intact */ }
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
+  }
+
+  if (request.method === "POST" && path === "/api/queue/simulate-tick") {
+    if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
+    return send(response, 200, await runSimulationTick(body.restaurant_id));
+  }
+
+  if (request.method === "POST" && path === "/api/queue/clear-ghosts") {
+    if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
+    const cleared = await clearAllGhostEntriesJs(body.restaurant_id);
+    return send(response, 200, { success: true, cleared, restaurant_id: body.restaurant_id });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {

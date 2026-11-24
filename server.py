@@ -1,12 +1,14 @@
 import hashlib
 import json
 import os
+import random
 import sqlite3
 import sys
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from zoneinfo import ZoneInfo
 from urllib.parse import urlparse, parse_qs
 
 PORT = 8080
@@ -57,6 +59,382 @@ def format_ist(ts):
         return datetime.fromtimestamp(float(ts), tz=IST_TZ).strftime('%I:%M %p')
     except (TypeError, ValueError, OSError):
         return None
+
+
+def calculate_realistic_duration(base_minutes, party_size):
+    # Larger groups linger longer; add random human variance
+    size_buffer = (party_size - 2) * 10 if party_size > 2 else 0
+    variance = random.randint(-10, 20)
+    return timedelta(minutes=max(30, base_minutes + size_buffer + variance))
+
+
+def process_live_queue(queue, available_tables):
+    # Seat real customers (is_ghost == False) ahead of ghost entries, then by
+    # joined_at / joinedAt arrival order within each group. Never mutates input.
+    ordered = sorted(queue, key=lambda c: (bool(c.get("is_ghost", False)), c.get("joined_at") or c.get("joinedAt") or 0))
+    seated = []
+    remaining = list(ordered)
+    for table in sorted(available_tables, key=lambda t: t["seats"]):
+        for i, customer in enumerate(remaining):
+            if customer["size"] <= table["seats"]:
+                seated.append((customer, table))
+                remaining.pop(i)
+                break  # Move to the next open table
+    return seated, remaining
+
+
+# ------------------------------------------------------------------
+# FIRESTORE SYNC (optional; server.py keeps SQLite as the local source
+# of truth and degrades gracefully when firebase_admin is unavailable)
+# ------------------------------------------------------------------
+_firestore_db = None
+_firestore_tried = False
+
+
+def get_firestore():
+    global _firestore_db, _firestore_tried
+    if _firestore_tried:
+        return _firestore_db
+    _firestore_tried = True
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore as _firestore_module
+    except Exception:
+        print("[firestore] firebase_admin not installed; Firestore sync disabled")
+        return None
+    raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    cred = None
+    if raw:
+        try:
+            cred = credentials.Certificate(json.loads(raw))
+        except Exception:
+            try:
+                cred = credentials.Certificate(raw)
+            except Exception:
+                cred = None
+    try:
+        if cred:
+            firebase_admin.initialize_app(cred)
+        else:
+            firebase_admin.initialize_app()
+    except ValueError:
+        pass  # already initialized
+    except Exception as exc:
+        print(f"[firestore] initialization failed: {exc}")
+        return None
+    _firestore_db = _firestore_module.client()
+    return _firestore_db
+
+
+def fs_set(collection, document_id, fields):
+    db = get_firestore()
+    if db is None:
+        return None
+    return db.collection(collection).document(document_id).set(fields, merge=True)
+
+
+def fs_delete(collection, document_id):
+    db = get_firestore()
+    if db is None:
+        return None
+    return db.collection(collection).document(document_id).delete()
+
+
+def fs_list(collection):
+    db = get_firestore()
+    if db is None:
+        return []
+    return [dict(doc.to_dict(), id=doc.id) for doc in db.collection(collection).stream()]
+
+
+# Mumbai IST peak windows: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
+MUMBAI_PEAK_WINDOWS = [
+    (13, 0, 15, 0),
+    (17, 30, 19, 0),
+    (20, 0, 22, 30),
+]
+
+GHOST_NAMES = [
+    "Aarav Patel", "Diya Sharma", "Vihaan Singh", "Ananya Reddy", "Kabir Nair",
+    "Myra Desai", "Ishaan Mehta", "Zoya Khan", "Reyansh Iyer", "Aanya Joshi",
+    "Arjun Malhotra", "Kiara Verma", "Advait Rao", "Saanvi Pillai", "Raghav Menon",
+]
+
+
+def _ist_now():
+    return datetime.now(IST_TZ)
+
+
+def is_mumbai_peak_window(dt=None):
+    dt = dt or _ist_now()
+    t = (dt.hour, dt.minute)
+    for h1, m1, h2, m2 in MUMBAI_PEAK_WINDOWS:
+        if (h1, m1) <= t < (h2, m2):
+            return True
+    return False
+
+
+# Mumbai IST traffic buckets: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
+MUMBAI_TRAFFIC_CONFIG = {
+    "Lunch": {"start": "13:00", "end": "15:00", "multiplier": 1.8},
+    "Snacks": {"start": "17:30", "end": "19:00", "multiplier": 1.4},
+    "Dinner": {"start": "20:00", "end": "22:30", "multiplier": 2.0},
+    "Off-Peak": {"start": None, "end": None, "multiplier": 1.0},
+}
+
+
+def get_mumbai_traffic_config():
+    """Return the current Mumbai (Asia/Kolkata) IST traffic bucket config."""
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    t = (now.hour, now.minute)
+    if (13, 0) <= t < (15, 0):
+        bucket = "Lunch"
+    elif (17, 30) <= t < (19, 0):
+        bucket = "Snacks"
+    elif (20, 0) <= t < (22, 30):
+        bucket = "Dinner"
+    else:
+        bucket = "Off-Peak"
+    cfg = dict(MUMBAI_TRAFFIC_CONFIG[bucket])
+    cfg["bucket"] = bucket
+    return cfg
+
+
+def clear_all_ghost_entries(restaurant_id):
+    """Delete every isGhost == True queue entry for a restaurant (sqlite + Firestore)."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1",
+        (restaurant_id,),
+    )
+    ids = [r[0] for r in c.fetchall()]
+    c.execute(
+        "DELETE FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1",
+        (restaurant_id,),
+    )
+    conn.commit()
+    conn.close()
+    firestore_cleared = 0
+    try:
+        for doc in fs_list("queue_entries"):
+            if doc.get("restaurant_id") == restaurant_id and doc.get("isGhost") is True:
+                fs_delete("queue_entries", doc["id"])
+                firestore_cleared += 1
+    except Exception as exc:
+        print(f"[firestore] clear_all_ghost_entries delete warning: {exc}")
+    return len(ids) + firestore_cleared
+
+
+def _ensure_schema_migrations(conn, c):
+    # last_simulated_at: 60-second cooldown tracker per restaurant
+    try:
+        c.execute("ALTER TABLE restaurants ADD COLUMN last_simulated_at REAL")
+    except sqlite3.OperationalError:
+        pass
+    # is_ghost flag on queue entries
+    try:
+        c.execute("ALTER TABLE queue_entries ADD COLUMN is_ghost INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    # Per-table turnover clock so the tick can free expired tables (freeAt <= now)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS restaurant_tables (
+        id TEXT PRIMARY KEY,
+        restaurant_id TEXT NOT NULL,
+        table_id TEXT NOT NULL,
+        seats INTEGER NOT NULL,
+        free_at REAL
+    )
+    ''')
+    # Backfill tables for restaurants that have none yet
+    c.execute("SELECT id, total_tables FROM restaurants")
+    for rest_id, total_tables in c.fetchall():
+        c.execute("SELECT COUNT(*) FROM restaurant_tables WHERE restaurant_id = ?", (rest_id,))
+        if c.fetchone()[0]:
+            continue
+        n = max(1, int(total_tables or 1))
+        for i in range(1, n + 1):
+            c.execute(
+                "INSERT INTO restaurant_tables (id, restaurant_id, table_id, seats, free_at) VALUES (?, ?, ?, ?, NULL)",
+                (f"{rest_id}-T{i}", rest_id, f"T{i}", 2 if i % 2 == 1 else 4),
+            )
+
+
+def get_restaurant_tables(restaurant_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT table_id, seats, free_at FROM restaurant_tables WHERE restaurant_id = ? ORDER BY table_id",
+        (restaurant_id,),
+    )
+    tables = [{"id": r[0], "seats": r[1], "free_at": r[2]} for r in c.fetchall()]
+    conn.close()
+    return tables
+
+
+def clearAllGhostEntries(restaurant_id):
+    """Wipe every is_ghost/ghost queue entry for a restaurant (sqlite + Firestore)."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
+        (restaurant_id,),
+    )
+    ids = [r[0] for r in c.fetchall()]
+    c.execute(
+        "DELETE FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
+        (restaurant_id,),
+    )
+    conn.commit()
+    conn.close()
+    try:
+        for doc in fs_list("queue_entries"):
+            if doc.get("restaurant_id") == restaurant_id and doc.get("status") == "waiting" and (doc.get("is_ghost") or doc.get("isGhost") or doc.get("entry_type") == "ghost"):
+                fs_delete("queue_entries", doc["id"])
+    except Exception as exc:
+        print(f"[firestore] clearAllGhostEntries delete warning: {exc}")
+    return len(ids)
+
+
+def run_simulation_tick(restaurant_id):
+    """One ghost-queue simulation tick for a restaurant.
+
+    Freed expired tables (free_at <= now), seats waiting customers into open
+    tables via process_live_queue, spawns Mumbai peak-hour ghosts when no
+    tables are open, and persists restaurants + queue_entries to Firestore.
+    Runs at most once per 60 seconds per restaurant (last_simulated_at).
+    Returns a result dict.
+    """
+    now = time.time()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {"skipped": True, "error": "restaurant not found"}
+    rest = dict(row)
+    last_simulated = float(rest.get("last_simulated_at") or 0)
+    if now - last_simulated < 60:
+        conn.close()
+        return {
+            "skipped": True,
+            "cooldown_remaining": int(60 - (now - last_simulated)),
+        }
+
+    # 1. Free expired tables
+    tables = get_restaurant_tables(restaurant_id)
+    freed = 0
+    for t in tables:
+        if t["free_at"] and now >= t["free_at"]:
+            c.execute("UPDATE restaurant_tables SET free_at = NULL WHERE id = ?", (t["id"],))
+            freed += 1
+    conn.commit()
+
+    # 2. Open tables + waiting real customers
+    tables = get_restaurant_tables(restaurant_id)
+    open_tables = [t for t in tables if not t["free_at"]]
+    c.execute(
+        "SELECT * FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost IS NULL OR is_ghost = 0) AND entry_type != 'ghost' ORDER BY joined_at ASC",
+        (restaurant_id,),
+    )
+    waiting = [dict(r) for r in c.fetchall()]
+
+    queue = [{"id": e["id"], "size": int(e["party_size"] or 2), "is_ghost": False} for e in waiting]
+    available = [{"id": t["id"], "seats": int(t["seats"])} for t in open_tables]
+    seated_pairs, remaining = process_live_queue(queue, available)
+
+    by_id = {e["id"]: e for e in waiting}
+    seated = []
+    for customer, table in seated_pairs:
+        entry = by_id[customer["id"]]
+        seated_at = now
+        actual_wait = max(1, int((seated_at - float(entry["joined_at"])) / 60))
+        c.execute(
+            "UPDATE queue_entries SET status = 'seated', seated_at = ?, actual_wait_mins = ?, has_arrived = 1 WHERE id = ?",
+            (seated_at, actual_wait, customer["id"]),
+        )
+        base_prep = int(rest.get("base_prep_time") or 12)
+        free_at = seated_at + calculate_realistic_duration(base_prep, int(customer["size"])).total_seconds() / 60.0
+        c.execute("UPDATE restaurant_tables SET free_at = ? WHERE id = ?", (free_at, table["id"]))
+        try:
+            log_id = f"log-tick-{int(now * 1000)}-{customer['id']}"
+            promised = int(entry.get("estimated_wait_mins") or 0)
+            diff = actual_wait - promised
+            rating = "spot_on" if abs(diff) <= 3 else ("faster" if diff < -3 else ("slight_delay" if diff <= 7 else "severe_delay"))
+            c.execute(
+                "INSERT INTO reliability_logs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (log_id, restaurant_id, customer["id"], promised, actual_wait, rating, "Auto-seated by simulation tick", now),
+            )
+        except sqlite3.OperationalError:
+            pass
+        seated.append({
+            "ticket_id": customer["id"],
+            "ticket_number": entry.get("ticket_number"),
+            "table_id": table["id"],
+            "actual_wait_mins": actual_wait,
+        })
+    conn.commit()
+
+    # 3. Mumbai peak-hour ghost spawn when no tables are open
+    open_count = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
+    ghosts_spawned = 0
+    if is_mumbai_peak_window() and open_count == 0:
+        c.execute(
+            "SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
+            (restaurant_id,),
+        )
+        existing_ghosts = c.fetchone()[0]
+        target = random.randint(5, 7)
+        to_spawn = max(0, target - int(existing_ghosts))
+        for _ in range(to_spawn):
+            ghost_id = f"ghost-{uuid.uuid4().hex[:8]}"
+            ticket_number = f"WM-G{int(now * 1000) % 100000:05d}"
+            name = random.choice(GHOST_NAMES)
+            party_size = random.randint(2, 4)
+            wait_mins = random.randint(5, 45)
+            phone = f"+91 {random.randint(7000, 9999)} {random.randint(70000, 99999)}"
+            c.execute(
+                "INSERT INTO queue_entries "
+                "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "waiting", wait_mins, now),
+            )
+            ghosts_spawned += 1
+    conn.commit()
+
+    # 4. Persist to Firestore + update cooldown
+    open_count_after = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
+    c.execute("UPDATE restaurants SET last_simulated_at = ?, available_tables = ? WHERE id = ?", (now, open_count_after, restaurant_id))
+    conn.commit()
+    conn.close()
+
+    try:
+        fs_set("restaurants", restaurant_id, {
+            "last_simulated_at": now,
+            "available_tables": open_count_after,
+        })
+        for s in seated:
+            fs_set("queue_entries", s["ticket_id"], {
+                "status": "seated",
+                "seated_at": now,
+                "actual_wait_mins": s["actual_wait_mins"],
+            })
+    except Exception as exc:
+        print(f"[firestore] simulation tick write warning: {exc}")
+
+    return {
+        "skipped": False,
+        "restaurant_id": restaurant_id,
+        "freed_tables": freed,
+        "open_tables": open_count_after,
+        "seated": seated,
+        "seated_count": len(seated),
+        "remaining_count": len(remaining),
+        "ghosts_spawned": ghosts_spawned,
+        "simulated_at": now,
+    }
 
 # Initialize database schema and initial data
 def init_db():
@@ -147,7 +525,24 @@ def init_db():
     )
     ''')
 
+    # Table bookings / reservations (turn-based seating)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS table_bookings (
+        id TEXT PRIMARY KEY,
+        restaurant_id TEXT NOT NULL,
+        table_id TEXT NOT NULL,
+        start_time REAL NOT NULL,
+        end_time REAL NOT NULL,
+        party_size INTEGER NOT NULL,
+        customer_name TEXT NOT NULL,
+        turn_minutes INTEGER NOT NULL,
+        created_at REAL NOT NULL
+    )
+    ''')
+
     conn.commit()
+
+    _ensure_schema_migrations(conn, c)
 
     # Migrate: add password_hash column to existing databases
     try:
@@ -701,6 +1096,122 @@ def seed_data(c):
                 INSERT INTO reliability_logs VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (log_id, rest_id, f"hist-tk-{log_count}", promised, actual, rating_type, note, ts))
 
+
+# ------------------------------------------------------------------
+# TABLE BOOKING (Reservation) ENGINE
+# ------------------------------------------------------------------
+def _to_ts(dt):
+    """Naive datetime (assumed IST) -> epoch seconds."""
+    return dt.replace(tzinfo=IST_TZ).timestamp()
+
+
+def _from_ts(ts):
+    """Epoch seconds -> naive datetime (IST)."""
+    return datetime.fromtimestamp(float(ts), tz=IST_TZ).replace(tzinfo=None)
+
+
+def _default_tables(total_tables):
+    n = max(1, int(total_tables or 1))
+    tables = []
+    for i in range(1, n + 1):
+        tables.append({"id": f"T{i}", "seats": 2 if i % 2 == 1 else 4})
+    return tables
+
+
+def get_table_bookings(restaurant_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        'SELECT id, table_id, start_time, end_time, party_size, customer_name, turn_minutes '
+        'FROM table_bookings WHERE restaurant_id = ? ORDER BY start_time',
+        (restaurant_id,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    bookings = []
+    for r in rows:
+        bookings.append({
+            "id": r["id"],
+            "table_id": r["table_id"],
+            "start": _from_ts(r["start_time"]),
+            "end": _from_ts(r["end_time"]),
+            "party_size": r["party_size"],
+            "customer_name": r["customer_name"],
+            "turn_minutes": r["turn_minutes"],
+        })
+    return bookings
+
+
+def save_table_booking(restaurant_id, table_id, start_dt, end_dt, party_size, customer_name, turn_minutes):
+    conn = get_db()
+    c = conn.cursor()
+    bid = f"bk-{int(time.time() * 1000)}"
+    c.execute(
+        '''
+        INSERT INTO table_bookings
+        (id, restaurant_id, table_id, start_time, end_time, party_size, customer_name, turn_minutes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        (bid, restaurant_id, table_id, _to_ts(start_dt), _to_ts(end_dt), party_size, customer_name, turn_minutes, time.time()),
+    )
+    conn.commit()
+    conn.close()
+    return bid
+
+
+class VirtualRestaurant:
+    def __init__(self, name, tables, turn_minutes=90, bookings=None):
+        self.name = name
+        # tables format: [{"id": "T1", "seats": 2}, {"id": "T2", "seats": 4}]
+        self.tables = sorted(tables, key=lambda x: x["seats"])
+        self.turn_time = timedelta(minutes=turn_minutes)
+        self.bookings = list(bookings or [])
+
+    def is_table_free(self, table_id, start_time):
+        end_time = start_time + self.turn_time
+        for b in self.bookings:
+            if b["table_id"] == table_id:
+                # Check for time overlap
+                if start_time < b["end"] and end_time > b["start"]:
+                    return False
+        return True
+
+    def find_table(self, party_size, requested_time):
+        for table in self.tables:
+            if table["seats"] >= party_size and self.is_table_free(table["id"], requested_time):
+                return table
+        return None
+
+    def seat_customer(self, party_size, requested_time_str):
+        req_time = datetime.strptime(requested_time_str, "%Y-%m-%d %H:%M")
+
+        # 1. Try exact time
+        table = self.find_table(party_size, req_time)
+        if table:
+            self.bookings.append({
+                "table_id": table["id"],
+                "start": req_time,
+                "end": req_time + self.turn_time,
+                "party_size": party_size
+            })
+            return {
+                "status": "CONFIRMED",
+                "table": table["id"],
+                "time": requested_time_str,
+                "start": req_time.isoformat(),
+                "end": (req_time + self.turn_time).isoformat(),
+            }
+
+        # 2. Suggest alternatives (+/- 30 mins)
+        alternatives = []
+        for delta in [-30, 30, -60, 60]:
+            alt_time = req_time + timedelta(minutes=delta)
+            if self.find_table(party_size, alt_time):
+                alternatives.append(alt_time.strftime("%H:%M"))
+
+        return {"status": "FULL", "alternatives": alternatives}
+
+
 def get_db():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
@@ -1077,6 +1588,14 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             conn.close()
             global_announcement = ga_row[0] if ga_row and ga_row[0] else ""
 
+            # Trigger the Mumbai ghost-queue simulation tick on page loads
+            # (60-second cooldown per restaurant is enforced inside the tick).
+            for r in rows:
+                try:
+                    run_simulation_tick(r["id"])
+                except Exception:
+                    pass
+
             result = []
             for r in rows:
                 r_dict = dict(r)
@@ -1193,6 +1712,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             if not row:
                 self.send_json({"error": "Restaurant not found"}, 404)
                 return
+
+            try:
+                run_simulation_tick(rest_id)
+            except Exception:
+                pass
 
             r_dict = dict(row)
             r_dict.pop("password_hash", None)
@@ -1516,6 +2040,24 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             })
             return
 
+        # API: List table bookings for a restaurant
+        if path.startswith("/api/table/bookings/"):
+            rest_id = path.replace("/api/table/bookings/", "").strip()
+            bookings = get_table_bookings(rest_id)
+            result = []
+            for b in bookings:
+                result.append({
+                    "id": b["id"],
+                    "table_id": b["table_id"],
+                    "start": b["start"].isoformat(),
+                    "end": b["end"].isoformat(),
+                    "party_size": b["party_size"],
+                    "customer_name": b["customer_name"],
+                    "turn_minutes": b["turn_minutes"],
+                })
+            self.send_json({"restaurant_id": rest_id, "bookings": result})
+            return
+
         self.send_json({"error": "Endpoint not found"}, 404)
 
     def do_POST(self):
@@ -1657,6 +2199,81 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 "estimated_wait_mins": est_wait,
                 "message": f"Spot confirmed! Your ticket is {ticket_num}."
             })
+            return
+
+        # API: Trigger the Mumbai ghost-queue simulation tick for a restaurant
+        if path == "/api/queue/simulate-tick":
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "restaurant_id is required"}, 400)
+                return
+            self.send_json(run_simulation_tick(rest_id))
+            return
+
+        # API: Wipe all ghost queue entries for a restaurant on demand
+        if path == "/api/queue/clear-ghosts":
+            data = self.read_json_body()
+            rest_id = data.get("restaurant_id")
+            if not rest_id:
+                self.send_json({"error": "restaurant_id is required"}, 400)
+                return
+            cleared = clear_all_ghost_entries(rest_id)
+            self.send_json({"success": True, "cleared": cleared, "restaurant_id": rest_id})
+            return
+
+        # API: Reserve a table (turn-based seating)
+        if path == "/api/table/reserve":
+            data = self.read_json_body()
+            rest_id = str(data.get("restaurant_id", "")).strip()
+            try:
+                party_size = int(data.get("party_size", 1) or 1)
+            except (TypeError, ValueError):
+                party_size = 1
+            requested_time = str(data.get("requested_time") or "").strip()
+            customer_name = str(data.get("customer_name") or "Guest").strip()
+            try:
+                turn_minutes = int(data.get("turn_minutes", 90) or 90)
+            except (TypeError, ValueError):
+                turn_minutes = 90
+            tables = data.get("tables")
+
+            if not rest_id or not requested_time:
+                self.send_json({"error": "restaurant_id and requested_time (YYYY-MM-DD HH:MM) are required"}, 400)
+                return
+            try:
+                datetime.strptime(requested_time, "%Y-%m-%d %H:%M")
+            except ValueError:
+                self.send_json({"error": "requested_time must be in YYYY-MM-DD HH:MM format"}, 400)
+                return
+
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('SELECT name, total_tables FROM restaurants WHERE id = ?', (rest_id,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                self.send_json({"error": "Restaurant not found"}, 404)
+                return
+
+            if tables is None:
+                tables = _default_tables(row["total_tables"])
+
+            bookings = get_table_bookings(rest_id)
+            vr = VirtualRestaurant(row["name"], tables, turn_minutes=turn_minutes, bookings=bookings)
+            result = vr.seat_customer(party_size, requested_time)
+
+            if result["status"] == "CONFIRMED":
+                req_dt = datetime.strptime(requested_time, "%Y-%m-%d %H:%M")
+                end_dt = req_dt + timedelta(minutes=turn_minutes)
+                bid = save_table_booking(rest_id, result["table"], req_dt, end_dt, party_size, customer_name, turn_minutes)
+                result["id"] = bid
+                result["restaurant_id"] = rest_id
+                result["customer_name"] = customer_name
+                result["party_size"] = party_size
+                result["turn_minutes"] = turn_minutes
+
+            self.send_json(result)
             return
 
         # API: Customer Actions

@@ -1,0 +1,7 @@
+# WaitMate Python backend (server.py).
+# Hard imports: hashlib, json, os, random, sqlite3, sys, time, uuid,
+# datetime, http.server, urllib.parse  (all Python standard library).
+# firebase-admin is optional: Firestore sync degrades gracefully when it is
+# not installed (get_firestore() returns None and server.py keeps running on
+# SQLite). The production API route is api/[...path].js (Node.js).
+firebase-admin>=6.0.0
