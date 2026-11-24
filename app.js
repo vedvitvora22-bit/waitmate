@@ -2817,6 +2817,35 @@ async function sharePassWhatsApp() {
   showToast("Opening WhatsApp…", "success");
 }
 
+async function copySharePassLink() {
+  if (!currentTicketId && !activeTicketData) {
+    showToast("No active pass to copy yet.", "info");
+    return;
+  }
+  const ticketId = currentTicketId || activeTicketData.id;
+  const link = buildShareLink(ticketId);
+  try {
+    await navigator.clipboard.writeText(link);
+    const icon = document.getElementById('copyShareIcon');
+    const label = document.getElementById('copyShareLabel');
+    if (icon) {
+      icon.setAttribute('data-lucide', 'check-circle-2');
+      lucide.createIcons();
+    }
+    if (label) label.textContent = 'Copied!';
+    showToast("Link copied to clipboard", "success");
+    setTimeout(() => {
+      if (icon) {
+        icon.setAttribute('data-lucide', 'copy');
+        lucide.createIcons();
+      }
+      if (label) label.textContent = 'Copy Link';
+    }, 2000);
+  } catch (err) {
+    window.prompt("Copy this link to share your live pass:", link);
+  }
+}
+
 // Update the share link preview when the pass modal opens
 const _origOpenTicketModal = openTicketModalImpl;
 function openTicketModal() {

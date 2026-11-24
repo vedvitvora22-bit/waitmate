@@ -51,7 +51,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-[#F9FAFB] text-slate-800 min-h-screen flex flex-col antialiased selection:bg-orange-500 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
+<body class="bg-[#F8FAFC] text-slate-900 min-h-screen flex flex-col antialiased selection:bg-orange-600 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- Top App Live Status Bar -->
   <div class="bg-slate-900 text-slate-200 text-xs py-2 px-4 border-b border-slate-800">
@@ -821,23 +821,26 @@
 
           <!-- Share Your Live Pass Section -->
           <div class="space-y-2 pt-3 border-t border-slate-100">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Share Your Pass</span>
-              <span class="text-[10px] text-slate-400">Friends can track live — read-only</span>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Share Your Pass</span>
+              <span class="text-[10px] text-slate-600">Friends can track live — read-only</span>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <button onclick="sharePass()" id="btnSharePass" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-800">
                 <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
                 <span>Share Pass with Friends</span>
               </button>
-              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-green-500 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-green-600">
+              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-emerald-700">
                 <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
                 <span>WhatsApp</span>
               </button>
             </div>
-            <p class="text-[10px] text-center text-slate-400">
-              Link: <span id="sharePassLinkPreview" class="font-mono text-orange-600 break-all truncate block">https://waitmate-weld.vercel.app/?ticket=...</span>
-            </p>
+            <div class="mt-1.5 flex justify-center">
+              <button onclick="copySharePassLink()" id="btnCopyShareLink" class="px-4 py-2 rounded-xl border border-slate-300 bg-slate-100 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900">
+                <i id="copyShareIcon" data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span id="copyShareLabel">Copy Link</span>
+              </button>
+            </div>
           </div>
 
           <!-- Diner Action Buttons -->
