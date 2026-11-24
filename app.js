@@ -602,14 +602,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadFavorites();
   startRestaurantsRefresh();
 
-  // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking
+  // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking.
+  // Purge stale/terminal tickets (seated, cancelled, completed, no_show) or tickets
+  // older than 2 hours so a fresh load never shows a stale "Seated! Enjoy your food"
+  // title when there is no active waitlist session.
   try {
     const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
-    if (saved && saved.id) {
+    const terminalStates = ['seated', 'cancelled', 'completed', 'no_show'];
+    const stale = saved && saved.id && saved.data && (
+      terminalStates.includes(saved.data.status) ||
+      (saved.data.joined_at && Date.now() - Number(saved.data.joined_at) > 2 * 60 * 60 * 1000)
+    );
+    if (saved && saved.id && !stale) {
       currentTicketId = saved.id;
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
-      if (activeTicketData && !['seated', 'cancelled'].includes(activeTicketData.status)) {
+      if (activeTicketData && !terminalStates.includes(activeTicketData.status)) {
         const pill = document.getElementById('activeTicketPill');
         if (pill) {
           pill.classList.remove('hidden');
@@ -617,8 +625,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         startTicketPolling();
       }
+    } else if (saved && saved.id) {
+      clearCurrentTicket();
     }
-  } catch (e) { /* ignore corrupt storage */   }
+  } catch (e) { /* ignore corrupt storage */ }
 
   // Restore already-rated tickets so a diner cannot rate the same visit twice after a reload
   try {

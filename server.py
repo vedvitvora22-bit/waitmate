@@ -575,6 +575,11 @@ def _ensure_schema_migrations(conn, c):
         c.execute("ALTER TABLE queue_entries ADD COLUMN is_ghost INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    # source field on queue entries ('walk-in' | 'remote' | 'ai-ghost')
+    try:
+        c.execute("ALTER TABLE queue_entries ADD COLUMN source TEXT DEFAULT 'remote'")
+    except sqlite3.OperationalError:
+        pass
     # Per-table turnover clock so the tick can free expired tables (freeAt <= now)
     c.execute('''
     CREATE TABLE IF NOT EXISTS restaurant_tables (
@@ -766,9 +771,9 @@ def run_simulation_tick(restaurant_id):
             phone = f"+91 {random.randint(7000, 9999)} {random.randint(70000, 99999)}"
             c.execute(
                 "INSERT INTO queue_entries "
-                "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, is_ghost) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "waiting", wait_mins, now),
+                "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at, is_ghost) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "ai-ghost", "waiting", wait_mins, now),
             )
             ghosts_spawned += 1
 
@@ -870,6 +875,7 @@ def init_db():
         seating_pref TEXT NOT NULL,
         special_requests TEXT,
         entry_type TEXT NOT NULL, -- 'remote' or 'walk_in'
+        source TEXT NOT NULL DEFAULT 'remote', -- 'walk-in' | 'remote' | 'ai-ghost'
         status TEXT NOT NULL, -- 'waiting', 'notified', 'delayed', 'seated', 'cancelled', 'no_show'
         estimated_wait_mins INTEGER NOT NULL,
         actual_wait_mins INTEGER DEFAULT 0,
@@ -2590,9 +2596,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             now = time.time()
             c.execute('''
             INSERT INTO queue_entries 
-            (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, has_arrived)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, special_req, entry_type, 'waiting', est_wait, now, has_arrived))
+            (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at, has_arrived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, special_req, entry_type, entry_type, 'waiting', est_wait, now, has_arrived))
             conn.commit()
             conn.close()
 
@@ -2904,9 +2910,9 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
                 c.execute('''
                 INSERT INTO queue_entries 
-                (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, "Host stand walk-in", "walk_in", 'waiting', est_wait, time.time()))
+                (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (ticket_id, ticket_num, rest_id, name, phone, party_size, seating_pref, "Host stand walk-in", "walk_in", "walk-in", 'waiting', est_wait, time.time()))
                 conn.commit()
                 conn.close()
                 self.send_json({"success": True, "ticket_id": ticket_id, "ticket_number": ticket_num})
