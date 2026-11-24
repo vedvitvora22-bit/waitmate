@@ -1,6 +1,6 @@
-// cache-bust-20261124-brand-logo-v29
+// cache-bust-20261124-map-responsive-v30
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-brand-logo-v29';
+const CACHE_NAME = 'waitmate-v20261124-map-responsive-v30';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
