@@ -369,6 +369,18 @@ async function ensureRestaurants() {
   const byId = {};
   for (const r of [...publicFallback, ...publicCustom]) byId[r.id] = r;
   for (const r of firestorePublic) byId[r.id] = r; // Firestore wins when reachable
+  // Ensure every default venue carries its assigned meal_times even when the
+  // Firestore document was created without them (keeps customer filters
+  // and the wait engine deterministic across local + production).
+  const fallbackMeals = {};
+  for (const r of publicFallback) {
+    if (r.meal_times && r.meal_times.length) fallbackMeals[r.id] = r.meal_times;
+  }
+  for (const r of Object.values(byId)) {
+    if (!r.meal_times || r.meal_times.length === 0) {
+      r.meal_times = fallbackMeals[r.id] || ["Lunch", "Dinner"];
+    }
+  }
   if (!firestorePublic.length && !global._customRestaurants.length) {
     try {
       await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
@@ -490,7 +502,7 @@ async function getLiveStats(restaurant, queueEntries) {
   return {
     queue_count: queueCount,
     total_waiting_people: people,
-    estimated_wait_mins: manual !== null && manual !== undefined ? Number(manual) : algorithmic,
+    estimated_wait_mins: manual !== null && manual !== undefined ? Math.min(60, Number(manual)) : algorithmic,
     algorithmic_wait_mins: algorithmic,
     has_manual_override: manual !== null && manual !== undefined,
     is_queue_open: Boolean(restaurant.is_queue_open)
