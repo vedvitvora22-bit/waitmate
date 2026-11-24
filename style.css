@@ -100,9 +100,18 @@ body {
 .ticket-container {
   position: relative;
   background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 1.25rem;
-  overflow: hidden;
+  box-sizing: border-box;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.ticket-clip {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .ticket-notch-left, .ticket-notch-right {
@@ -220,3 +229,25 @@ body {
 .favorite-btn.liking .heart-fill {
   color: #f97316 !important;
 }
+
+
+/* Border clipping fixes */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100dvh;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Prevent wide content from pushing borders off-screen */
+.flex > *, .grid > * { min-width: 0; }
+
+/* Cards/tables: keep borders visible while allowing inner scroll */
+.overflow-x-auto { -webkit-overflow-scrolling: touch; }

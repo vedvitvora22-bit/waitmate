@@ -702,16 +702,17 @@ def run_simulation_tick(restaurant_id):
             freed += 1
     conn.commit()
 
-    # 2. Open tables + waiting real customers
+    # 2. Open tables + waiting customers (walk-in, remote, and AI ghost guests
+    #    are all eligible for automatic seating, ordered purely by join time).
     tables = get_restaurant_tables(restaurant_id)
     open_tables = [t for t in tables if not t["free_at"]]
     c.execute(
-        "SELECT * FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost IS NULL OR is_ghost = 0) AND entry_type != 'ghost' ORDER BY joined_at ASC",
+        "SELECT * FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' ORDER BY joined_at ASC",
         (restaurant_id,),
     )
     waiting = [dict(r) for r in c.fetchall()]
 
-    queue = [{"id": e["id"], "size": int(e["party_size"] or 2), "is_ghost": False} for e in waiting]
+    queue = [{"id": e["id"], "size": int(e["party_size"] or 2), "is_ghost": bool(e.get("is_ghost"))} for e in waiting]
     available = [{"id": t["id"], "table_id": t["table_id"], "seats": int(t["seats"])} for t in open_tables]
     seated_pairs, remaining = process_live_queue(queue, available)
 
@@ -1956,6 +1957,13 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             return
         elif path == "/manifest.json":
             self.serve_static_file(os.path.join(BASE_DIR, "manifest.json"), "application/json; charset=utf-8")
+            return
+
+        # SPA fallback: serve index.html for any non-asset, non-API route so
+        # client-side routing (e.g. /founder, /?founder=1) works locally too
+        # instead of returning 404. The app.js router inspects the URL on load.
+        if not path.startswith("/api/") and not path.startswith("/.well-known/"):
+            self.serve_static_file(os.path.join(BASE_DIR, "index.html"), "text/html; charset=utf-8")
             return
 
         # API: Diagnostic storage status

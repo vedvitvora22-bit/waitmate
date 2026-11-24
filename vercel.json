@@ -3,6 +3,17 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/[...path]"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
-  ]
+  ],
+  "crons": [
+    {
+      "path": "/api/cleanup-ghosts",
+      "schedule": "30 18 * * *"
+    }
+  ],
+  "outputDirectory": "dist"
 }

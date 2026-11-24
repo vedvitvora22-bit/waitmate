@@ -503,12 +503,7 @@ function defaultTables(n) {
 // customers (is_ghost falsy) are sorted ahead of ghost entries; arrival order
 // is preserved within each group. Returns { seated: [...], remaining: [...] }.
 function processLiveQueue(queue, availableTables) {
-  const ordered = [...queue].sort((a, b) => {
-    const ghostA = Number(!!a.is_ghost || !!a.isGhost || a.entry_type === 'ghost');
-    const ghostB = Number(!!b.is_ghost || !!b.isGhost || b.entry_type === 'ghost');
-    if (ghostA !== ghostB) return ghostA - ghostB;
-    return Number(a.joined_at || a.joinedAt || 0) - Number(b.joined_at || b.joinedAt || 0);
-  });
+  const ordered = [...queue];
   const remaining = [...ordered];
   const seated = [];
   for (const table of [...availableTables].sort((a, b) => a.seats - b.seats)) {
@@ -531,7 +526,320 @@ async function clearAllGhostEntriesJs(restaurantId) {
   return targets.length;
 }
 
-// Dev/demo helper: spawn a batch of AI ghost guests for a restaurant, bypassing
+// ---------------------------------------------------------------------------
+// Mumbai time-of-day ghost target algorithm (IST / Asia-Kolkata)
+// Maintains a platform-wide target of 20-100 active diners distributed by
+// venue class and the current IST window.
+// ---------------------------------------------------------------------------
+
+function classifyVenue(restaurant) {
+  const name = String(restaurant.name || '').toLowerCase();
+  const cat = String(restaurant.category || '').toLowerCase();
+  const type = String(restaurant.type || '').toLowerCase();
+  const addr = String(restaurant.address || '').toLowerCase();
+  const meals = Array.isArray(restaurant.meal_times) ? restaurant.meal_times.join(' ') : '';
+  const text = `${name} ${cat} ${type} ${addr} ${meals}`;
+  if (/south indian|udupi|dosa|idli|filter coffee|chai sutta|\bchai\b|bun maska|bakery|irani|parsi|cafe|café/.test(text)) return 'breakfast_cafe';
+  if (/thali|meals|casual dining|biryani|andhra|punjab|north indian|family dining|multicuisine/.test(text)) return 'lunch_casual';
+  if (/street food|snack|quick.?bite|kebab|roll|pav bhaji|tawa|pizza|truck/.test(text)) return 'evening_snack';
+  if (/dinner|fine dining|brewpub|brew|pub|grill|tandoor/.test(text)) return 'dinner_main';
+  return 'general';
+}
+
+function nowIST() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+}
+
+function randRange(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+// Returns { totalTarget, busyClasses, waitBands, hour, minute } for the current IST.
+function getISTTimeOfDayTarget() {
+  const d = nowIST();
+  const t = d.getHours() * 60 + d.getMinutes();
+  const isBreakfast = t >= 450 && t < 690;   // 07:30 - 11:30
+  const isLunch     = t >= 750 && t < 930;   // 12:30 - 15:30
+  const isSnacks    = t >= 990 && t < 1140;  // 16:30 - 19:00
+  const isDinner    = t >= 1170 && t < 1380; // 19:30 - 23:00
+
+  let totalTarget, busyClasses, waitBands;
+  if (isBreakfast) {
+    busyClasses = ['breakfast_cafe'];
+    totalTarget = 60 + Math.floor(Math.random() * 40); // 60-100
+    waitBands = { breakfast_cafe: [15, 45], lunch_casual: [0, 5], evening_snack: [0, 5], dinner_main: [0, 5], general: [0, 5] };
+  } else if (isLunch) {
+    busyClasses = ['lunch_casual'];
+    totalTarget = 55 + Math.floor(Math.random() * 40); // 55-95
+    waitBands = { breakfast_cafe: [0, 5], lunch_casual: [15, 45], evening_snack: [0, 8], dinner_main: [0, 8], general: [0, 8] };
+  } else if (isSnacks) {
+    busyClasses = ['evening_snack'];
+    totalTarget = 40 + Math.floor(Math.random() * 35); // 40-75
+    waitBands = { breakfast_cafe: [0, 5], lunch_casual: [0, 8], evening_snack: [10, 30], dinner_main: [0, 8], general: [0, 8] };
+  } else if (isDinner) {
+    busyClasses = ['dinner_main'];
+    totalTarget = 65 + Math.floor(Math.random() * 35); // 65-100
+    waitBands = { breakfast_cafe: [0, 5], lunch_casual: [0, 8], evening_snack: [0, 8], dinner_main: [20, 50], general: [0, 8] };
+  } else {
+    busyClasses = [];
+    totalTarget = 20 + Math.floor(Math.random() * 10); // 20-30 off-peak
+    waitBands = { breakfast_cafe: [0, 5], lunch_casual: [0, 5], evening_snack: [0, 5], dinner_main: [0, 5], general: [0, 5] };
+  }
+  return { totalTarget, busyClasses, waitBands, hour: d.getHours(), minute: d.getMinutes() };
+}
+
+// Distribute the platform target across restaurants by venue class.
+// Peak-category venues get 40-50% share; ALL other active venues get a baseline of 1-3.
+// Caps at 4-6 ghost parties per venue. Total diners kept in 20-100 range.
+function computeGhostTargets(restaurants, { totalTarget, busyClasses }) {
+  const targets = {};
+  const busy = restaurants.filter(r => busyClasses.includes(classifyVenue(r)));
+  const others = restaurants.filter(r => !busyClasses.includes(classifyVenue(r)));
+  const allActive = [...busy, ...others];
+
+  // Clamp total target to 20-100 diners (assuming avg 2.5 guests/party = ~8-40 parties)
+  const minParties = 8;
+  const maxParties = 40;
+  const clampedTarget = Math.min(Math.max(totalTarget, minParties), maxParties);
+
+  if (busy.length > 0) {
+    // Peak venues get 40-50% of total target
+    const peakSharePct = 0.4 + Math.random() * 0.1; // 40-50%
+    const peakTarget = Math.round(clampedTarget * peakSharePct);
+    const perPeak = Math.floor(peakTarget / busy.length);
+    let remPeak = peakTarget;
+    for (let i = 0; i < busy.length; i++) {
+      const t = i === busy.length - 1 ? remPeak : perPeak;
+      // Cap at 4-6 parties per peak venue
+      targets[busy[i].id] = Math.min(Math.max(1, t), 6);
+      remPeak -= targets[busy[i].id];
+    }
+
+    // Remaining target distributed to other venues with baseline 1-3, cap at 4
+    const otherTarget = clampedTarget - peakTarget;
+    const otherCount = others.length || 1;
+    const perOtherBase = Math.floor(otherTarget / otherCount);
+    let remOther = otherTarget;
+    for (let i = 0; i < others.length; i++) {
+      const baseline = 1 + Math.floor(Math.random() * 3); // 1-3
+      const t = i === others.length - 1 ? remOther : Math.max(baseline, perOtherBase);
+      // Cap at 4 parties per non-peak venue
+      targets[others[i].id] = Math.min(Math.max(1, t), 4);
+      remOther -= targets[others[i].id];
+    }
+  } else {
+    // Off-peak: distribute evenly with baseline 1-3, cap at 4
+    const perVenue = Math.floor(clampedTarget / allActive.length);
+    let rem = clampedTarget;
+    for (let i = 0; i < allActive.length; i++) {
+      const baseline = 1 + Math.floor(Math.random() * 3); // 1-3
+      const t = i === allActive.length - 1 ? rem : Math.max(baseline, perVenue);
+      targets[allActive[i].id] = Math.min(Math.max(1, t), 4);
+      rem -= targets[allActive[i].id];
+    }
+  }
+
+  // Ensure no venue exceeds 6 ghost parties (hard cap)
+  for (const id of Object.keys(targets)) {
+    if (targets[id] > 6) targets[id] = 6;
+  }
+
+  return targets;
+}
+
+// Platform-wide ghost maintenance: spawn/remove waiting ghosts so the live
+// ghost count matches the IST time-of-day target. Throttled to ~55s.
+async function maintainGhostPlatformTarget() {
+  const now = Date.now();
+  const last = Number(global._ghostMaintainCache || 0);
+  if (last && now - last < 55000) {
+    return { skipped: true, cooldown: Math.ceil((55000 - (now - last)) / 1000) };
+  }
+  global._ghostMaintainCache = now;
+
+  const algo = getISTTimeOfDayTarget();
+  let restaurants = [];
+  try { restaurants = await ensureRestaurants(); } catch (e) { return { skipped: true, error: String(e.message || e) }; }
+  let entries = [];
+  try { entries = await fetchQueueEntries(); } catch (e) { entries = Object.values(global._tickets || {}); }
+
+  const targets = computeGhostTargets(restaurants, algo);
+  const writes = [];
+  let spawned = 0, removed = 0;
+
+  for (const restaurant of restaurants) {
+    const target = targets[restaurant.id] || 0;
+    const restGhosts = entries.filter(e => e.restaurant_id === restaurant.id && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost'));
+    const existing = restGhosts.length;
+    const tables = Array.isArray(restaurant.tables) && restaurant.tables.length ? restaurant.tables : defaultTables(restaurant.total_tables || 1);
+    const openTables = tables.filter(t => !t.freeAt).length;
+
+    if (existing < target) {
+      const toSpawn = target - existing;
+      const waitBand = algo.waitBands[classifyVenue(restaurant)] || [0, 5];
+      for (let i = 0; i < toSpawn; i++) {
+        const ghostId = `ghost-${String(now * 1000 + i).slice(-8)}`;
+        const partySize = 2 + Math.floor(Math.random() * 3);
+        const ghostName = GHOST_NAMES_JS[(spawned + i) % GHOST_NAMES_JS.length];
+        const ghost = {
+          id: ghostId,
+          ticket_number: `WM-G${String(Math.floor(now / 1000) % 100000).padStart(5, '0')}`,
+          restaurant_id: restaurant.id,
+          restaurant_name: restaurant.name || '',
+          guest_name: ghostName,
+          customer_name: ghostName,
+          phone: '',
+          party_size: partySize,
+          seating_pref: 'First Available',
+          special_requests: '',
+          channel: 'remote',
+          entry_type: 'ghost',
+          source: 'ghost',
+          '09_channel': 'remote',
+          status: 'waiting',
+          estimated_wait_mins: randRange(waitBand[0], waitBand[1]),
+          actual_wait_mins: 0,
+          joined_at: now,
+          joined_time_ist: formatIST(now),
+          is_ghost: true,
+          isGhost: true,
+          notified_at: null,
+          seated_at: null,
+          has_arrived: false,
+          delay_mins: 0,
+        };
+        writes.push(setDocument('queue_entries', ghostId, toNumberedEntry(ghost)));
+        global._tickets[ghostId] = { ...ghost };
+        spawned++;
+      }
+    } else if (existing > target && openTables === 0) {
+      const toRemove = existing - target;
+      restGhosts.sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+      for (let i = 0; i < toRemove; i++) {
+        const g = restGhosts[i];
+        writes.push({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(g.id)}` } });
+        delete global._tickets[g.id];
+        removed++;
+      }
+    }
+  }
+
+  if (writes.length) await safeCommit(writes);
+  return { skipped: false, totalTarget: algo.totalTarget, busyClasses: algo.busyClasses, spawned, removed, targets, hour: algo.hour, minute: algo.minute };
+}
+
+// Advance ghost lifecycle: Waiting -> Notified -> Seated -> Cleared.
+// Runs on the same ~55s throttle as the platform maintainer.
+async function advanceGhostLifecycle() {
+  const now = Date.now();
+  const last = Number(global._ghostLifecycleCache || 0);
+  if (last && now - last < 55000) return { skipped: true };
+  global._ghostLifecycleCache = now;
+
+  let entries = [];
+  try { entries = await fetchQueueEntries(); } catch (e) { entries = Object.values(global._tickets || {}); }
+  let restaurants = [];
+  try { restaurants = await ensureRestaurants(); } catch (e) { return { skipped: true, error: String(e.message || e) }; }
+
+  const writes = [];
+  let notified = 0, seated = 0, cleared = 0;
+
+  for (const restaurant of restaurants) {
+    const tables = Array.isArray(restaurant.tables) && restaurant.tables.length ? restaurant.tables : defaultTables(restaurant.total_tables || 1);
+    const openTables = tables.filter(t => !t.freeAt);
+    const restEntries = entries.filter(e => e.restaurant_id === restaurant.id);
+    const waiting = restEntries.filter(e => e.status === 'waiting' && e.is_ghost);
+    const notifiedList = restEntries.filter(e => e.status === 'notified' && e.is_ghost);
+    const seatedList = restEntries.filter(e => e.status === 'seated' && e.is_ghost);
+
+    for (const e of waiting) {
+      const waitMins = Math.max(0, (now - Number(e.joined_at || now)) / 60000);
+      const pNotify = Math.min(0.9, waitMins / Math.max(1, Number(e.estimated_wait_mins || 20)));
+      if (Math.random() < pNotify) {
+        const merged = { ...e, status: 'notified', notified_at: now, notified_time_ist: formatIST(now) };
+        writes.push(setDocument('queue_entries', e.id, toNumberedEntry(merged)));
+        global._tickets[e.id] = merged;
+        notified++;
+      }
+    }
+
+    const queue = notifiedList.map(e => ({ id: e.id, size: Number(e.party_size || 2), is_ghost: true }));
+    const available = openTables.map(t => ({ id: t.id, seats: Number(t.seats) }));
+    const { seated: seatedPairs } = processLiveQueue(queue, available);
+    for (const { customer, table } of seatedPairs) {
+      const e = restEntries.find(x => x.id === customer.id);
+      if (!e) continue;
+      const seatedAt = now;
+      const actualWait = Math.max(1, Math.floor((seatedAt - Number(e.joined_at || seatedAt)) / 60000));
+      const merged = { ...e, status: 'seated', seated_at: seatedAt, seated_time_ist: formatIST(seatedAt), has_arrived: true, actual_wait_mins: actualWait };
+      writes.push(setDocument('queue_entries', customer.id, toNumberedEntry(merged)));
+      const t = tables.find(x => x.id === table.id);
+      if (t) t.freeAt = seatedAt + calculateRealisticDuration(Number(restaurant.base_prep_time || 12), Number(customer.size)) * 60000;
+      global._tickets[customer.id] = merged;
+      seated++;
+    }
+
+    for (const e of seatedList) {
+      const dined = now - Number(e.seated_at || now);
+      const duration = calculateRealisticDuration(Number(restaurant.base_prep_time || 12), Number(e.party_size || 2)) * 60000;
+      if (dined >= duration) {
+        writes.push({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } });
+        delete global._tickets[e.id];
+        cleared++;
+      }
+    }
+  }
+
+  if (writes.length) await safeCommit(writes);
+  return { skipped: false, notified, seated, cleared };
+}
+
+// ---------------------------------------------------------------------------
+// Daily ghost-guest cleanup (12:00 AM IST). Batch-deletes every queue_entries
+// document whose source === "ghost" (and/or created on a previous IST date),
+// in chunks of up to 450 deletes per Firestore commit. Real walk-in/remote
+// records are never touched.
+// ---------------------------------------------------------------------------
+
+function todayISTKey() {
+  const d = nowIST();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function deleteGhostsChunk(ids) {
+  const writes = ids.map(id => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(id)}` } }));
+  if (!writes.length) return 0;
+  await safeCommit(writes);
+  for (const id of ids) delete global._tickets[id];
+  return writes.length;
+}
+
+async function cleanupGhostGuests(options = {}) {
+  const { olderThanIstDate = null } = options;
+  let entries = [];
+  try { entries = await fetchQueueEntries(); } catch (e) { entries = Object.values(global._tickets || {}); }
+  const targets = entries.filter(e => {
+    const isGhost = e.source === 'ghost' || e.is_ghost || e.isGhost || e.entry_type === 'ghost';
+    if (!isGhost) return false;
+    if (olderThanIstDate) {
+      const joinedMs = Number(e.joined_at || e.joined_at_ms || 0);
+      if (!joinedMs) return true;
+      const d = new Date(joinedMs);
+      // derive IST date string
+      const ist = new Date(new Date(joinedMs).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const key = `${ist.getFullYear()}-${String(ist.getMonth()+1).padStart(2,'0')}-${String(ist.getDate()).padStart(2,'0')}`;
+      return key !== olderThanIstDate;
+    }
+    return true;
+  });
+  let deleted = 0;
+  for (let i = 0; i < targets.length; i += 450) {
+    const chunk = targets.slice(i, i + 450).map(t => t.id);
+    deleted += await deleteGhostsChunk(chunk);
+  }
+  return { deleted, total: targets.length, olderThanIstDate };
+}
+
 // the Mumbai peak-window and zero-open-tables gating used by runSimulationTick.
 // Intended for manual verification via the owner portal / founder endpoint.
 async function spawnGhostsForRestaurant(restaurantId, restaurant, count = 5) {
@@ -609,10 +917,10 @@ async function runSimulationTick(restaurantId) {
     let entries = [];
     try { entries = await fetchQueueEntries(); } catch (error) { entries = Object.values(global._tickets || {}); }
     const waiting = entries
-      .filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && !e.is_ghost && !e.isGhost && e.entry_type !== 'ghost')
+      .filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting')
       .sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
 
-    const queue = waiting.map((e) => ({ id: e.id, size: Number(e.party_size || 2), is_ghost: false }));
+    const queue = waiting.map((e) => ({ id: e.id, size: Number(e.party_size || 2), is_ghost: Boolean(e.is_ghost || e.isGhost || e.entry_type === 'ghost') }));
     const available = openTables.map((t) => ({ id: t.id, seats: Number(t.seats) }));
     const { seated, remaining } = processLiveQueue(queue, available);
 
@@ -688,6 +996,19 @@ async function runSimulationTick(restaurantId) {
     global._pwdMap[restaurantId].available_tables = openCount;
     global._pwdMap[restaurantId].last_simulated_at = now;
     global._lastSimCache[restaurantId] = now;
+
+    // Platform-wide ghost maintenance (once per IST minute bucket): adjust the
+    // live ghost count to the time-of-day target and advance ghost lifecycle.
+    const ghostMinute = Math.floor(now / 60000);
+    if (Number(global._platformGhostMinute || 0) !== ghostMinute) {
+      global._platformGhostMinute = ghostMinute;
+      try {
+        await maintainGhostPlatformTarget();
+        await advanceGhostLifecycle();
+      } catch (e) {
+        console.warn('platform ghost maintenance failed:', e.message || e);
+      }
+    }
 
     return {
       skipped: false,
@@ -767,9 +1088,17 @@ async function getLiveStats(restaurant, queueEntries) {
   const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting", "notified", "delayed"].includes(entry.status));
   const queueCount = active.length;
   const people = active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
-  const availableTables = Number(restaurant.available_tables || 0);
-  const basePrep = Number(restaurant.base_prep_time || 10);
-  const algorithmic = queueCount === 0 ? 0 : Math.max(4, Math.round((Math.max(0, queueCount - availableTables) * basePrep * 0.75) + (availableTables === 0 ? basePrep : 0)));
+  const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
+  const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
+  const basePrep = Number(restaurant.base_prep_time || 12);
+  // Estimated wait = (waitingParties / activeTables) * avgTurnTimeMinutes
+  // avgTurnTimeMinutes approximated by base_prep_time (typical dining duration)
+  // Floor at 0 when tables are open (queueCount <= availableTables)
+  let algorithmic = 0;
+  if (queueCount > 0) {
+    const partiesAheadOfOpenTables = Math.max(0, queueCount - availableTables);
+    algorithmic = Math.floor((partiesAheadOfOpenTables / availableTables) * basePrep);
+  }
   const manual = restaurant.manual_override_wait;
   return {
     queue_count: queueCount,
@@ -850,8 +1179,15 @@ async function route(request, response, pathParts) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
       const realParties = realActive.length;
       const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
-      const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
-      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
+      // Exact live sum of active diners (waiting + notified + seated) across all
+      // sources (walk-in, remote, ghost) currently in Firebase.
+      const activeDinerEntries = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","seated"].includes(entry.status));
+      const activeDiners = activeDinerEntries.reduce((s,e)=>s+Number(e.party_size||0),0);
+      const liveStats = await getLiveStats(restaurant, queueEntries);
+      // Override queue_count and total_waiting_people with exact Firebase counts
+      liveStats.queue_count = realParties;
+      liveStats.total_waiting_people = realGuests;
+      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: activeDiners, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
     }
     const body = { 
       restaurants: result,
@@ -882,6 +1218,25 @@ async function route(request, response, pathParts) {
     if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
     const cleared = await clearAllGhostEntriesJs(body.restaurant_id);
     return send(response, 200, { success: true, cleared, restaurant_id: body.restaurant_id });
+  }
+
+  // Platform-wide ghost maintenance: align live ghost count to the IST
+  // time-of-day target and advance the Waiting -> Notified -> Seated -> Cleared
+  // lifecycle. Throttled server-side (~55s).
+  if (request.method === "POST" && path === "/api/queue/maintain-ghosts") {
+    const mt = await maintainGhostPlatformTarget();
+    const lc = await advanceGhostLifecycle();
+    return send(response, 200, { success: true, ...mt, ...lc });
+  }
+
+  // Daily ghost-guest cleanup (12:00 AM IST). Batch-deletes every queue_entries
+  // document whose source === "ghost" in chunks of up to 450 deletes per commit.
+  // Real walk-in/remote records are never touched. Used by Vercel Cron and by the
+  // client fallback guard when a midnight cron is missed.
+  if (request.method === "POST" && path === "/api/cleanup-ghosts") {
+    const olderThan = body && body.older_than_ist_date ? String(body.older_than_ist_date) : null;
+    const result = await cleanupGhostGuests({ olderThanIstDate: olderThan });
+    return send(response, 200, { success: true, ...result, cleaned_at_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST' });
   }
 
 // Dev/demo: manually spawn AI ghost guests for a restaurant (bypasses peak-window
@@ -944,7 +1299,7 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const realActive = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status));
     const realParties = realActive.length;
     const realGuests = realActive.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
-    const liveStats = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
+    const liveStats = await getLiveStats(restaurant, entries);
     const estWait = Number.isFinite(liveStats.estimated_wait_mins) ? liveStats.estimated_wait_mins : 10;
 
     const revTs = String(9999999999999 - Date.now()).padStart(13, "0");
@@ -1106,7 +1461,9 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const enriched = [];
     for (const restaurant of restaurants) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
-      const liveStats = computePrototypeRestaurantMetrics(restaurant, realActive.length, realActive.reduce((s,e)=>s+Number(e.party_size||0),0));
+      const liveStats = await getLiveStats(restaurant, queueEntries);
+      liveStats.queue_count = realActive.length;
+      liveStats.total_waiting_people = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
       enriched.push({ ...restaurant, live_stats: liveStats, reliability: reliabilityFromRestaurant(restaurant) });
     }
     return send(response, 200, { summary: { total_restaurants: restaurants.length, total_cities: new Set(restaurants.map(r => r.city)).size, cities_list: [...new Set(restaurants.map(r => r.city))], active_parties_in_queue: active.length, active_diners_in_queue: active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), total_seated_parties: seated.length, total_seated_diners: seated.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0), platform_avg_reliability: 92 }, restaurants: enriched, recent_queues: queueEntries.slice(-15).reverse().map(({ phone, ...q }) => ({ ...q, phone: "" })), recent_reviews: [] });

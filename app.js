@@ -341,6 +341,7 @@ let currentSearch = '';
 let openOnly = true;
 
 let currentInterface = 'customer'; // 'customer', 'owner', 'founder'
+let founderInterfaceTemplate = null;
 
 let currentTicketId = localStorage.getItem('waitmate_ticket_id') || null;
 let activeTicketData = null;
@@ -537,8 +538,8 @@ async function sendPushNotification({ title, body, tag = 'waitmate', actions = [
     body,
     tag,
     renotify: true,
-    icon: icon || '/logo.png',
-    badge: '/logo.png',
+    icon: icon || '/logo.png?v=2',
+    badge: '/logo.png?v=2',
     vibrate: [200, 100, 200, 100, 400],
     data: { url: '/' }
   };
@@ -597,6 +598,22 @@ async function sendTableReadyNotification(ticketData) {
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
   document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
+  const founderDiv = document.getElementById('founderInterface');
+  if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
+  try {
+    const _params = new URLSearchParams(window.location.search);
+    const _hash = (window.location.hash || '').toLowerCase();
+    const _path = (window.location.pathname || '/').toLowerCase();
+    const _explicitFounder = _path === '/founder' || _path.endsWith('/founder') || _params.get('founder') === '1' || _hash === '#founder';
+    if (!_explicitFounder) {
+      sessionStorage.removeItem('waitmate_founder_pwd');
+      currentInterface = 'customer';
+      if (founderDiv && founderDiv.isConnected) {
+        founderInterfaceTemplate = founderDiv.cloneNode(true);
+        founderDiv.remove();
+      }
+    }
+  } catch (e) {}
   await initPushNotifications();
   await loadRestaurants();
   loadFavorites();
@@ -1232,12 +1249,14 @@ function initFounderSecretTriggers() {
     }
   });
 
-  // URL triggers: ?founder=1 or #founder
+  // URL triggers: /founder path, ?founder=1, or #founder
   try {
     const params = new URLSearchParams(window.location.search);
     const hash = (window.location.hash || '').toLowerCase();
-    if (params.get('founder') === '1' || hash === '#founder') {
-      triggerFounderAccess();
+    const path = (window.location.pathname || '/').toLowerCase();
+    const isFounderPath = path === '/founder' || path.endsWith('/founder');
+    if (isFounderPath || params.get('founder') === '1' || hash === '#founder') {
+      openFounderLoginModal();
     }
   } catch (e) { /* ignore */ }
 
@@ -1281,23 +1300,36 @@ function switchInterface(role) {
 
   custDiv.classList.add('hidden');
   ownerDiv.classList.add('hidden');
-  if (founderDiv) founderDiv.classList.add('hidden');
+  if (founderDiv && founderDiv.isConnected) founderDiv.classList.add('hidden');
 
   tabCust.className = inactiveTabClass;
   tabOwner.className = inactiveTabClass;
 
   if (role === 'customer') {
+    if (founderDiv && founderDiv.isConnected) {
+      founderInterfaceTemplate = founderDiv.cloneNode(true);
+      founderDiv.remove();
+    }
     custDiv.classList.remove('hidden');
     tabCust.className = activeTabClass;
     renderRestaurantsGrid();
   } else if (role === 'owner') {
+    if (founderDiv && founderDiv.isConnected) {
+      founderInterfaceTemplate = founderDiv.cloneNode(true);
+      founderDiv.remove();
+    }
     ownerDiv.classList.remove('hidden');
     tabOwner.className = activeTabClass;
     showOwnerDirectory();
     startHostStandPolling();
   } else if (role === 'founder') {
     ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
-    if (founderDiv) founderDiv.classList.remove('hidden');
+    if (!document.getElementById('founderInterface') && founderInterfaceTemplate) {
+      document.getElementById('mainContainer').appendChild(founderInterfaceTemplate.cloneNode(true));
+      founderInterfaceTemplate = founderInterfaceTemplate.cloneNode(true);
+    }
+    const founderEl = document.getElementById('founderInterface');
+    if (founderEl) founderEl.classList.remove('hidden');
     if (tabFounder) {
       tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
       tabFounder.style.display = 'none';
@@ -1745,6 +1777,27 @@ async function founderToggleQueue(restId) {
 // ==========================================
 // 3. RESTAURANT DATA LOADING & DISCOVERY
 // ==========================================
+
+// Client fallback guard: if the midnight IST cron is missed, the first active
+// session after 12:00 AM IST batch-deletes ghost records from previous IST dates
+// while leaving real walk-in/remote records untouched.
+async function ensureGhostCleanupGuard() {
+  try {
+    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const last = localStorage.getItem('wm_lastGhostCleanupDateIST');
+    if (last === todayKey) return;
+    const res = await fetch('/api/cleanup-ghosts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than_ist_date: todayKey }), cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.deleted > 0) console.log(`[ghost cleanup] removed ${data.deleted} ghost record(s) from before ${todayKey}`);
+      localStorage.setItem('wm_lastGhostCleanupDateIST', todayKey);
+    }
+  } catch (e) {
+    console.warn('[ghost cleanup guard] skipped:', e.message || e);
+  }
+}
+
 async function loadRestaurants() {
   try {
     const res = await fetch('/api/restaurants', { cache: 'no-store' });
@@ -1781,6 +1834,8 @@ async function loadRestaurants() {
     populateHostDropdown();
     // Cards are already on screen; advance the simulation out-of-band.
     triggerBackgroundSimTick();
+    // Daily ghost-guest cleanup guard (runs after midnight IST if cron missed).
+    await ensureGhostCleanupGuard();
   } catch (err) {
     console.warn("Using offline/fallback data for restaurants:", err);
     allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
@@ -1864,10 +1919,11 @@ function renderRestaurantsGrid() {
   const container = document.getElementById('restaurantsGrid');
   if (!container) return;
 
-  // Update header live diners counter
-  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + (r.live_stats ? r.live_stats.total_waiting_people : 0), 0);
+  // Update header live diners counter — exact live sum of active diners
+  // (waiting + notified + seated across walk-in, remote, ghost) in Firebase.
+  const totalLiveDiners = allRestaurants.reduce((sum, r) => sum + Number(r.active_diners || 0), 0);
   const topCountEl = document.getElementById('topLiveDinersCount');
-  if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners in line`;
+  if (topCountEl) topCountEl.textContent = `${totalLiveDiners} diners live`;
 
   let filtered = allRestaurants.filter(r => {
     if (currentCity !== 'all' && (r.city || 'Mumbai') !== currentCity) return false;
@@ -2786,12 +2842,32 @@ function buildShareLink(ticketId) {
   return `${window.location.origin}?ticket=${encodeURIComponent(ticketId)}`;
 }
 
+// Reliable clipboard write with iOS / older-browser fallback (textarea + execCommand)
+async function writeTextFallback(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return await navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '-9999px';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  if (!ok) throw new Error('clipboard copy unavailable');
+}
+
 function buildShareMessage(ticketData) {
   const venueName = (ticketData.restaurant && ticketData.restaurant.name) || (ticketData.restaurant_name) || 'this restaurant';
   const rank = ticketData.position_in_line ?? '?';
   const eta = ticketData.estimated_remaining_mins ?? ticketData.estimated_wait_mins ?? '?';
+  const party = ticketData.party_size ? ` • ${ticketData.party_size} guest${ticketData.party_size > 1 ? 's' : ''}` : '';
   const link = buildShareLink(currentTicketId || (ticketData.id || ''));
-  return `I'm #${rank} in line at ${venueName} (~${eta} mins wait) on WaitMate! Track our live table status: ${link}`;
+  return `I'm #${rank} in line at ${venueName}${party} (~${eta} mins wait) on WaitMate! Track our live table status: ${link}`;
 }
 
 async function sharePass() {
@@ -2804,19 +2880,19 @@ async function sharePass() {
   const message = buildShareMessage(activeTicketData || {});
   const shareData = { title: 'My WaitMate Live Pass', text: message, url: link };
 
-  // Mobile native share first, clean clipboard fallback on desktop
+  // Mobile native share first (Android, iOS Safari, Chrome), clean clipboard fallback on desktop
   if (navigator.share) {
     try {
       await navigator.share(shareData);
       showToast("Pass shared!", "success");
       return;
     } catch (err) {
-      // User cancelled or share failed — fall through to clipboard
+      // User cancelled or share failed — fall through to clipboard copy
     }
   }
   try {
-    await navigator.clipboard.writeText(`${message}\n${link}`);
-    showToast("Live pass link copied to clipboard", "success");
+    await writeTextFallback(link);
+    showToast("Link copied to share!", "success");
   } catch (err) {
     window.prompt("Copy this link to share your live pass:", link);
   }
@@ -2830,7 +2906,7 @@ async function sharePassWhatsApp() {
   const ticketId = currentTicketId || activeTicketData.id;
   const link = buildShareLink(ticketId);
   const message = buildShareMessage(activeTicketData || {});
-  try { await navigator.clipboard.writeText(message); } catch (e) { /* clipboard optional */ }
+  try { await writeTextFallback(message); } catch (e) { /* clipboard optional */ }
   window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
   showToast("Opening WhatsApp…", "success");
 }
@@ -2843,19 +2919,19 @@ async function copySharePassLink() {
   const ticketId = currentTicketId || activeTicketData.id;
   const link = buildShareLink(ticketId);
   try {
-    await navigator.clipboard.writeText(link);
+    await writeTextFallback(link);
     const icon = document.getElementById('copyShareIcon');
     const label = document.getElementById('copyShareLabel');
     if (icon) {
-      icon.setAttribute('data-lucide', 'check-circle-2');
-      lucide.createIcons();
+      icon.innerHTML = '<polyline points="20 12 14 18 8 12"></polyline><path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12"></path>';
+      icon.setAttribute('data-copied', '1');
     }
     if (label) label.textContent = 'Copied!';
     showToast("Link copied to clipboard", "success");
     setTimeout(() => {
       if (icon) {
-        icon.setAttribute('data-lucide', 'copy');
-        lucide.createIcons();
+        icon.innerHTML = '<rect width="16" height="12" x="2" y="7" rx="2"></rect><path d="M16 7h-2V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2z"></path>';
+        icon.removeAttribute('data-copied');
       }
       if (label) label.textContent = 'Copy Link';
     }, 2000);

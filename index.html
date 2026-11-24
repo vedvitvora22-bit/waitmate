@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network</title>
-  <link rel="icon" href="/logo.png" type="image/png">
-  <link rel="icon" href="/logo.png" type="image/png">
-  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="icon" href="/logo.png?v=2" type="image/png">
+  <link rel="icon" href="/logo.png?v=2" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png?v=2">
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -51,7 +51,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-[#F8FAFC] text-slate-900 min-h-screen flex flex-col antialiased selection:bg-orange-600 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
+<body class="bg-[#F8FAFC] text-slate-900 min-h-[100dvh] flex flex-col antialiased selection:bg-orange-600 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- Top App Live Status Bar -->
   <div class="bg-slate-900 text-slate-200 text-xs py-2 px-4 border-b border-slate-800">
@@ -84,7 +84,7 @@
       
       <!-- Brand Logo -->
       <div class="flex items-center gap-3">
-        <img src="/logo.png" alt="WaitMate" class="w-9 h-9 shrink-0 rounded object-contain" width="36" height="36">
+        <img src="/logo.png?v=2" alt="WaitMate" class="w-9 h-9 shrink-0 rounded object-contain" width="36" height="36">
         <div>
           <div class="flex items-center gap-1.5">
             <span class="font-heading font-extrabold text-xl tracking-tight text-slate-900">Wait<span class="text-emerald-500">Mate</span></span>
@@ -499,7 +499,7 @@
     <div id="founderInterface" class="hidden">
       <div class="flex items-center justify-between border-b border-slate-200 mb-6 pb-2">
         <div class="flex items-center gap-3">
-          <img src="/logo.png" alt="WaitMate" class="w-8 h-8 shrink-0 rounded object-contain" width="32" height="32">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-8 h-8 shrink-0 rounded object-contain" width="32" height="32">
           <div>
             <h2 class="font-heading font-extrabold text-lg text-slate-900">Founder Command Center</h2>
             <p class="text-[11px] text-slate-600 font-medium">Network-wide venue QR posters, live queues & controls</p>
@@ -687,7 +687,9 @@
         <div class="ticket-notch-left"></div>
         <div class="ticket-notch-right"></div>
 
-        <!-- Ticket Header -->
+        <div class="ticket-clip overflow-hidden relative">
+
+          <!-- Ticket Header -->
         <div class="bg-slate-900 text-white p-5 pb-6">
           <div class="flex items-center justify-between mb-3">
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-500 text-white">
@@ -701,7 +703,7 @@
 
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+              <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
               <div>
                 <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
                 <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian & Filter Coffee</p>
@@ -835,20 +837,18 @@
               <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Share Your Pass</span>
               <span class="text-[10px] text-slate-600">Friends can track live — read-only</span>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <button onclick="sharePass()" id="btnSharePass" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-800">
-                <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
-                <span>Share Pass with Friends</span>
+            <div id="passActionRow" class="flex gap-2 items-center">
+              <button onclick="sharePass()" id="btnSharePass" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-800" title="Share your live pass via native share">
+                <svg id="iconShare" class="w-3.5 h-3.5 shrink-0 text-white" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M19 15l-6 6-6-6"/><path d="M5 12h14"/></svg>
+                <span id="sharePassLabel" class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">Share Pass</span>
               </button>
-              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-emerald-700">
-                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
-                <span>WhatsApp</span>
+              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-emerald-700" title="Share your live pass on WhatsApp">
+                <svg id="iconWhatsapp" class="w-3.5 h-3.5 shrink-0 text-white" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M20.545 3.854C11.275 2.273 3.56 3.057 1.947 7.25c-.472 1.218-.336 2.537.34 3.697.828 1.414 2.215 3.547 3.268 5.27.714 1.165 1.328 2.263 1.328 2.263l.001.001c3.314 4.522 9.476 2.512 13.998-1.798.546-.519.728-1.293.298-1.961l-.002-.004c-3.078-4.803-3.79-11.131-1.826-14.577 1.052-1.853 3.03-3.548 4.801-4.207 1.206-.447 2.515-.725 3.867-.595l.161.016c.929.089 1.849.399 2.347 1.079.364.498.398 1.137.197 1.787-.247.805-.788 1.495-1.425 2.011l-.005.004c-1.757 1.414-4.027 2.627-4.027 2.627s-1.595-1.278-4.392-.916c-1.691.218-3.057.732-3.649.776l-.044.003c-.876.067-1.515-.495-1.698-1.07-.129-.422-.038-.904.253-1.323l.003-.003c1.118-1.603 1.485-3.531.666-5.198-.62-1.268-1.527-2.318-2.013-2.993-.733-1.018-1.083-1.678-1.083-1.678 0-1.135-.229-2.229-.842-3.021-.75-.961-1.984-1.444-3.046-1.273-1.488.24-2.84 1.168-3.282 2.263-.398.989-.305 2.052.207 2.949.376.661 1.031 1.206 1.869 1.584l.006.003c1.593.714 3.571 1.521 4.751-.594 1.001-1.795.144-3.808-.612-5.066-.441-.733-1.322-1.48-1.896-2.167-.829-.99-1.482-1.831-1.588-2.203-.131-.458-.024-.988.424-1.384.692-.612 1.532-1.042 2.326-1.282.996-.302 2.027-.341 3.043-.164 1.646.286 2.612 1.207 2.721 2.298.045.449-.025 1.04-.446 1.439-.867.822-2.177 1.977-2.989 3.268-.378.598-.511 1.262-.381 1.912.128.64.538 1.181 1.112 1.521.457.272.989.376 1.526.319 1.029-.11 1.947-.521 2.7-1.217 1.152-1.065 2.017-2.361 2.122-3.794.058-.8-.028-1.69-.352-2.604-.584-1.646-2.31-3.022-4.348-3.428-1.867-.372-3.735-.333-4.766-.215-.92.104-1.672.416-2.273 1.002-.81.787-1.381 1.964-1.272 3.048.062.622.438 1.223 1.013 1.648.826.61 1.873 1.001 2.976 1.001h.001c.121 0 .243-.009.364-.025.814-.109 1.488-.465 2.101-.979l.004-.003c1.418-1.178 2.144-2.884 1.794-4.693-.172-.884-.827-1.64-1.455-2.281-.905-.922-1.923-1.625-2.502-2.21-.708-.714-1.063-1.145-1.063-1.145 0-.714.138-1.406.508-1.997.45-.719 1.176-1.21 1.886-1.21h.001c.714-.001 1.435.491 1.886 1.21.371.592.508 1.284.508 1.997s-.355.431-1.063 1.145c-.579.584-1.597 1.288-2.502 2.21-.629.641-1.283 1.397-1.455 2.281-.35 1.81.376 3.516 1.794 4.693l.004.003c.613.514 1.287.87 2.101.979.12.016.242.025.363.025h.001c1.103 0 2.15-.391 2.976-1.001.574-.425.951-1.026 1.013-1.648.109-1.084-.462-2.261-1.272-3.048-.601-.586-1.353-.898-2.273-1.002-1.031-.118-2.899-.157-4.766.215-2.038.407-3.764 1.782-4.348 3.428-.324.914-.41 1.804-.352 2.604.105 1.433.97 2.73 2.122 3.794.753.695 1.671 1.106 2.7 1.217.538.058 1.07-.047 1.527-.319.574-.34.984-.881 1.112-1.521.13-.65-.003-1.314-.381-1.912-.812-1.291-2.122-2.446-2.989-3.268-.421-.4-.491-.99-.446-1.439.109-1.091 1.074-2.012 2.721-2.298 1.016-.177 2.047-.138 3.043.164.793.24 1.633.67 2.326 1.282.448.395.555.926.424 1.384-.106.372-.76 1.213-1.588 2.203-.574.687-1.455 1.434-1.896 2.167-.756 1.258-1.613 3.271-.612 5.066 1.18 2.115 3.158 1.308 4.751.594l.006-.003c.838-.378 1.493-.923 1.869-1.584.512-.897.605-1.96.207-2.949-.442-1.095-1.794-2.023-3.282-2.263-1.062-.171-2.296.312-3.046 1.273-.613.792-.842 1.886-.842 3.021 0 0-.35.66-1.083 1.678-.486.675-1.393 1.725-2.013 2.993-.819 1.668-.452 3.595.666 5.198l.003.003c.292.418.382.9.253 1.323-.183.575-.823 1.137-1.698 1.07l-.044-.003c-.592-.044-1.958-.559-3.649-.776-2.797-.362-4.392.916-4.392-.916s-2.27-1.213-4.027-2.627l-.005-.004c-.637-.516-1.178-1.206-1.425-2.011-.201-.65-.167-1.289.197-1.787.498-.68 1.418-.99 2.347-1.079l.161-.016c1.352-.13 2.661.148 3.867.595 1.771.66 3.749 2.354 4.801 4.207 1.964 3.445 1.252 9.774-1.826 14.577l-.002.004c-.43.668-.248 1.442.298 1.961 4.522 4.31 10.684 6.32 13.998 1.798l.001-.001s.614-1.098 1.328-2.263c1.054-1.723 2.44-3.856 3.268-5.27.676-1.16.812-2.479.34-3.697-1.613-4.193-9.328-4.977-18.598-3.396"/></svg>
+                <span class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">WhatsApp</span>
               </button>
-            </div>
-            <div class="mt-1.5 flex justify-center">
-              <button onclick="copySharePassLink()" id="btnCopyShareLink" class="px-4 py-2 rounded-xl border border-slate-300 bg-slate-100 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900">
-                <i id="copyShareIcon" data-lucide="copy" class="w-3.5 h-3.5"></i>
-                <span id="copyShareLabel">Copy Link</span>
+              <button onclick="copySharePassLink()" id="btnCopyShareLink" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-slate-300 bg-slate-100 text-slate-800 shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900" title="Copy live pass link">
+                <svg id="copyShareIcon" class="w-3.5 h-3.5 shrink-0 text-slate-700" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="16" height="12" x="2" y="7" rx="2"/><path d="M16 7h-2V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2z"/></svg>
+                <span id="copyShareLabel" class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">Copy Link</span>
               </button>
             </div>
           </div>
@@ -869,15 +869,16 @@
                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
                 <span>Leave Queue</span>
               </button>
+              </div>
             </div>
           </div>
 
+        </div>
         </div>
 
       </div>
 
     </div>
-  </div>
 
   <!-- ========================================================================= -->
   <!-- MODAL 2B: LIVE FRIEND PASS TRACKER (Read-only shared pass view)           -->
@@ -889,7 +890,7 @@
       <!-- Modal Header -->
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
         <div class="flex items-center gap-2">
-          <img id="qrModalLogo" src="/logo.png" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
+          <img id="qrModalLogo" src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
           <div>
             <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Venue QR Poster</span>
             <h3 id="qrModalVenueName" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Britannia & Co. Restaurant</h3>
@@ -944,7 +945,7 @@
   <!-- ========================================================================= -->
   <div id="reliabilityModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeReliabilityModal()"></div>
-    <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90vh] flex flex-col">
+    <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90dvh] flex flex-col">
       
       <!-- Header -->
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between shrink-0">
@@ -1204,6 +1205,33 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
+  <script>
+    (function () {
+      try {
+        var TARGET = 'waitmate-20261124-v36';
+        if (localStorage.getItem('wm_build') === TARGET) return;
+        if (!('serviceWorker' in navigator)) { localStorage.setItem('wm_build', TARGET); return; }
+        var hadRegs = false, hadCaches = false;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          hadRegs = !!(regs && regs.length);
+          return Promise.all((regs || []).map(function (r) { return r.unregister(); }));
+        }).then(function () {
+          if (window.caches && caches.keys) {
+            return caches.keys().then(function (keys) {
+              hadCaches = !!(keys && keys.length);
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          }
+        }).then(function () {
+          localStorage.setItem('wm_build', TARGET);
+          if ((hadRegs || hadCaches) && !sessionStorage.getItem('wm_reloaded_' + TARGET)) {
+            sessionStorage.setItem('wm_reloaded_' + TARGET, '1');
+            window.location.reload();
+          }
+        }).catch(function () { try { localStorage.setItem('wm_build', TARGET); } catch (e) {} });
+      } catch (e) {}
+    })();
+  </script>
   <script src="app.js"></script>
   <script src="qrcode.js"></script>
 
@@ -1235,7 +1263,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">Owner Access</span>
           <h3 id="ownerChangePwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Change Dashboard Password</h3>
         </div>
@@ -1275,7 +1303,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Action</span>
           <h3 id="founderResetPwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Reset Restaurant Password</h3>
         </div>
@@ -1307,7 +1335,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">Owner Access</span>
           <h3 id="ownerPwdModalTitle" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Unlock Restaurant Dashboard</h3>
         </div>
@@ -1337,7 +1365,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Access</span>
           <h3 class="font-heading font-extrabold text-lg text-slate-900 mt-1">Founder Command Center</h3>
         </div>
@@ -1367,7 +1395,7 @@
   <footer class="mt-auto border-t border-slate-200 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
       <div class="flex items-center gap-2 select-none">
-        <img src="/logo.png" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
+        <img src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
         <span id="footerBrandText" class="font-heading font-extrabold text-base tracking-tight text-slate-800 cursor-default">Wait<span class="text-emerald-500">Mate</span> <span class="text-[10px] font-black text-slate-600 align-middle">INDIA</span></span>
       </div>
       <p class="text-[11px] text-slate-600 font-medium">Zero waiting, verified seating. &copy; 2026 WaitMate India.</p>
@@ -1379,7 +1407,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <img src="/logo.png" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
           <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Founder Access</span>
           <h3 class="font-heading font-extrabold text-lg text-slate-900 mt-1">Change Founder Password</h3>
         </div>

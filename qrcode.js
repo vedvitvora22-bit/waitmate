@@ -21,7 +21,7 @@ function openVenueQrModal(venueId) {
   document.getElementById('qrModalVenueAddress').textContent = r.address || 'Mumbai, India';
 
   const logoImg = document.getElementById('qrModalLogo');
-  if (logoImg) logoImg.src = '/logo.png';
+  if (logoImg) logoImg.src = '/logo.png?v=2';
 
   const joinUrl = venueJoinUrl(venueId);
   const directUrlEl = document.getElementById('qrModalDirectUrl');
@@ -120,7 +120,7 @@ function downloadVenueQrPng() {
 
   // WaitMate logo in header (same-origin; graceful fallback if it fails to load)
   const logo = new Image();
-  logo.src = '/logo.png';
+  logo.src = '/logo.png?v=2';
   logo.onload = () => {
     ctx.drawImage(logo, W / 2 - 42, 34, 84, 84);
     finalize();
