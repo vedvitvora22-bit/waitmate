@@ -147,6 +147,116 @@ def fs_list(collection):
     return [dict(doc.to_dict(), id=doc.id) for doc in db.collection(collection).stream()]
 
 
+# ------------------------------------------------------------------
+# Unified IST Meal-Slot Engine (Breakfast, Lunch, Snacks, Dinner,
+# Late Night, Off Hours). Each slot defines base turn-time minutes,
+# ghost spawn chance, and max ghosts for the Mumbai ghost-queue simulator.
+# ------------------------------------------------------------------
+IST_MEAL_SLOTS = [
+    ("breakfast", 7, 0, 11, 0),
+    ("lunch", 12, 0, 15, 30),
+    ("snacks", 16, 0, 19, 0),
+    ("dinner", 19, 30, 23, 0),
+    ("late_night", 23, 0, 3, 0),
+    ("off_hours", 3, 0, 7, 0),
+]
+
+MEAL_SLOT_CONFIGS = {
+    "breakfast": {"base_mins": 25, "spawn_chance": 0.45, "max_ghosts": 3},
+    "lunch": {"base_mins": 35, "spawn_chance": 0.70, "max_ghosts": 5},
+    "snacks": {"base_mins": 30, "spawn_chance": 0.45, "max_ghosts": 4},
+    "dinner": {"base_mins": 50, "spawn_chance": 0.85, "max_ghosts": 7},
+    "late_night": {"base_mins": 40, "spawn_chance": 0.35, "max_ghosts": 3},
+    "off_hours": {"base_mins": 30, "spawn_chance": 0.05, "max_ghosts": 0},
+}
+
+MAX_WAIT_MINS = 60
+
+
+def _ist_now():
+    return datetime.now(IST_TZ)
+
+
+def get_ist_meal_slot(dt=None):
+    """Detect the active IST (Asia/Kolkata) meal slot.
+
+    Returns a dict: {slot, base_mins, spawn_chance, max_ghosts}.
+    """
+    now = dt or _ist_now()
+    t = (now.hour, now.minute)
+    for slot, h1, m1, h2, m2 in IST_MEAL_SLOTS:
+        if h1 < h2:
+            if (h1, m1) <= t < (h2, m2):
+                return {"slot": slot, **MEAL_SLOT_CONFIGS[slot]}
+        else:
+            # Wraps past midnight (late_night 23:00-03:00)
+            if t >= (h1, m1) or t < (h2, m2):
+                return {"slot": slot, **MEAL_SLOT_CONFIGS[slot]}
+    return {"slot": "off_hours", **MEAL_SLOT_CONFIGS["off_hours"]}
+
+
+def get_restaurant_meal_slot_config(restaurant_id):
+    """Return the meal-slot config for a restaurant, gated by its configured
+    meal_slots / category tags. If the restaurant does NOT serve the current
+    IST meal slot, spawn_chance and max_ghosts are forced to 0."""
+    slot_info = get_ist_meal_slot()
+    current_slot = slot_info["slot"]
+
+    # Load restaurant's configured meal slots (default: all slots served)
+    restaurant_meal_slots = None
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT meal_slots FROM restaurants WHERE id = ?", (restaurant_id,))
+        row = c.fetchone()
+        conn.close()
+        if row and row[0]:
+            import json as _json
+            try:
+                restaurant_meal_slots = _json.loads(row[0])
+            except Exception:
+                restaurant_meal_slots = [s.strip() for s in str(row[0]).split(",") if s.strip()]
+    except Exception:
+        restaurant_meal_slots = None
+
+    # Default: if no meal_slots configured, serve all slots
+    serves_current = True
+    if restaurant_meal_slots:
+        serves_current = current_slot in restaurant_meal_slots
+
+    config = dict(MEAL_SLOT_CONFIGS[current_slot])
+    config["slot"] = current_slot
+    if not serves_current:
+        config["spawn_chance"] = 0
+        config["max_ghosts"] = 0
+    return config
+
+
+def enforce_60min_wait_ceiling(restaurant_id, current_wait_mins):
+    """Cap current_wait_mins at MAX_WAIT_MINS (60). If capped and ghost
+    entries exist in line, evict the oldest ghost entry to keep the wait
+    accurate. Returns (capped_wait, ghosts_evicted)."""
+    capped = min(MAX_WAIT_MINS, int(current_wait_mins or 0))
+    ghosts_evicted = 0
+    if capped < int(current_wait_mins or 0):
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1 ORDER BY joined_at ASC LIMIT 1",
+            (restaurant_id,),
+        )
+        row = c.fetchone()
+        if row:
+            c.execute(
+                "DELETE FROM queue_entries WHERE id = ?",
+                (row[0],),
+            )
+            conn.commit()
+            ghosts_evicted = 1
+        conn.close()
+    return capped, ghosts_evicted
+
+
 # Mumbai IST peak windows: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
 MUMBAI_PEAK_WINDOWS = [
     (13, 0, 15, 0),
@@ -161,7 +271,7 @@ GHOST_NAMES = [
 ]
 
 
-def _ist_now():
+def _ist_now_utc():
     return datetime.now(IST_TZ)
 
 
@@ -183,9 +293,9 @@ MUMBAI_TRAFFIC_CONFIG = {
 }
 
 
-def get_mumbai_traffic_config():
+def get_mumbai_traffic_config(dt=None):
     """Return the current Mumbai (Asia/Kolkata) IST traffic bucket config."""
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    now = dt or datetime.now(ZoneInfo("Asia/Kolkata"))
     t = (now.hour, now.minute)
     if (13, 0) <= t < (15, 0):
         bucket = "Lunch"
@@ -1542,8 +1652,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
         elif path == "/sw.js":
             self.serve_static_file(os.path.join(BASE_DIR, "sw.js"), "application/javascript; charset=utf-8")
             return
-        elif path == "/logo.svg":
-            self.serve_static_file(os.path.join(BASE_DIR, "logo.svg"), "image/svg+xml; charset=utf-8")
+        elif path == "/logo.png":
+            self.serve_static_file(os.path.join(BASE_DIR, "public", "logo.png"), "image/png")
             return
         elif path == "/logo.jpg":
             self.serve_static_file(os.path.join(BASE_DIR, "logo.jpg"), "image/jpeg")
