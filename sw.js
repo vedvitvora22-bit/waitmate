@@ -1,6 +1,6 @@
-// cache-bust-20261124-map-responsive-v30
+// cache-bust-20261124-map-clip-v31
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261124-map-responsive-v30';
+const CACHE_NAME = 'waitmate-v20261124-map-clip-v31';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
