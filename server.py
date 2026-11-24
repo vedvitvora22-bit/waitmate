@@ -90,6 +90,26 @@ def process_live_queue(queue, available_tables):
 _firestore_db = None
 _firestore_tried = False
 
+# In-memory cooldown guard (module scope) so warm Vercel invocations can short-
+# circuit repeated simulation ticks on back-to-back requests without even
+# touching SQLite/Firestore. Mirrors the Firestore/SQLite `lastSimulatedAt`
+# cooldown (120s here is intentionally stricter than the 60s persistence guard).
+LAST_SIM_CACHE = {}
+LAST_SIM_COOLDOWN_SECONDS = 120
+
+
+def _sim_cooldown_active(restaurant_id, now=None):
+    """Return remaining cooldown seconds if a tick ran within the 120s window,
+    else 0. Consulted before any DB/Firestore work in run_simulation_tick."""
+    now = time.time() if now is None else now
+    last = LAST_SIM_CACHE.get(restaurant_id)
+    if not last:
+        return 0
+    elapsed = now - last
+    if elapsed < LAST_SIM_COOLDOWN_SECONDS:
+        return LAST_SIM_COOLDOWN_SECONDS - elapsed
+    return 0
+
 
 def get_firestore():
     global _firestore_db, _firestore_tried
@@ -415,6 +435,14 @@ def run_simulation_tick(restaurant_id):
     Returns a result dict.
     """
     now = time.time()
+    # Fast in-memory guard: skip before any DB/Firestore work if a tick already
+    # ran within the 120s cooldown window (prevents back-to-back repeat ticks).
+    cached_remaining = _sim_cooldown_active(restaurant_id, now)
+    if cached_remaining > 0:
+        return {
+            "skipped": True,
+            "cooldown_remaining": int(cached_remaining),
+        }
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,))
@@ -538,6 +566,9 @@ def run_simulation_tick(restaurant_id):
     c.execute("UPDATE restaurants SET last_simulated_at = ?, available_tables = ? WHERE id = ?", (now, open_count_after, restaurant_id))
     conn.commit()
     conn.close()
+
+    # Record the in-memory cooldown so back-to-back requests short-circuit.
+    LAST_SIM_CACHE[restaurant_id] = now
 
     try:
         fs_set("restaurants", restaurant_id, {
@@ -1719,22 +1750,32 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             rows = c.fetchall()
             c.execute("SELECT value FROM app_settings WHERE key = 'global_announcement'")
             ga_row = c.fetchone()
-            conn.close()
             global_announcement = ga_row[0] if ga_row and ga_row[0] else ""
 
-            # Trigger the Mumbai ghost-queue simulation tick on page loads
-            # (60-second cooldown per restaurant is enforced inside the tick).
-            for r in rows:
-                try:
-                    run_simulation_tick(r["id"])
-                except Exception:
-                    pass
+            # Batch-fetch active queue counts in a single grouped query rather
+            # than issuing one query per restaurant inside the loop below.
+            c.execute(
+                "SELECT restaurant_id, COUNT(*) as queue_count, "
+                "COALESCE(SUM(party_size), 0) as total_people "
+                "FROM queue_entries "
+                "WHERE status IN ('waiting','notified','delayed') "
+                "GROUP BY restaurant_id"
+            )
+            queue_by_rest = {q["restaurant_id"]: q for q in c.fetchall()}
+            conn.close()
+
+            # NOTE: Simulation ticks are intentionally NOT run here. GET must be
+            # a fast, non-blocking read. The frontend fires a background
+            # POST /api/queue/simulate-tick when a tick is actually due.
 
             result = []
             for r in rows:
                 r_dict = dict(r)
                 r_dict.pop("password_hash", None)
-                live_stats = get_restaurant_live_stats(r['id'])
+                q = queue_by_rest.get(r["id"])
+                queue_count = (q["queue_count"] if q else 0) or 0
+                total_people = (q["total_people"] if q else 0) or 0
+                live_stats = compute_prototype_restaurant_metrics(r_dict, queue_count, total_people)
                 reliability = calculate_reliability(r['id'])
                 r_dict.update({
                     "live_stats": live_stats,
