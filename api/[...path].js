@@ -812,6 +812,7 @@ async function route(request, response, pathParts) {
       storage,
       storage_status: storage === "firebase_firestore" ? "firebase" : "memory",
       reason,
+      demo_mode: String(process.env.DEMO_MODE || "").toLowerCase() === "true",
       restaurants: restaurants.filter(r => !deleted.includes(r.id)).length,
       active_queue_entries: Object.values(byId).filter(e => ["waiting", "notified", "delayed"].includes(e.status)).length,
       custom_overrides: (global._customRestaurants || []).filter(r => !deleted.includes(r.id)).length
