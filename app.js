@@ -3612,6 +3612,52 @@ function toggleHostGhostGuests(checked) {
   renderHostDashboard();
 }
 
+async function spawnGhostGuests() {
+  if (!currentHostVenueId) {
+    showToast("No venue selected. Open a Host Stand first.", "info");
+    return;
+  }
+  const btn = document.getElementById('hostSpawnGhostBtn');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i> <span>Spawning...</span>`;
+  lucide.createIcons();
+  try {
+    // Founder master password (prompt once per session)
+    let pwd = sessionStorage.getItem('wm_founder_password') || '';
+    if (!pwd) {
+      pwd = window.prompt("Founder verification required\nEnter the Founder Master Password to spawn AI ghost guests:");
+      if (pwd === null) return;
+      pwd = pwd.trim();
+      if (!pwd) { showToast("Founder password required.", "info"); return; }
+      sessionStorage.setItem('wm_founder_password', pwd);
+    }
+
+    const res = await fetch('/api/queue/spawn-ghosts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Founder-Password': pwd },
+      body: JSON.stringify({ restaurant_id: currentHostVenueId, count: 5 }),
+      cache: 'no-store'
+    });
+    if (res.status === 401) {
+      sessionStorage.removeItem('wm_founder_password');
+      showToast("Incorrect Founder Master Password.", "error");
+      return;
+    }
+    if (!res.ok) throw new Error('Spawn request failed');
+    const data = await res.json();
+    showToast(`Spawned ${data.spawned} AI ghost guest(s) at ${data.restaurant_id}.`, "success");
+    await loadHostStand();
+  } catch (err) {
+    console.warn("Spawn ghost guests error:", err);
+    showToast("Failed to spawn AI ghost guests.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+    lucide.createIcons();
+  }
+}
+
 async function loadHostStand() {
   if (isAnyPasswordModalOpen()) return;
   const savedPwd = getSavedHostPassword(currentHostVenueId);

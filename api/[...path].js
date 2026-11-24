@@ -513,6 +513,56 @@ async function clearAllGhostEntriesJs(restaurantId) {
   return targets.length;
 }
 
+// Dev/demo helper: spawn a batch of AI ghost guests for a restaurant, bypassing
+// the Mumbai peak-window and zero-open-tables gating used by runSimulationTick.
+// Intended for manual verification via the owner portal / founder endpoint.
+async function spawnGhostsForRestaurant(restaurantId, restaurant, count = 5) {
+  const now = Date.now();
+  const tables = Array.isArray(restaurant.tables) && restaurant.tables.length ? restaurant.tables : defaultTables(restaurant.total_tables || 1);
+  const existingGhosts = (await fetchQueueEntries()).filter((e) => e.restaurant_id === restaurantId && e.status === 'waiting' && (e.is_ghost || e.isGhost || e.entry_type === 'ghost')).length;
+  const toSpawn = Math.max(0, Number(count) - existingGhosts);
+  const writes = [];
+  let spawned = 0;
+  for (let i = 0; i < toSpawn; i++) {
+    const ghostId = `ghost-dev-${String(now * 1000 + i).slice(-8)}`;
+    const ticketNumber = `WM-G${String(Math.floor(now / 1000) % 100000).padStart(5, '0')}`;
+    const partySize = 2 + Math.floor(Math.random() * 3);
+    const ghostName = GHOST_NAMES_JS[(existingGhosts + i) % GHOST_NAMES_JS.length];
+    const ghost = {
+      id: ghostId,
+      ticket_number: ticketNumber,
+      restaurant_id: restaurantId,
+      restaurant_name: restaurant.name || '',
+      guest_name: ghostName,
+      customer_name: ghostName,
+      phone: '',
+      party_size: partySize,
+      seating_pref: 'First Available',
+      special_requests: '',
+      channel: 'remote',
+      entry_type: 'ghost',
+      source: 'ai-ghost',
+      '09_channel': 'remote',
+      status: 'waiting',
+      estimated_wait_mins: 1 + Math.floor(Math.random() * 45),
+      actual_wait_mins: 0,
+      joined_at: now,
+      joined_time_ist: formatIST(now),
+      is_ghost: true,
+      isGhost: true,
+      notified_at: null,
+      seated_at: null,
+      has_arrived: false,
+      delay_mins: 0,
+    };
+    writes.push(setDocument('queue_entries', ghostId, toNumberedEntry(ghost)));
+    global._tickets[ghostId] = { ...ghost };
+    spawned++;
+  }
+  if (writes.length) await safeCommit(writes);
+  return { spawned, existingGhosts, target: count };
+}
+
 async function runSimulationTick(restaurantId) {
   try {
     const now = Date.now();
@@ -813,6 +863,18 @@ async function route(request, response, pathParts) {
     if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
     const cleared = await clearAllGhostEntriesJs(body.restaurant_id);
     return send(response, 200, { success: true, cleared, restaurant_id: body.restaurant_id });
+  }
+
+  // Dev/demo: manually spawn AI ghost guests for a restaurant (bypasses peak-window
+  // and zero-open-tables gating). Founder-only — requires X-Founder-Password header.
+  if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    if (!body.restaurant_id) return send(response, 400, { error: "restaurant_id is required" });
+    const restaurant = await findRestaurantById(body.restaurant_id);
+    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    const count = Number(body.count || 5);
+    const result = await spawnGhostsForRestaurant(body.restaurant_id, restaurant, count);
+    return send(response, 200, { success: true, restaurant_id: body.restaurant_id, ...result });
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {

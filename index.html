@@ -455,6 +455,10 @@
                 <input type="checkbox" id="hostGhostToggle" checked onchange="toggleHostGhostGuests(this.checked)" class="w-3.5 h-3.5 accent-purple-600">
                 Show AI Ghost Guests
               </label>
+              <button onclick="spawnGhostGuests()" id="hostSpawnGhostBtn" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold transition flex items-center gap-1" title="Dev: manually spawn AI ghost guests for this venue (Founder auth required)">
+                <i data-lucide="plus-circle" class="w-3 h-3"></i>
+                <span>Spawn AI Ghosts</span>
+              </button>
               <span class="text-xs text-slate-600">Live queue sync</span>
             </div>
           </div>
