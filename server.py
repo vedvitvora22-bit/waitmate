@@ -457,14 +457,20 @@ def get_restaurant_meal_slot_config(restaurant_id):
     return config
 
 
-def enforce_60min_wait_ceiling(restaurant_id, current_wait_mins):
+def enforce_60min_wait_ceiling(restaurant_id, current_wait_mins, conn=None):
     """Cap current_wait_mins at MAX_WAIT_MINS (60). If capped and ghost
     entries exist in line, evict the oldest ghost entry to keep the wait
-    accurate. Returns (capped_wait, ghosts_evicted)."""
+    accurate. Returns (capped_wait, ghosts_evicted).
+
+    Accepts an open connection so callers (e.g. run_simulation_tick) can reuse
+    it instead of opening a second connection to the same SQLite file, which
+    would otherwise raise "database is locked" under concurrent access."""
     capped = min(MAX_WAIT_MINS, int(current_wait_mins or 0))
     ghosts_evicted = 0
     if capped < int(current_wait_mins or 0):
-        conn = get_db()
+        own_conn = conn is None
+        if own_conn:
+            conn = get_db()
         c = conn.cursor()
         c.execute(
             "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1 ORDER BY joined_at ASC LIMIT 1",
@@ -478,7 +484,8 @@ def enforce_60min_wait_ceiling(restaurant_id, current_wait_mins):
             )
             conn.commit()
             ghosts_evicted = 1
-        conn.close()
+        if own_conn:
+            conn.close()
     return capped, ghosts_evicted
 
 
@@ -774,7 +781,7 @@ def run_simulation_tick(restaurant_id):
     max_wait_row = c.fetchone()
     max_wait = max_wait_row[0] if max_wait_row and max_wait_row[0] else 0
     if max_wait and max_wait > MAX_WAIT_MINS:
-        capped, evicted = enforce_60min_wait_ceiling(restaurant_id, max_wait)
+        capped, evicted = enforce_60min_wait_ceiling(restaurant_id, max_wait, conn)
         ghosts_evicted += evicted
     conn.commit()
 
