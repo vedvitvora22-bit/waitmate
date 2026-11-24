@@ -523,6 +523,8 @@ async function clearAllGhostEntriesJs(restaurantId) {
   const deletes = targets.map((e) => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
   if (deletes.length) await safeCommit(deletes);
   for (const e of targets) delete global._tickets[e.id];
+  // Update aggregates after clearing ghosts
+  await updateRestaurantAggregates(restaurantId);
   return targets.length;
 }
 
@@ -833,9 +835,16 @@ async function cleanupGhostGuests(options = {}) {
     return true;
   });
   let deleted = 0;
+  const affectedIds = new Set();
   for (let i = 0; i < targets.length; i += 450) {
     const chunk = targets.slice(i, i + 450).map(t => t.id);
     deleted += await deleteGhostsChunk(chunk);
+    // Track affected restaurant IDs
+    targets.slice(i, i + 450).forEach(t => affectedIds.add(t.restaurant_id));
+  }
+  // Update aggregates for all affected restaurants
+  for (const id of affectedIds) {
+    await updateRestaurantAggregates(id);
   }
   return { deleted, total: targets.length, olderThanIstDate };
 }
@@ -886,6 +895,8 @@ async function spawnGhostsForRestaurant(restaurantId, restaurant, count = 5) {
     spawned++;
   }
   if (writes.length) await safeCommit(writes);
+  // Update aggregates after spawning ghosts
+  await updateRestaurantAggregates(restaurantId);
   return { spawned, existingGhosts, target: count };
 }
 
@@ -1203,10 +1214,29 @@ async function route(request, response, pathParts) {
     const id = normalized[normalized.length - 1];
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    // GET stays a fast, non-blocking read — no simulation tick here.
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
-    return send(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, allQueueEntries(firestoreEntries)), reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
+    // Use aggregate fields from restaurant document (no queue_entries scan)
+    const queueCount = Number(restaurant.queue_count || 0);
+    const totalWaitingPeople = Number(restaurant.total_waiting_people || 0);
+    const activeDiners = Number(restaurant.active_diners || 0);
+    const occupiedTables = Number(restaurant.occupied_tables || 0);
+    const availableTables = Number(restaurant.available_tables || 0);
+    const basePrep = Number(restaurant.base_prep_time || 12);
+    const manual = restaurant.manual_override_wait;
+    let algorithmic = 0;
+    if (queueCount > 0 && availableTables > 0) {
+      const partiesAheadOfOpenTables = Math.max(0, queueCount - availableTables);
+      algorithmic = Math.floor((partiesAheadOfOpenTables / availableTables) * basePrep);
+    }
+    const estimated = manual !== null && manual !== undefined ? Math.min(60, Number(manual)) : algorithmic;
+    const liveStats = {
+      queue_count: queueCount,
+      total_waiting_people: totalWaitingPeople,
+      estimated_wait_mins: estimated,
+      algorithmic_wait_mins: algorithmic,
+      has_manual_override: manual !== null && manual !== undefined,
+      is_queue_open: Boolean(restaurant.is_queue_open)
+    };
+    return sendPublic(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: activeDiners, occupied_tables: occupiedTables, available_tables: availableTables, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
   }
 
   if (request.method === "POST" && path === "/api/queue/simulate-tick") {
@@ -1818,6 +1848,8 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
+        // Update aggregates after adding walk-in guest
+        await updateRestaurantAggregates(body.restaurant_id);
       } catch (error) {
         if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
           global._tickets[ticketId] = { ...ticket };
@@ -2038,6 +2070,8 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
           delete merged.stars; // no duplicate "stars" field in queue_entries
           const numbered = toNumberedEntry(merged);
           await safeCommit([setDocument("queue_entries", ticketId, numbered)]);
+          // Update aggregates after rating (which changes status to seated)
+          await updateRestaurantAggregates(restaurantId);
           const mem = { ...t, ...merged };
           delete mem.stars;
           global._tickets[ticketId] = mem;
@@ -2349,6 +2383,8 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     }
     try {
       await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
+      // Update aggregates after founder queue action
+      await updateRestaurantAggregates(ticket.restaurant_id);
     } catch (error) {
       if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
         console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
@@ -2370,6 +2406,8 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
     for (const e of targets) delete global._tickets[e.id];
+    // Update aggregates after clearing venue queue
+    await updateRestaurantAggregates(restaurantId);
     return send(response, 200, { success: true, message: `Cleared ${targets.length} active ticket(s) from the venue queue.`, cleared: targets.length });
   }
 
@@ -2382,7 +2420,12 @@ if (request.method === "POST" && path === "/api/queue/spawn-ghosts") {
     const targets = entries.filter(e => !["waiting","notified","delayed"].includes(e.status));
     const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
+    const affectedIds = new Set(targets.map(e => e.restaurant_id));
     for (const e of targets) delete global._tickets[e.id];
+    // Update aggregates for all affected restaurants after purge
+    for (const id of affectedIds) {
+      await updateRestaurantAggregates(id);
+    }
     return send(response, 200, { success: true, message: `Purged ${targets.length} stale/test queue entry(ies).`, purged: targets.length });
   }
 

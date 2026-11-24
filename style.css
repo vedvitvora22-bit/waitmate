@@ -251,3 +251,20 @@ body {
 
 /* Cards/tables: keep borders visible while allowing inner scroll */
 .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+/* Password reveal toggle */
+input[type="password"], input[type="text"].pw-reveal {
+  padding-right: 44px;
+}
+input::-ms-reveal, input::-ms-clear {
+  display: none;
+}
+button[aria-label="Toggle password visibility"] {
+  z-index: 20;
+  cursor: pointer;
+  pointer-events: auto;
+}
+button[aria-label="Toggle password visibility"] svg,
+button[aria-label="Toggle password visibility"] i {
+  pointer-events: none;
+}
