@@ -205,7 +205,7 @@ function normalizeQueueEntry(raw) {
     special_requests: pick("08_special_requests", "special_requests") || "",
     channel,
     entry_type: channel,
-    source: pick("source") || (entry_type === 'ghost' ? 'ai-ghost' : channel),
+    source: pick("source") || (Boolean(pick("is_ghost", "isGhost")) ? 'ai-ghost' : channel),
     status: pick("10_status", "status") || "waiting",
     has_arrived: Boolean(pick("11_has_arrived", "has_arrived")),
     is_ghost: Boolean(pick("is_ghost", "isGhost")),
