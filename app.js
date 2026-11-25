@@ -2955,12 +2955,12 @@ const openTicketModalImpl = function openTicketModal() {
     return;
   }
   updateTicketUI();
-  document.getElementById('ticketModal').classList.remove('hidden');
+  document.getElementById('ticketModal').classList.remove('hidden', 'pointer-events-none');
   lucide.createIcons();
 };
 
 function closeTicketModal() {
-  document.getElementById('ticketModal').classList.add('hidden');
+  document.getElementById('ticketModal').classList.add('hidden', 'pointer-events-none');
 }
 
 function clearCurrentTicket() {
