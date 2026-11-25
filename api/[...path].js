@@ -1015,7 +1015,7 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/queue/action") {
-    const body = request.body || {};
+    const body = parseBody(request);
     const ticket = await fetchQueueEntry(body.ticket_id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     let updates = { ...ticket };
