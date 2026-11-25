@@ -2639,7 +2639,10 @@ async function submitJoinQueue(e) {
 function startTicketPolling() {
   if (pollTimer) clearInterval(pollTimer);
   fetchTicketStatus();
-  pollTimer = setInterval(fetchTicketStatus, 4000);
+  pollTimer = setInterval(async () => {
+    if (document.hidden || document.visibilityState !== 'visible') return;
+    await fetchTicketStatus();
+  }, 15000);
 }
 
 async function fetchTicketStatus() {
@@ -4002,15 +4005,15 @@ async function loadHostStand() {
   await renderUnlockedHostStand(currentHostVenueId, savedPwd);
 }
 
-// Auto-poll the Host Stand queue every 5s while the owner tab is active so new
+// Auto-poll the Host Stand queue every 15s while the owner tab is active and visible so new
 // customer joins appear automatically and fire a single alert without page reloads.
 function startHostStandPolling() {
   if (hostStandPollTimer) clearInterval(hostStandPollTimer);
   hostStandPollTimer = setInterval(() => {
-    if (currentInterface === 'owner' && currentHostVenueId) {
+    if (currentInterface === 'owner' && currentHostVenueId && !document.hidden && document.visibilityState === 'visible') {
       loadHostStand();
     }
-  }, 5000);
+  }, 15000);
 }
 
 function stopHostStandPolling() {

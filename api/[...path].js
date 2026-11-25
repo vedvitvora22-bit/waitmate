@@ -7,7 +7,8 @@ const {
   commitWrites,
   setDocument,
   PROJECT_ID,
-  encodeSegment
+  encodeSegment,
+  isMemoryFallbackActive
 } = require("./_firestore");
 
 const now = Date.now();
@@ -132,9 +133,16 @@ function reliabilityFallback() {
 }
 
 async function findRestaurantById(id) {
-  const doc = await getDocument("restaurants", id);
-  if (doc) return doc;
-  return null;
+  try {
+    const doc = await getDocument("restaurants", id);
+    if (doc) return doc;
+    return null;
+  } catch (error) {
+    if (isMemoryFallbackActive()) {
+      return fallbackRestaurants.find(r => r.id === id) || null;
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,15 +298,28 @@ function isGhostTicket(entry) {
 }
 
 async function fetchQueueEntries() {
-  const docs = await listCollection("queue_entries");
-  return docs.map(normalizeQueueEntry).filter(e => !isGhostTicket(e));
+  try {
+    const docs = await listCollection("queue_entries");
+    return docs.map(normalizeQueueEntry).filter(e => !isGhostTicket(e));
+  } catch (error) {
+    if (isMemoryFallbackActive()) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 async function fetchQueueEntry(id) {
-  const doc = await getDocument("queue_entries", id);
-  const normalized = normalizeQueueEntry(doc);
-  // A legacy ghost ticket must never be served, even by direct id lookup.
-  return isGhostTicket(normalized) ? null : normalized;
+  try {
+    const doc = await getDocument("queue_entries", id);
+    const normalized = normalizeQueueEntry(doc);
+    return isGhostTicket(normalized) ? null : normalized;
+  } catch (error) {
+    if (isMemoryFallbackActive()) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // Force the seated invariants (status = seated, has_arrived = true, seated IST
@@ -388,9 +409,16 @@ async function updateRestaurantAggregates(restaurantId) {
 
 // Raw restaurant lookup from Firestore ONLY. Throws on failure - NO memory fallback.
 async function getRawRestaurant(id) {
-  const doc = await getDocument("restaurants", id);
-  if (doc) return doc;
-  return null;
+  try {
+    const doc = await getDocument("restaurants", id);
+    if (doc) return doc;
+    return null;
+  } catch (error) {
+    if (isMemoryFallbackActive()) {
+      return fallbackRestaurants.find(r => r.id === id) || null;
+    }
+    throw error;
+  }
 }
 
 function publicRestaurant(r) {
@@ -398,17 +426,23 @@ function publicRestaurant(r) {
 }
 
 async function ensureRestaurants() {
-  const docs = await listCollection("restaurants");
-  const publicRestaurants = docs.map(publicRestaurant);
-  
-  // Seed default restaurants if Firestore is empty
-  if (!publicRestaurants.length) {
-    await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
-    const seededDocs = await listCollection("restaurants");
-    return seededDocs.map(publicRestaurant);
+  try {
+    const docs = await listCollection("restaurants");
+    const publicRestaurants = docs.map(publicRestaurant);
+    
+    if (!publicRestaurants.length) {
+      await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
+      const seededDocs = await listCollection("restaurants");
+      return seededDocs.map(publicRestaurant);
+    }
+    
+    return publicRestaurants;
+  } catch (error) {
+    if (isMemoryFallbackActive()) {
+      return fallbackRestaurants.map(publicRestaurant);
+    }
+    throw error;
   }
-  
-  return publicRestaurants;
 }
 
 const PROTO_PROFILES = {

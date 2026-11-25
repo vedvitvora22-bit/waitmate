@@ -5,6 +5,14 @@ const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databas
 let cachedAccessToken = null;
 let cachedAccessTokenExpiry = 0;
 
+const TTL_MS = 15000;
+const cache = {
+  restaurants: { data: null, expires: 0 },
+  queue_entries: { data: null, expires: 0 }
+};
+
+let useMemoryFallback = false;
+
 function encodeSegment(value) {
   return encodeURIComponent(String(value));
 }
@@ -47,7 +55,6 @@ function parseServiceAccount(raw) {
 
   let str = raw.trim();
 
-  // Strip accidental outer single/double quotes/backticks added by some hosts.
   if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith("`") && str.endsWith("`"))) {
     str = str.slice(1, -1).trim();
   } else if (str.startsWith('"') && str.endsWith('"') && !str.startsWith('{"')) {
@@ -58,7 +65,6 @@ function parseServiceAccount(raw) {
     }
   }
 
-  // Base64-encoded service account (another common Vercel env format)
   if (!str.startsWith("{")) {
     try {
       const decoded = Buffer.from(str, "base64").toString("utf8").trim();
@@ -66,7 +72,6 @@ function parseServiceAccount(raw) {
     } catch (_) {}
   }
 
-  // 3. Attempt direct JSON parse
   let parsed = null;
   let parseError = null;
   try {
@@ -75,7 +80,6 @@ function parseServiceAccount(raw) {
     parseError = e1;
   }
 
-  // 4. Handle unescaped control chars / newlines inside string literals
   if (!parsed) {
     try {
       const fixed = str.replace(/\r?\n/g, "\\n");
@@ -85,7 +89,6 @@ function parseServiceAccount(raw) {
         const unescaped = str.replace(/\\\\n/g, "\\n");
         parsed = JSON.parse(unescaped);
       } catch (e3) {
-        // 5. Fallback regex extractor for crucial service account fields
         const emailMatch = str.match(/"client_email"\s*:\s*"([^"]+)"/);
         const keyMatch = str.match(/"private_key"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*})/);
         const projectMatch = str.match(/"project_id"\s*:\s*"([^"]+)"/);
@@ -114,7 +117,6 @@ function parseServiceAccount(raw) {
     return { error: "Service account JSON is missing private_key" };
   }
 
-  // 6. Ensure private_key has real newline characters for OpenSSL PEM parsing
   let privateKey = String(parsed.private_key);
   if (privateKey.includes("\\n")) {
     privateKey = privateKey.replace(/\\n/g, "\n");
@@ -137,8 +139,6 @@ async function getAccessToken() {
             process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
 
   if (!raw) {
-    // Fallback: individual service-account env vars when the combined JSON
-    // variable is not set (a common Vercel dashboard env format).
     const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = process.env.FIREBASE_PRIVATE_KEY;
@@ -214,6 +214,13 @@ async function getAccessToken() {
 }
 
 async function firestoreRequest(path, options = {}) {
+  if (useMemoryFallback) {
+    const err = new Error("Using memory fallback");
+    err.status = 503;
+    err.code = "RESOURCE_EXHAUSTED";
+    throw err;
+  }
+
   const accessToken = await getAccessToken();
   const url = `${BASE}${path}`;
   const response = await fetch(url, {
@@ -231,12 +238,13 @@ async function firestoreRequest(path, options = {}) {
   }
   if (!response.ok) {
     const error = new Error(data?.error?.message || data?.message || `Firestore request failed (${response.status})`);
-    // Normalize Firestore quota exhaustion (429 RESOURCE_EXHAUSTED) to a 503
-    // "service unavailable" status. Every read fallback guard and safeCommit
-    // already treats 503 as "degrade to the in-memory store", so a single 429
-    // anywhere (reads or writes) transparently flips the whole API into memory
-    // mode instead of surfacing a "Quota exceeded" error to the user.
-    error.status = response.status === 429 ? 503 : response.status;
+    if (response.status === 429 || data?.error?.status === "RESOURCE_EXHAUSTED") {
+      useMemoryFallback = true;
+      error.status = 503;
+      error.code = "RESOURCE_EXHAUSTED";
+    } else {
+      error.status = response.status;
+    }
     error.originalStatus = response.status;
     error.code = data?.error?.status;
     throw error;
@@ -248,9 +256,24 @@ function documentId(document) {
   return String(document.name || "").split("/").pop();
 }
 
+function invalidateCache(collection) {
+  if (cache[collection]) {
+    cache[collection].data = null;
+    cache[collection].expires = 0;
+  }
+}
+
 async function listCollection(collection) {
+  const now = Date.now();
+  const entry = cache[collection];
+  if (entry && entry.data !== null && now < entry.expires) {
+    return entry.data;
+  }
+
   const data = await firestoreRequest(`/${encodeSegment(collection)}?pageSize=100`);
-  return (data.documents || []).map(document => ({ id: documentId(document), ...fromFirestoreFields(document.fields) }));
+  const docs = (data.documents || []).map(document => ({ id: documentId(document), ...fromFirestoreFields(document.fields) }));
+  cache[collection] = { data: docs, expires: now + TTL_MS };
+  return docs;
 }
 
 async function getDocument(collection, id) {
@@ -270,19 +293,27 @@ async function commitWrites(writes) {
       body: JSON.stringify({ writes })
     });
   } catch (error) {
-    // Log the exact reason for Firestore write failures but never crash the caller
     console.warn("Firestore commitWrites error:", error.message || error);
     throw error;
   }
 }
 
 function setDocument(collection, id, fields) {
+  invalidateCache(collection);
   return {
     update: {
       name: `projects/${PROJECT_ID}/databases/(default)/documents/${encodeSegment(collection)}/${encodeSegment(id)}`,
       fields: toFirestoreFields(fields)
     }
   };
+}
+
+function enableMemoryFallback() {
+  useMemoryFallback = true;
+}
+
+function isMemoryFallbackActive() {
+  return useMemoryFallback;
 }
 
 module.exports = {
@@ -295,5 +326,7 @@ module.exports = {
   toFirestoreFields,
   fromFirestoreFields,
   PROJECT_ID,
-  encodeSegment
+  encodeSegment,
+  enableMemoryFallback,
+  isMemoryFallbackActive
 };
