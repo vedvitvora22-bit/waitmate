@@ -380,7 +380,8 @@ async function nextTicketNumber() {
     }
   ]);
   const transformResults = result && result.writeResults && result.writeResults[0] && result.writeResults[0].transformResults;
-  const seqValue = transformResults && transformResults[0] && transformResults[0].fields && transformResults[0].fields.seq && transformResults[0].fields.seq.integerValue;
+  const tr = transformResults && transformResults[0];
+  const seqValue = tr && tr.transformResult && tr.transformResult.integerValue;
   const seq = Number(seqValue);
   if (Number.isFinite(seq) && seq > 0) {
     return `WM-${100 + seq}`;
