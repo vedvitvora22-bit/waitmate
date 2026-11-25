@@ -4105,6 +4105,11 @@ function renderHostDashboard() {
   document.getElementById('hostKpiGrade').textContent = `Grade ${rel.grade}`;
   document.getElementById('hostKpiVariance').textContent = `± ${rel.avg_variance_mins}m`;
 
+  // Re-evaluate the anti-overpromising warning against the live queue on
+  // every render (initial load + 15s poll) so it hides when the queue
+  // empties or the manual wait is not genuinely lower than algorithmic.
+  checkWaitOverrideWarning(stats.has_manual_override ? stats.estimated_wait_mins : null);
+
   // Host table rows
   const tbody = document.getElementById('hostQueueTableBody');
   if (visibleQueue.length === 0) {
