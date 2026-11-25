@@ -115,14 +115,7 @@
       <!-- Center / Right: 3 Live Dedicated Interfaces -->
       <div class="flex items-center gap-2 sm:gap-3">
         
-        <!-- Active Ticket Pill (Appears when customer has active queue ticket) -->
-        <button id="activeTicketPill" onclick="openActiveBoardingPass()" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/25 hover:bg-orange-600 hover:brightness-110 active:scale-[0.98] transition cursor-pointer">
-          <span class="w-2 h-2 rounded-full bg-white live-pulse"></span>
-          <span>My Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
-          <span class="ml-1 text-[10px] opacity-80">View →</span>
-        </button>
-
-        <!-- 3-Way Role Mode Switcher Tabs -->
+      <!-- 3-Way Role Mode Switcher Tabs -->
         <div class="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
           
           <!-- 1. Customer View -->
@@ -1684,6 +1677,15 @@
       </form>
     </div>
   </div>
+
+  <!-- Floating Active Pass Bar -->
+  <button id="activeTicketPill" onclick="openActiveBoardingPass()" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto z-40 items-center justify-between gap-2 px-4 py-2.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition cursor-pointer">
+    <span class="flex items-center gap-2 min-w-0">
+      <span class="w-2 h-2 rounded-full bg-white live-pulse shrink-0"></span>
+      <span class="truncate">🎟️ Active Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
+    </span>
+    <span class="shrink-0">• View →</span>
+  </button>
 
 </body>
 </html>
