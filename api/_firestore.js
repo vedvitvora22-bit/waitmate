@@ -47,25 +47,23 @@ function parseServiceAccount(raw) {
 
   let str = raw.trim();
 
-  // 1. Check if Base64 encoded
-  if (!str.startsWith("{")) {
-    try {
-      const decoded = Buffer.from(str, "base64").toString("utf8").trim();
-      if (decoded.startsWith("{")) {
-        str = decoded;
-      }
-    } catch (_) {}
-  }
-
-  // 2. Strip single quotes, backticks, or outer double quotes if string was wrapped
+  // Strip accidental outer single/double quotes/backticks added by some hosts.
   if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith("`") && str.endsWith("`"))) {
     str = str.slice(1, -1).trim();
   } else if (str.startsWith('"') && str.endsWith('"') && !str.startsWith('{"')) {
     try {
-      str = JSON.parse(str).trim();
+      str = JSON.parse(str);
     } catch (_) {
       str = str.slice(1, -1).trim();
     }
+  }
+
+  // Base64-encoded service account (another common Vercel env format)
+  if (!str.startsWith("{")) {
+    try {
+      const decoded = Buffer.from(str, "base64").toString("utf8").trim();
+      if (decoded.startsWith("{")) str = decoded;
+    } catch (_) {}
   }
 
   // 3. Attempt direct JSON parse
@@ -98,7 +96,7 @@ function parseServiceAccount(raw) {
             project_id: projectMatch ? projectMatch[1] : PROJECT_ID
           };
         } else {
-          return { error: `JSON parse error: ${parseError?.message || e2?.message || "Invalid JSON"}` };
+          return { error: `Invalid FIREBASE_SERVICE_ACCOUNT JSON: ${parseError?.message || e2?.message || e3?.message || "Invalid JSON"}` };
         }
       }
     }
@@ -130,21 +128,38 @@ function parseServiceAccount(raw) {
 async function getAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiry) return cachedAccessToken;
 
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT ||
-              process.env.FIREBASE_SERVER_ACCOUNT ||
-              process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
-              process.env.FIREBASE_CREDENTIALS ||
-              process.env.FIREBASE_CONFIG ||
-              process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  let raw = process.env.FIREBASE_SERVICE_ACCOUNT ||
+            process.env.FIREBASE_SERVER_ACCOUNT ||
+            process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+            process.env.FIREBASE_CREDENTIALS ||
+            process.env.FIREBASE_CONFIG ||
+            process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+            process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
 
   if (!raw) {
-    const presentKeys = Object.keys(process.env).filter(k => 
+    // Fallback: individual service-account env vars when the combined JSON
+    // variable is not set (a common Vercel dashboard env format).
+    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (clientEmail && privateKey) {
+      raw = JSON.stringify({
+        type: "service_account",
+        project_id: projectId,
+        private_key: privateKey,
+        client_email: clientEmail
+      });
+    }
+  }
+
+  if (!raw) {
+    const presentKeys = Object.keys(process.env).filter(k =>
       k.includes("FIREBASE") || k.includes("GOOGLE") || k.includes("SERVICE")
     );
     const err = new Error(
-      presentKeys.length 
-        ? `FIREBASE_SERVICE_ACCOUNT not set (detected env keys: ${presentKeys.join(", ")})` 
-        : "FIREBASE_SERVICE_ACCOUNT environment variable is not configured"
+      presentKeys.length
+        ? `Missing FIREBASE_SERVICE_ACCOUNT env var (detected env keys: ${presentKeys.join(", ")})`
+        : "Missing FIREBASE_SERVICE_ACCOUNT env var"
     );
     err.status = 503;
     throw err;
@@ -172,7 +187,7 @@ async function getAccessToken() {
   try {
     signature = crypto.sign("RSA-SHA256", Buffer.from(unsignedToken), credentials.private_key).toString("base64url");
   } catch (signErr) {
-    const err = new Error(`RSA signing failed: ${signErr.message}. Verify private_key formatting.`);
+    const err = new Error(`Invalid PEM private_key format: ${signErr.message}`);
     err.status = 503;
     throw err;
   }
