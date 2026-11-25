@@ -967,19 +967,36 @@ async function route(request, response, pathParts) {
     const restaurant = await getDocument("restaurants", ticket.restaurant_id);
     const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
+    // Parties strictly ahead of this ticket (joined before this ticket)
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
     const availableTables = Math.max(1, Number(restaurant?.available_tables || 0));
-    const partiesAheadOfTables = Math.max(0, ahead + (availableTables > 0 ? 0 : 0) - availableTables + (ahead > 0 ? 0 : 0));
-    // Recompute live wait from current queue position so a #1 party reflects base prep pace.
-    const livePartiesAhead = Math.max(0, ahead - Math.max(0, availableTables - 1));
-    const partiesAheadOfTables2 = Math.max(0, ahead > 0 ? Math.max(0, entries.filter(e=>e.restaurant_id===ticket.restaurant_id && ["waiting","notified","delayed"].includes(e.status) && Number(e.joined_at) < Number(ticket.joined_at)).length - availableTables + 1) : 0);
-    const promised = restaurant ? getEstimatedWaitMinutes(restaurant, Math.max(0, ahead === 0 ? 0 : Math.max(0, ahead - availableTables + 1)), availableTables) : Number(ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 10);
-    // When 0 parties ahead, reflect venue base prep pace (5-10 mins)
-    const promisedFinal = ahead === 0 ? (restaurant ? Math.max(5, Math.min(10, Number(restaurant.base_prep_time || 8))) : 8) : promised;
-    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, promisedFinal + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
-    return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, promised_wait_mins: promisedFinal, estimated_wait_mins: promisedFinal, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
+    // Parties ahead that must wait for tables = parties strictly ahead minus available tables
+    const partiesAheadOfTables = Math.max(0, ahead - availableTables);
+    // Promised wait using the SAME shared formula as discovery/join
+    const promised = restaurant
+      ? getEstimatedWaitMinutes(restaurant, partiesAheadOfTables, availableTables)
+      : Number(ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 10);
+    // When 0 parties ahead of tables, reflect venue base prep pace (5-10 mins)
+    const promisedFinal = partiesAheadOfTables === 0
+      ? (restaurant ? Math.max(5, Math.min(10, Number(restaurant.base_prep_time || 8))) : 8)
+      : promised;
+    // Remaining wait counts down from promised based on elapsed time
+    const remaining = (ticket.status === "waiting" || ticket.status === "delayed")
+      ? Math.max(1, promisedFinal + Number(ticket.delay_mins ?? 0) - elapsed)
+      : 0;
+    return send(response, 200, {
+      ...ticket,
+      position_in_line: position,
+      parties_ahead: ahead,
+      estimated_remaining_mins: remaining,
+      promised_wait_mins: promisedFinal,
+      estimated_wait_mins: promisedFinal,
+      is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7),
+      is_table_ready: ticket.status === "notified",
+      restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null
+    });
   }
 
   if (request.method === "GET" && path.startsWith("/api/host/queue/")) {
@@ -1037,6 +1054,14 @@ async function route(request, response, pathParts) {
     const body = parseBody(request);
     const ticket = await fetchQueueEntry(body.ticket_id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
+    
+    // Enforce arrival requirement for seating actions (both customer and host)
+    if (body.action === "seat" || body.action === "seat_self") {
+      if (!ticket.has_arrived) {
+        return send(response, 400, { error: "Customer must click I've Arrived at the Venue before seating" });
+      }
+    }
+    
     let updates = { ...ticket };
     if (body.action === "seat_self") {
       if (!ticket) {
@@ -1146,6 +1171,12 @@ async function route(request, response, pathParts) {
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
         return send(response, 401, { error: "Invalid restaurant password." });
       }
+      
+      // Enforce arrival requirement for seating - customer must have clicked "I've Arrived at the Venue"
+      if (body.action === "seat" && !ticket.has_arrived) {
+        return send(response, 400, { error: "Customer must click I've Arrived at the Venue before seating" });
+      }
+      
       const updates = { ...ticket };
       if (body.action === "notify") updates.status = "notified", updates.notified_at = Date.now(), updates.notified_time_ist = formatIST(updates.notified_at);
       if (body.action === "seat") { 
@@ -1209,7 +1240,7 @@ async function route(request, response, pathParts) {
       const availableTablesWalkin = Math.max(1, Number(restaurant.available_tables || 0));
       const partiesAheadWalkin = Math.max(0, realPartiesWalkin - availableTablesWalkin);
       const promisedWalkin = getEstimatedWaitMinutes(restaurant, partiesAheadWalkin, availableTablesWalkin);
-      const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: promisedWalkin, promised_wait_mins: promisedWalkin, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0, parties_ahead: realPartiesWalkin };
+      const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: promisedWalkin, promised_wait_mins: promisedWalkin, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: null, arrived_time_ist: null, seated_at: null, seated_time_ist: null, has_arrived: false, delay_mins: 0, parties_ahead: realPartiesWalkin };
       await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
       // Update aggregates after adding walk-in guest
       await updateRestaurantAggregates(body.restaurant_id);
