@@ -4393,7 +4393,7 @@ function showToast(message, type = "info") {
   toast.className = `p-3 px-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 transform transition-all duration-300 pointer-events-auto ${
     type === 'success' ? 'bg-emerald-900 text-white border-emerald-700' :
     type === 'error' ? 'bg-rose-900 text-white border-rose-700' :
-    'bg-slate-900 text-white border-slate-700'
+    'bg-slate-900 text-[var(--wm-text-primary)] border-slate-700'
   }`;
 
   let icon = 'check-circle';
@@ -4401,7 +4401,7 @@ function showToast(message, type = "info") {
   if (type === 'info') icon = 'info';
 
   toast.innerHTML = `
-    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : type === 'error' ? 'text-rose-400' : 'text-slate-300'}"></i>
+    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : type === 'error' ? 'text-rose-400' : 'text-[var(--wm-text-secondary)]'}"></i>
     <span class="flex-1">${message}</span>
   `;
 

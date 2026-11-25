@@ -10,6 +10,8 @@
   --accent-green: #15803d;
   --accent-amber: #c2410c;
   --accent-rose: #c2410c;
+  --wm-text-primary: #ffffff;
+  --wm-text-secondary: #f1f5f9;
 }
 
 body {
@@ -370,7 +372,7 @@ button[aria-label="Toggle password visibility"] i {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #64748b;
+  color: #334155;
   letter-spacing: 0.01em;
 }
 
