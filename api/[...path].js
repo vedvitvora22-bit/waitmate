@@ -269,6 +269,7 @@ function toNumberedEntry(entry) {
     "11_has_arrived": Boolean(e.has_arrived),
     "12_promised_wait_mins": Number(promised || 0),
     "source": normalizeSource(e.source, channel),
+    "isRealHuman": Boolean(e.isRealHuman),
     "13_joined_time_ist": e.joined_time_ist || ist(joinedMs) || "",
     "14_arrived_time_ist": e.arrived_time_ist || ist(e.arrived_at) || null,
     "15_notified_time_ist": e.notified_time_ist || ist(e.notified_at) || null,
@@ -371,23 +372,31 @@ async function safeCommit(writes) {
 
 async function nextTicketNumber() {
   const counterDoc = `projects/${PROJECT_ID}/databases/(default)/documents/counters/ticket_seq`;
-  await commitWrites([
-    {
-      transform: {
-        document: counterDoc,
-        fieldTransforms: [{ fieldPath: "seq", increment: { integerValue: "1" } }]
+  try {
+    await commitWrites([
+      {
+        transform: {
+          document: counterDoc,
+          fieldTransforms: [{ fieldPath: "seq", increment: { integerValue: "1" } }]
+        }
       }
+    ]);
+    // Read back the counter to get the current seq value after the atomic increment.
+    // Firestore's commit response may not include transformResults in all cases,
+    // so reading the document directly is more reliable.
+    const counter = await getDocument("counters", "ticket_seq");
+    const seq = Number(counter?.seq || 0);
+    if (Number.isFinite(seq) && seq > 0) {
+      return `WM-${100 + seq}`;
     }
-  ]);
-  // Read back the counter to get the current seq value after the atomic increment.
-  // Firestore's commit response may not include transformResults in all cases,
-  // so reading the document directly is more reliable.
-  const counter = await getDocument("counters", "ticket_seq");
-  const seq = Number(counter?.seq || 0);
-  if (Number.isFinite(seq) && seq > 0) {
-    return `WM-${100 + seq}`;
+    // Counter document wasn't created by transform (edge case), initialize it
+    console.warn("nextTicketNumber: counter not found after increment, initializing");
+    await safeCommit([setDocument("counters", "ticket_seq", { seq: 1 })]);
+    return "WM-101";
+  } catch (error) {
+    console.error("nextTicketNumber: Firestore counter error:", error.message || error);
+    throw new Error(`Failed to generate ticket number from Firestore counter: ${error.message || error}`);
   }
-  throw new Error("Failed to generate ticket number from Firestore counter");
 }
 
 // Recompute and persist a restaurant's aggregate queue fields (queue_count,
