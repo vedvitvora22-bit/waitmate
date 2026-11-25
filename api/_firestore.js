@@ -1,6 +1,16 @@
 const crypto = require("crypto");
 
 let PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || null;
+if (!PROJECT_ID) {
+  const _saRaw = process.env.FIREBASE_SERVER_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT ||
+                 process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_CREDENTIALS ||
+                 process.env.FIREBASE_CONFIG || process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+                 process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (_saRaw) {
+    const _parsed = parseServiceAccount(_saRaw);
+    if (_parsed.credentials && _parsed.credentials.project_id) PROJECT_ID = _parsed.credentials.project_id;
+  }
+}
 let BASE = PROJECT_ID ? `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents` : null;
 let cachedAccessToken = null;
 let cachedAccessTokenExpiry = 0;
