@@ -98,7 +98,7 @@ function verifyRestaurantPassword(restaurant, password) {
       return true;
     }
   }
-  return lower === "waitmate123";
+  return false;
 }
 
 function send(response, status, data) {
@@ -337,7 +337,7 @@ function markSeated(updates) {
 
 // Returns ONLY Firestore queue entries (no in-memory merge).
 // In-memory fallbacks REMOVED: all live data must come from Firestore.
-async function allQueueEntries(firestoreEntries) {
+function allQueueEntries(firestoreEntries) {
   const byId = {};
   for (const entry of (firestoreEntries || [])) {
     const normalized = normalizeQueueEntry(entry);
@@ -1285,7 +1285,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Unauthorized. Only the Founder can add new restaurants." });
     if (!body.name || !body.category || !body.address) return send(response, 400, { error: "Please provide Restaurant Name, Cuisine Category, and Address." });
     const id = `rest-${Date.now().toString().slice(-6)}`;
-    const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", meal_times: normalizeMealTimes(body.meal_times), image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
+    const restaurant = { id, password_hash: hashPassword(body.password), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", meal_times: normalizeMealTimes(body.meal_times), image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
 
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' was added to WaitMate India (demo).`, restaurant: sanitizeRestaurant(restaurant) });
