@@ -1659,7 +1659,9 @@ function setFounderText(id, value) {
 function renderFounderData(data) {
   const sum = data.summary || {};
   setFounderText('fndTotalVenues', sum.total_restaurants || 0);
-  setFounderText('fndCitiesSummary', 'Across Mumbai dining hubs');
+  const venuesForOpen = data.restaurants || founderRestaurantsCache || [];
+  const openNowCount = venuesForOpen.filter(r => Boolean((r.live_stats || { is_queue_open: true }).is_queue_open)).length;
+  setFounderText('fndCitiesSummary', openNowCount);
   setFounderText('fndWaitingDiners', sum.active_diners_in_queue || 0);
   setFounderText('fndWaitingParties', `${sum.active_parties_in_queue || 0} parties in queues`);
   setFounderText('fndSeatedDiners', `${sum.total_seated_diners || 0}`);
