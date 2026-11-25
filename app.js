@@ -5468,10 +5468,10 @@ window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
 
 // ==========================================
 // 17. ONBOARDING TOUR (3-Step Interactive Split-Card)
-// ==========================================
-let onboardingCurrentStep = 1;
-const onboardingTotalSteps = 3;
-
+ // ==========================================
+ let onboardingCurrentStep = 1;
+ const onboardingTotalSteps = 3;
+ 
 function initOnboarding() {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
@@ -5479,12 +5479,16 @@ function initOnboarding() {
   // Check if user has already completed onboarding tour
   if (localStorage.getItem('onboarding_done') === 'true') {
     modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    showCustomerInterface();
     return;
   }
 
-  // Show the modal
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  // Show the modal backdrop (was hidden during splash)
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.remove('hidden');
+
+  // Modal is already visible in DOM (rendered under splash), just initialize state
   onboardingCurrentStep = 1;
   updateOnboardingUI();
   lucide.createIcons();
@@ -5492,6 +5496,22 @@ function initOnboarding() {
   // Add keyboard event listener
   document.addEventListener('keydown', handleOnboardingKeydown);
 }
+ 
+ function showCustomerInterface() {
+   const customerDiv = document.getElementById('customerInterface');
+   if (customerDiv) {
+     customerDiv.classList.remove('hidden');
+   }
+   // Ensure we're on customer tab
+   currentInterface = 'customer';
+   const tabCust = document.getElementById('tabCustomer');
+   const tabOwner = document.getElementById('tabOwner');
+   const activeTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm";
+   const inactiveTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900";
+   if (tabCust) tabCust.className = activeTabClass;
+   if (tabOwner) tabOwner.className = inactiveTabClass;
+   renderRestaurantsGrid();
+ }
 
 function handleOnboardingKeydown(e) {
   const modal = document.getElementById('onboardingModal');
@@ -5623,8 +5643,15 @@ function completeOnboarding(skipped = false) {
   modal.classList.add('hidden');
   modal.classList.remove('flex');
 
+  // Hide backdrop
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.add('hidden');
+
   // Remove keyboard listener
   document.removeEventListener('keydown', handleOnboardingKeydown);
+
+  // Show customer interface
+  showCustomerInterface();
 
   if (!skipped) {
     showToast('Welcome to WaitMate! 🎉', 'success');

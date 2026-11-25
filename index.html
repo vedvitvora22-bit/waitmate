@@ -74,8 +74,8 @@
   <!-- ========================================================================= -->
   <!-- ONBOARDING TOUR (3-Step Interactive Split-Card Layout)                  -->
   <!-- ========================================================================= -->
-  <div id="onboardingModal" class="fixed inset-0 z-[10000] hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
-    <div class="modal-backdrop fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="skipOnboarding()"></div>
+  <div id="onboardingModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+    <div id="onboardingBackdrop" class="modal-backdrop fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden" onclick="skipOnboarding()"></div>
     
     <div class="onboarding-container relative z-10 w-full max-w-3xl max-h-[90dvh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
       
@@ -454,7 +454,7 @@
     <!-- ========================================================================= -->
     <!-- INTERFACE 1: CUSTOMER VIEW (DISCOVERY, JOIN QUEUE & DIGITAL PASS)        -->
     <!-- ========================================================================= -->
-    <div id="customerInterface">
+    <div id="customerInterface" class="hidden">
       
       <!-- Customer Hero Banner -->
       <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-[var(--wm-text-primary)] p-6 sm:p-8 mb-6 border border-slate-800 shadow-lg">
