@@ -2686,11 +2686,32 @@ function updateTicketUI() {
   }
 
   const d = activeTicketData;
+
+  const toMs = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+    if (typeof v === 'string') { const t = Date.parse(v); return isNaN(t) ? null : t; }
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+  const targetTs = toMs(d.estimated_call_time ?? d.estimatedCallTime ?? d.estimated_call_timestamp ?? d.target_call_time);
+  if (targetTs != null) {
+    const mins = Math.max(0, Math.round((targetTs - Date.now()) / 60000));
+    d.estimated_remaining_mins = Math.min(60, Math.max(0, mins));
+  } else {
+    d.estimated_remaining_mins = Math.min(60, Math.max(0, Number(d.estimated_remaining_mins ?? 0)));
+  }
   const pill = document.getElementById('activeTicketPill');
 
   // Always find the real restaurant name from allRestaurants (never fall back to "Partner Venue")
   const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
   const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
+
+  const step4Icon = document.getElementById('step4Icon');
+  if (step4Icon && !(d.status === 'seated' || d.status === 'completed')) {
+    step4Icon.className = "w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1";
+    step4Icon.textContent = "4";
+  }
 
   if (d.status === 'notified') {
     acknowledgedAlertForTicket = null;
@@ -2777,7 +2798,7 @@ function updateTicketUI() {
   } else if (isArrivedWaiting) {
     // Arrived at Venue — Waiting for Host screen
     document.title = "✓ Checked In at Entrance • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600";
     document.getElementById('ticketStatusMsg').textContent = "You're checked in at the entrance. The host will notify you when your table is ready.";
 
@@ -2794,7 +2815,7 @@ function updateTicketUI() {
 
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
@@ -2850,7 +2871,7 @@ function updateTicketUI() {
   } else {
     // Normal waiting
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
     tableNearAlert.classList.add('hidden');
@@ -2859,7 +2880,7 @@ function updateTicketUI() {
 
   // Update Arrived button appearance based on state
   if (isArrivedWaiting && arrivedBtn) {
-    arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
+    arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
     arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
   } else if (isTableReady && arrivedBtn) {
     // Show "Confirm Seated" button when notified
@@ -3082,14 +3103,14 @@ async function copySharePassLink() {
     const icon = document.getElementById('copyShareIcon');
     const label = document.getElementById('copyShareLabel');
     if (icon) {
-      icon.innerHTML = '<polyline points="20 12 14 18 8 12"></polyline><path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12"></path>';
+      icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
       icon.setAttribute('data-copied', '1');
     }
     if (label) label.textContent = 'Copied!';
     showToast("Link copied to clipboard", "success");
     setTimeout(() => {
       if (icon) {
-        icon.innerHTML = '<rect width="16" height="12" x="2" y="7" rx="2"></rect><path d="M16 7h-2V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2z"></path>';
+        icon.innerHTML = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>';
         icon.removeAttribute('data-copied');
       }
       if (label) label.textContent = 'Copy Link';
@@ -3212,7 +3233,7 @@ async function dinerArrivedAction() {
 
   const btn = document.getElementById('btnArrivedAction');
   if (btn) {
-    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
+    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
     btn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
     lucide.createIcons();
   }

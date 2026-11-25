@@ -53,11 +53,6 @@ def verify_founder_password(password):
 
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
-# When False, the backend NEVER creates, clones, or advances "ghost" documents
-# in SQLite/Firestore queue_entries. queue_entries holds only real customer
-# entries (walk-in and remote). Diner simulation is pure IST time-of-day math.
-ENABLE_GHOST_GUESTS = False
-
 
 def format_ist(ts):
     try:
@@ -74,9 +69,8 @@ def calculate_realistic_duration(base_minutes, party_size):
 
 
 def process_live_queue(queue, available_tables):
-    # Seat real customers (is_ghost == False) ahead of ghost entries, then by
-    # joined_at / joinedAt arrival order within each group. Never mutates input.
-    ordered = sorted(queue, key=lambda c: (bool(c.get("is_ghost", False)), c.get("joined_at") or c.get("joinedAt") or 0))
+    # Seat customers by joined_at arrival order. Never mutates input.
+    ordered = sorted(queue, key=lambda c: c.get("joined_at") or c.get("joinedAt") or 0)
     seated = []
     remaining = list(ordered)
     for table in sorted(available_tables, key=lambda t: t["seats"]):
@@ -379,8 +373,7 @@ def verify_host_password(rest_id, password):
 
 # ------------------------------------------------------------------
 # Unified IST Meal-Slot Engine (Breakfast, Lunch, Snacks, Dinner,
-# Late Night, Off Hours). Each slot defines base turn-time minutes,
-# ghost spawn chance, and max ghosts for the Mumbai ghost-queue simulator.
+# Late Night, Off Hours). Each slot defines base turn-time minutes.
 # ------------------------------------------------------------------
 IST_MEAL_SLOTS = [
     ("breakfast", 7, 0, 11, 0),
@@ -392,12 +385,12 @@ IST_MEAL_SLOTS = [
 ]
 
 MEAL_SLOT_CONFIGS = {
-    "breakfast": {"base_mins": 25, "spawn_chance": 0.45, "max_ghosts": 3},
-    "lunch": {"base_mins": 35, "spawn_chance": 0.70, "max_ghosts": 5},
-    "snacks": {"base_mins": 30, "spawn_chance": 0.45, "max_ghosts": 4},
-    "dinner": {"base_mins": 50, "spawn_chance": 0.85, "max_ghosts": 7},
-    "late_night": {"base_mins": 40, "spawn_chance": 0.35, "max_ghosts": 3},
-    "off_hours": {"base_mins": 30, "spawn_chance": 0.05, "max_ghosts": 0},
+    "breakfast": {"base_mins": 25},
+    "lunch": {"base_mins": 35},
+    "snacks": {"base_mins": 30},
+    "dinner": {"base_mins": 50},
+    "late_night": {"base_mins": 40},
+    "off_hours": {"base_mins": 30},
 }
 
 MAX_WAIT_MINS = 60
@@ -410,7 +403,7 @@ def _ist_now():
 def get_ist_meal_slot(dt=None):
     """Detect the active IST (Asia/Kolkata) meal slot.
 
-    Returns a dict: {slot, base_mins, spawn_chance, max_ghosts}.
+    Returns a dict: {slot, base_mins}.
     """
     now = dt or _ist_now()
     t = (now.hour, now.minute)
@@ -428,7 +421,7 @@ def get_ist_meal_slot(dt=None):
 def get_restaurant_meal_slot_config(restaurant_id):
     """Return the meal-slot config for a restaurant, gated by its configured
     meal_slots / category tags. If the restaurant does NOT serve the current
-    IST meal slot, spawn_chance and max_ghosts are forced to 0."""
+    IST meal slot, it's noted but no ghost logic is applied."""
     slot_info = get_ist_meal_slot()
     current_slot = slot_info["slot"]
 
@@ -456,42 +449,14 @@ def get_restaurant_meal_slot_config(restaurant_id):
 
     config = dict(MEAL_SLOT_CONFIGS[current_slot])
     config["slot"] = current_slot
-    if not serves_current:
-        config["spawn_chance"] = 0
-        config["max_ghosts"] = 0
+    config["serves_current_slot"] = serves_current
     return config
 
 
 def enforce_60min_wait_ceiling(restaurant_id, current_wait_mins, conn=None):
-    """Cap current_wait_mins at MAX_WAIT_MINS (60). If capped and ghost
-    entries exist in line, evict the oldest ghost entry to keep the wait
-    accurate. Returns (capped_wait, ghosts_evicted).
-
-    Accepts an open connection so callers (e.g. run_simulation_tick) can reuse
-    it instead of opening a second connection to the same SQLite file, which
-    would otherwise raise "database is locked" under concurrent access."""
+    """Cap current_wait_mins at MAX_WAIT_MINS (60). Returns capped_wait."""
     capped = min(MAX_WAIT_MINS, int(current_wait_mins or 0))
-    ghosts_evicted = 0
-    if capped < int(current_wait_mins or 0):
-        own_conn = conn is None
-        if own_conn:
-            conn = get_db()
-        c = conn.cursor()
-        c.execute(
-            "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1 ORDER BY joined_at ASC LIMIT 1",
-            (restaurant_id,),
-        )
-        row = c.fetchone()
-        if row:
-            c.execute(
-                "DELETE FROM queue_entries WHERE id = ?",
-                (row[0],),
-            )
-            conn.commit()
-            ghosts_evicted = 1
-        if own_conn:
-            conn.close()
-    return capped, ghosts_evicted
+    return capped
 
 
 # Mumbai IST peak windows: Lunch 13:00-15:00, Snacks 17:30-19:00, Dinner 20:00-22:30
@@ -499,12 +464,6 @@ MUMBAI_PEAK_WINDOWS = [
     (13, 0, 15, 0),
     (17, 30, 19, 0),
     (20, 0, 22, 30),
-]
-
-GHOST_NAMES = [
-    "Aarav Patel", "Diya Sharma", "Vihaan Singh", "Ananya Reddy", "Kabir Nair",
-    "Myra Desai", "Ishaan Mehta", "Zoya Khan", "Reyansh Iyer", "Aanya Joshi",
-    "Arjun Malhotra", "Kiara Verma", "Advait Rao", "Saanvi Pillai", "Raghav Menon",
 ]
 
 
@@ -543,46 +502,10 @@ def get_mumbai_traffic_config(dt=None):
     return cfg
 
 
-def clear_all_ghost_entries(restaurant_id):
-    """Delete every isGhost == True queue entry for a restaurant (sqlite + Firestore)."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1",
-        (restaurant_id,),
-    )
-    ids = [r[0] for r in c.fetchall()]
-    c.execute(
-        "DELETE FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND is_ghost = 1",
-        (restaurant_id,),
-    )
-    conn.commit()
-    conn.close()
-    firestore_cleared = 0
-    try:
-        for doc in fs_list("queue_entries"):
-            if doc.get("restaurant_id") == restaurant_id and doc.get("isGhost") is True:
-                fs_delete("queue_entries", doc["id"])
-                firestore_cleared += 1
-    except Exception as exc:
-        print(f"[firestore] clear_all_ghost_entries delete warning: {exc}")
-    return len(ids) + firestore_cleared
-
-
 def _ensure_schema_migrations(conn, c):
     # last_simulated_at: 60-second cooldown tracker per restaurant
     try:
         c.execute("ALTER TABLE restaurants ADD COLUMN last_simulated_at REAL")
-    except sqlite3.OperationalError:
-        pass
-    # is_ghost flag on queue entries
-    try:
-        c.execute("ALTER TABLE queue_entries ADD COLUMN is_ghost INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    # source field on queue entries ('walk-in' | 'remote' | 'ai-ghost')
-    try:
-        c.execute("ALTER TABLE queue_entries ADD COLUMN source TEXT DEFAULT 'remote'")
     except sqlite3.OperationalError:
         pass
     # Per-table turnover clock so the tick can free expired tables (freeAt <= now)
@@ -620,225 +543,6 @@ def get_restaurant_tables(restaurant_id):
     conn.close()
     return tables
 
-
-def clearAllGhostEntries(restaurant_id):
-    """Wipe every is_ghost/ghost queue entry for a restaurant (sqlite + Firestore)."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
-        (restaurant_id,),
-    )
-    ids = [r[0] for r in c.fetchall()]
-    c.execute(
-        "DELETE FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
-        (restaurant_id,),
-    )
-    conn.commit()
-    conn.close()
-    try:
-        for doc in fs_list("queue_entries"):
-            if doc.get("restaurant_id") == restaurant_id and doc.get("status") == "waiting" and (doc.get("is_ghost") or doc.get("isGhost") or doc.get("entry_type") == "ghost"):
-                fs_delete("queue_entries", doc["id"])
-    except Exception as exc:
-        print(f"[firestore] clearAllGhostEntries delete warning: {exc}")
-    return len(ids)
-
-
-def run_simulation_tick(restaurant_id):
-    """One ghost-queue simulation tick for a restaurant.
-
-    Freed expired tables (free_at <= now), seats waiting customers into open
-    tables via process_live_queue, spawns IST meal-slot ghosts when no tables
-    are open (gated by restaurant meal_slots, spawn_chance, max_ghosts),
-    enforces the 60-minute wait-time ceiling with ghost eviction, and persists
-    restaurants + queue_entries to Firestore.
-    Runs at most once per 60 seconds per restaurant (last_simulated_at).
-    Returns a result dict.
-    """
-    now = time.time()
-    # Fast in-memory guard: skip before any DB/Firestore work if a tick already
-    # ran within the 120s cooldown window (prevents back-to-back repeat ticks).
-    cached_remaining = _sim_cooldown_active(restaurant_id, now)
-    if cached_remaining > 0:
-        return {
-            "skipped": True,
-            "cooldown_remaining": int(cached_remaining),
-        }
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        return {"skipped": True, "error": "restaurant not found"}
-    rest = dict(row)
-    last_simulated = float(rest.get("last_simulated_at") or 0)
-    if now - last_simulated < 60:
-        conn.close()
-        return {
-            "skipped": True,
-            "cooldown_remaining": int(60 - (now - last_simulated)),
-        }
-
-    # Resolve the active IST meal slot + restaurant-gated spawn config.
-    meal_slot_config = get_restaurant_meal_slot_config(restaurant_id)
-    slot = meal_slot_config["slot"]
-    base_mins = meal_slot_config["base_mins"]
-    spawn_chance = meal_slot_config["spawn_chance"]
-    max_ghosts = meal_slot_config["max_ghosts"]
-
-    # Mumbai IST peak-rush surge (Lunch 13:00-15:00, Snacks 17:30-19:00,
-    # Dinner 20:00-22:30): elevate ghost spawn intensity during peak windows
-    # so the simulator reflects real Mumbai dinner/lunch rushes.
-    peak_dt = datetime.fromtimestamp(now, tz=ZoneInfo("Asia/Kolkata"))
-    traffic = get_mumbai_traffic_config(dt=peak_dt)
-    is_mumbai_peak = traffic["bucket"] != "Off-Peak" or is_mumbai_peak_window(dt=peak_dt)
-    if is_mumbai_peak:
-        spawn_chance = min(1.0, spawn_chance * traffic["multiplier"])
-        max_ghosts = int(max_ghosts * traffic["multiplier"])
-
-    # 1. Free expired tables
-    tables = get_restaurant_tables(restaurant_id)
-    freed = 0
-    for t in tables:
-        if t["free_at"] and now >= t["free_at"]:
-            c.execute("UPDATE restaurant_tables SET free_at = NULL WHERE id = ?", (t["id"],))
-            freed += 1
-    conn.commit()
-
-    # 2. Open tables + waiting customers (walk-in, remote, and AI ghost guests
-    #    are all eligible for automatic seating, ordered purely by join time).
-    tables = get_restaurant_tables(restaurant_id)
-    open_tables = [t for t in tables if not t["free_at"]]
-    c.execute(
-        "SELECT * FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' ORDER BY joined_at ASC",
-        (restaurant_id,),
-    )
-    waiting = [dict(r) for r in c.fetchall()]
-
-    queue = [{"id": e["id"], "size": int(e["party_size"] or 2), "is_ghost": bool(e.get("is_ghost"))} for e in waiting]
-    available = [{"id": t["id"], "table_id": t["table_id"], "seats": int(t["seats"])} for t in open_tables]
-    seated_pairs, remaining = process_live_queue(queue, available)
-
-    by_id = {e["id"]: e for e in waiting}
-    seated = []
-    for customer, table in seated_pairs:
-        entry = by_id[customer["id"]]
-        seated_at = now
-        actual_wait = max(1, int((seated_at - float(entry["joined_at"])) / 60))
-        actual_wait = min(MAX_WAIT_MINS, actual_wait)
-        c.execute(
-            "UPDATE queue_entries SET status = 'seated', seated_at = ?, actual_wait_mins = ?, has_arrived = 1 WHERE id = ?",
-            (seated_at, actual_wait, customer["id"]),
-        )
-        # Slot-aware turn-time: Dinner groups stay longer than Breakfast/Snacks.
-        # free_at is an epoch-seconds timestamp (seated_at = time.time() in s),
-        # so add the duration in seconds (not minutes).
-        free_at = seated_at + calculate_realistic_duration(base_mins, int(customer["size"])).total_seconds()
-        c.execute("UPDATE restaurant_tables SET free_at = ? WHERE id = ?", (free_at, table["id"]))
-        try:
-            log_id = f"log-tick-{int(now * 1000)}-{customer['id']}"
-            promised = int(entry.get("estimated_wait_mins") or 0)
-            diff = actual_wait - promised
-            rating = "spot_on" if abs(diff) <= 3 else ("faster" if diff < -3 else ("slight_delay" if diff <= 7 else "severe_delay"))
-            c.execute(
-                "INSERT INTO reliability_logs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (log_id, restaurant_id, customer["id"], promised, actual_wait, rating, "Auto-seated by simulation tick", now),
-            )
-        except sqlite3.OperationalError:
-            pass
-        seated.append({
-            "ticket_id": customer["id"],
-            "ticket_number": entry.get("ticket_number"),
-            "table_id": table["table_id"],
-            "actual_wait_mins": actual_wait,
-        })
-    conn.commit()
-
-    # 3. Slot-aware ghost spawn when no tables are open (gated by meal slot,
-    #    restaurant meal_slots, spawn_chance probability, and max_ghosts cap).
-    #    Disabled entirely when ENABLE_GHOST_GUESTS is False.
-    ghosts_spawned = 0
-    ghosts_evicted = 0
-    if ENABLE_GHOST_GUESTS:
-        open_count = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
-        if open_count == 0 and random.random() < spawn_chance and max_ghosts > 0:
-            c.execute(
-                "SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting' AND (is_ghost = 1 OR entry_type = 'ghost')",
-                (restaurant_id,),
-            )
-            existing_ghosts = c.fetchone()[0]
-            to_spawn = max(0, int(max_ghosts) - int(existing_ghosts))
-            for _ in range(to_spawn):
-                ghost_id = f"ghost-{uuid.uuid4().hex[:8]}"
-                ticket_number = f"WM-G{int(now * 1000) % 100000:05d}"
-                name = random.choice(GHOST_NAMES)
-                party_size = random.randint(2, 4)
-                wait_mins = min(MAX_WAIT_MINS, random.randint(5, 45))
-                phone = f"+91 {random.randint(7000, 9999)} {random.randint(70000, 99999)}"
-                c.execute(
-                    "INSERT INTO queue_entries "
-                    "(id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, source, status, estimated_wait_mins, joined_at, is_ghost) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                    (ghost_id, ticket_number, restaurant_id, name, phone, party_size, "First Available", "", "ghost", "ai-ghost", "waiting", wait_mins, now),
-                )
-                ghosts_spawned += 1
-
-    # 4. Enforce 60-minute wait ceiling: if any wait exceeds 60 mins and ghosts
-    #    exist in line, evict the oldest ghost entry.
-    c.execute(
-        "SELECT MAX(estimated_wait_mins) FROM queue_entries WHERE restaurant_id = ? AND status = 'waiting'",
-        (restaurant_id,),
-    )
-    max_wait_row = c.fetchone()
-    max_wait = max_wait_row[0] if max_wait_row and max_wait_row[0] else 0
-    if max_wait and max_wait > MAX_WAIT_MINS:
-        capped, evicted = enforce_60min_wait_ceiling(restaurant_id, max_wait, conn)
-        ghosts_evicted += evicted
-    conn.commit()
-
-    # 5. Persist to Firestore + update cooldown
-    open_count_after = len([t for t in get_restaurant_tables(restaurant_id) if not t["free_at"]])
-    c.execute("UPDATE restaurants SET last_simulated_at = ?, available_tables = ? WHERE id = ?", (now, open_count_after, restaurant_id))
-    conn.commit()
-    conn.close()
-
-    # Record the in-memory cooldown so back-to-back requests short-circuit.
-    LAST_SIM_CACHE[restaurant_id] = now
-
-    try:
-        fs_set("restaurants", restaurant_id, {
-            "last_simulated_at": now,
-            "available_tables": open_count_after,
-        })
-        for s in seated:
-            fs_set("queue_entries", s["ticket_id"], {
-                "status": "seated",
-                "seated_at": now,
-                "actual_wait_mins": s["actual_wait_mins"],
-            })
-    except Exception as exc:
-        print(f"[firestore] simulation tick write warning: {exc}")
-
-    return {
-        "skipped": False,
-        "restaurant_id": restaurant_id,
-        "meal_slot": slot,
-        "base_mins": base_mins,
-        "spawn_chance": spawn_chance,
-        "max_ghosts": max_ghosts,
-        "mumbai_peak": is_mumbai_peak,
-        "traffic_multiplier": traffic["multiplier"],
-        "freed_tables": freed,
-        "open_tables": open_count_after,
-        "seated": seated,
-        "seated_count": len(seated),
-        "remaining_count": len(remaining),
-        "ghosts_spawned": ghosts_spawned,
-        "ghosts_evicted": ghosts_evicted,
-        "simulated_at": now,
-    }
 
 # Initialize database schema and initial data
 def init_db():
@@ -883,7 +587,7 @@ def init_db():
         seating_pref TEXT NOT NULL,
         special_requests TEXT,
         entry_type TEXT NOT NULL, -- 'remote' or 'walk_in'
-        source TEXT NOT NULL DEFAULT 'remote', -- 'walk-in' | 'remote' | 'ai-ghost'
+        source TEXT NOT NULL DEFAULT 'remote', -- 'walk-in' | 'remote'
         status TEXT NOT NULL, -- 'waiting', 'notified', 'delayed', 'seated', 'cancelled', 'no_show'
         estimated_wait_mins INTEGER NOT NULL,
         actual_wait_mins INTEGER DEFAULT 0,
@@ -914,6 +618,17 @@ def init_db():
     CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
         value TEXT
+    )
+    ''')
+
+    # Permanent, monotonic ticket-number counter. A guest's ticket_number
+    # (e.g. "WM-101") is generated once at join time from this counter and then
+    # stored verbatim on the queue row. It is never recomputed from the queue
+    # length or array index afterward.
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS ticket_counters (
+        name TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
     )
     ''')
 
@@ -1048,10 +763,6 @@ def init_db():
     }
     for rest_id, cover in mumbai_covers.items():
         c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
-
-    # Startup purge: delete any existing ghost / cloned queue entries so
-    # queue_entries contains only real walk-in and remote customers.
-    c.execute("DELETE FROM queue_entries WHERE entry_type = 'ghost' OR is_ghost = 1 OR source IN ('ghost', 'ai-ghost')")
 
     # Startup migration: INSERT OR IGNORE new Mumbai venues so existing local SQLite databases pick them up automatically
     now = time.time()
@@ -1639,6 +1350,25 @@ def get_db():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def next_ticket_number(conn):
+    """Atomically allocate the next permanent ticket number (WM-101, WM-102, ...).
+
+    Uses a single monotonic counter row so numbers are unique and never reused,
+    regardless of how many entries are seated/removed. The caller is responsible
+    for committing the surrounding transaction. Generated exactly once at join
+    time and then stored verbatim on the queue row; never recomputed afterward.
+    """
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO ticket_counters (name, value) VALUES ('ticket_seq', 0) "
+        "ON CONFLICT(name) DO NOTHING"
+    )
+    c.execute("UPDATE ticket_counters SET value = value + 1 WHERE name = 'ticket_seq'")
+    c.execute("SELECT value FROM ticket_counters WHERE name = 'ticket_seq'")
+    seq = c.fetchone()[0]
+    return f"WM-{100 + int(seq)}"
 
 
 def _founder_override(restaurant_id):
@@ -2662,8 +2392,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 return
 
             ticket_id = f"q-{str(int(time.time() * 1000))[-6:]}"
-            c.execute('SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ?', (rest_id,))
-            ticket_num = f"WM-{c.fetchone()[0] + 101}"
+            ticket_num = next_ticket_number(c.connection)
 
             live_stats = get_restaurant_live_stats(rest_id)
             est_wait = live_stats["estimated_wait_mins"] + (party_size > 4 and 8 or 0)
@@ -2688,25 +2417,11 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # API: Trigger the Mumbai ghost-queue simulation tick for a restaurant
+        # API: Simulation/auto-seating worker DISABLED. The queue is 100%
+        # human-driven; this endpoint no longer reads, reorders, auto-seats, or
+        # rewrites active queue documents. Kept as a safe no-op for stale callers.
         if path == "/api/queue/simulate-tick":
-            data = self.read_json_body()
-            rest_id = data.get("restaurant_id")
-            if not rest_id:
-                self.send_json({"error": "restaurant_id is required"}, 400)
-                return
-            self.send_json(run_simulation_tick(rest_id))
-            return
-
-        # API: Wipe all ghost queue entries for a restaurant on demand
-        if path == "/api/queue/clear-ghosts":
-            data = self.read_json_body()
-            rest_id = data.get("restaurant_id")
-            if not rest_id:
-                self.send_json({"error": "restaurant_id is required"}, 400)
-                return
-            cleared = clear_all_ghost_entries(rest_id)
-            self.send_json({"success": True, "cleared": cleared, "restaurant_id": rest_id})
+            self.send_json({"skipped": True, "disabled": True, "reason": "simulation_worker_disabled_human_only_queue"})
             return
 
         # API: Reserve a table (turn-based seating)
@@ -2921,7 +2636,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 entry = c.fetchone()
                 if entry:
                     actual_wait = max(1, int((now - entry['joined_at']) / 60))
-                    c.execute('UPDATE queue_entries SET status = "seated", seated_at = ?, actual_wait_mins = ? WHERE id = ?', (now, actual_wait, ticket_id))
+                    c.execute('UPDATE queue_entries SET status = "seated", rated = 0, seated_at = ?, actual_wait_mins = ? WHERE id = ?', (now, actual_wait, ticket_id))
                     
                     promised = entry['estimated_wait_mins']
                     diff = actual_wait - promised
@@ -2983,8 +2698,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 seating_pref = data.get("seating_pref", "First Available")
                 
                 ticket_id = f"q-{str(int(time.time() * 1000))[-6:]}"
-                c.execute('SELECT COUNT(*) FROM queue_entries WHERE restaurant_id = ?', (rest_id,))
-                ticket_num = f"WM-{c.fetchone()[0] + 101}"
+                ticket_num = next_ticket_number(c.connection)
                 
                 live_stats = get_restaurant_live_stats(rest_id)
                 est_wait = live_stats["estimated_wait_mins"]

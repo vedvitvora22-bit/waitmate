@@ -54,19 +54,8 @@ function startRestaurantsRefresh() {
 // blocks the UI. Throttled client-side (and again server-side via the 120s
 // LAST_SIM_CACHE cooldown) so back-to-back requests don't re-run ticks.
 function triggerBackgroundSimTick() {
-  if (document.hidden) return;
-  const now = Date.now();
-  if (now - lastSimTriggerAt < SIM_TRIGGER_COOLDOWN_MS) return;
-  lastSimTriggerAt = now;
-  const ids = (allRestaurants || []).map(r => r.id).filter(Boolean);
-  ids.forEach(id => {
-    fetch('/api/queue/simulate-tick', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurant_id: id }),
-      keepalive: true
-    }).catch(() => {});
-  });
+  // Simulation worker disabled: queue is 100% human-driven
+  return;
 }
 
 function closeOwnerPasswordModal() {
@@ -219,13 +208,13 @@ async function renderUnlockedHostStand(venueId, pwd) {
   if (dashEl) dashEl.classList.remove('hidden');
   if (typeof populateHostDropdown === 'function') populateHostDropdown();
   if (typeof renderHostDashboard === 'function') renderHostDashboard();
-  // Advance the AI ghost-queue simulator in the background so ghost guests
-  // are generated and persisted even when the owner never opens the customer page.
-  fetch('/api/queue/simulate-tick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restaurant_id: venueId }), keepalive: true }).catch(() => {});
 }
 
 
 function showOwnerDirectory() {
+  // Leaving the unlocked dashboard (back to directory / switching tabs) must
+  // re-lock every venue so the password is required again next time.
+  clearAllHostPasswords();
   const dirEl = document.getElementById('ownerVenueDirectory');
   const dashEl = document.getElementById('ownerDashboardContent');
   if (dirEl) dirEl.classList.remove('hidden');
@@ -266,16 +255,17 @@ function renderOwnerDirectory() {
 
 async function openProtectedHostStand(venueId) {
   currentHostVenueId = venueId;
-  const savedPwd = getSavedHostPassword(venueId);
-  if (savedPwd) {
-    await renderUnlockedHostStand(venueId, savedPwd);
-  } else {
-    openOwnerPasswordModal(venueId);
-  }
+  // Always require the password: never reuse an in-memory unlock. Opening a
+  // host stand must always pop the password modal first.
+  clearHostPassword(venueId);
+  openOwnerPasswordModal(venueId);
 }
 
-// Per-restaurant owner password storage & verification
-const verifiedHostPasswords = JSON.parse(sessionStorage.getItem('wm_host_passwords') || '{}');
+// Per-restaurant owner password storage & verification.
+// In-memory ONLY: nothing is persisted to sessionStorage/localStorage, so the
+// host stand is always re-locked on page refresh/reopen and whenever the user
+// leaves the dashboard.
+const verifiedHostPasswords = {};
 
 function getSavedHostPassword(venueId) {
   return verifiedHostPasswords[venueId] || '';
@@ -283,12 +273,16 @@ function getSavedHostPassword(venueId) {
 
 function saveHostPassword(venueId, password) {
   verifiedHostPasswords[venueId] = password;
-  sessionStorage.setItem('wm_host_passwords', JSON.stringify(verifiedHostPasswords));
 }
 
 function clearHostPassword(venueId) {
   delete verifiedHostPasswords[venueId];
-  sessionStorage.setItem('wm_host_passwords', JSON.stringify(verifiedHostPasswords));
+}
+
+// Wipe every unlocked venue so the next host-stand open always requires the
+// password again (called on leaving/closing/switching away from the dashboard).
+function clearAllHostPasswords() {
+  Object.keys(verifiedHostPasswords).forEach(k => { delete verifiedHostPasswords[k]; });
 }
 
 async function ensureHostAccess(venueId) {
@@ -355,7 +349,6 @@ let selectedRestaurantId = null;
 let currentHostVenueId = 'rest-1';
 let currentVenueQrId = null;
 let hostData = null;
-let hostShowGhostGuests = false;
 
 // Seated-rating gating: a diner can only rate once they've been seated, and only once per visit
 let ratedTickets = new Set();
@@ -692,22 +685,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   // title when there is no active waitlist session.
   try {
     const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
-    const terminalStates = ['seated', 'cancelled', 'completed', 'no_show'];
+    // Hard-terminal states never resume (no rating is owed for these).
+    const hardTerminal = ['cancelled', 'completed', 'no_show'];
+    // A seated-but-unrated visit must resume on the rating screen after a reload
+    // rather than dropping the diner back to the browsing view.
+    const seatedUnrated = !!(saved && saved.data && saved.data.status === 'seated' && !saved.data.rated);
     const stale = saved && saved.id && saved.data && (
-      terminalStates.includes(saved.data.status) ||
-      (saved.data.joined_at && Date.now() - Number(saved.data.joined_at) > 2 * 60 * 60 * 1000)
+      hardTerminal.includes(saved.data.status) ||
+      (saved.data.status === 'seated' && !seatedUnrated) ||
+      (saved.data.status !== 'seated' && saved.data.joined_at && Date.now() - Number(saved.data.joined_at) > 2 * 60 * 60 * 1000)
     );
     if (saved && saved.id && !stale) {
       currentTicketId = saved.id;
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
-      if (activeTicketData && !terminalStates.includes(activeTicketData.status)) {
+      if (activeTicketData) {
         const pill = document.getElementById('activeTicketPill');
         if (pill) {
           pill.classList.remove('hidden');
           pill.classList.add('flex');
         }
         startTicketPolling();
+      }
+      // Resume a pending seated rating immediately on the customer view.
+      if (seatedUnrated && currentInterface === 'customer') {
+        activeTicketData._hasPromptedFeedback = true;
+        closeTicketModal();
+        openFeedbackModal(activeTicketData);
       }
     } else if (saved && saved.id) {
       clearCurrentTicket();
@@ -1187,37 +1191,9 @@ const fallbackRestaurants = [
 ];
 
 // Local mock queues for offline or immediate client responsiveness
-let localMockQueues = {
-  'rest-1': [
-    { id: "q-101", ticket_number: "WM-101", restaurant_id: "rest-1", customer_name: "Aarav Mehta", phone: "+91 98201 44521", party_size: 2, seating_pref: "High-top / Standing", special_requests: "Filter coffee right after dosa", entry_type: "remote", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, joined_at: Date.now()/1000 - 400, has_arrived: 1, delay_mins: 0 },
-    { id: "q-102", ticket_number: "WM-102", restaurant_id: "rest-1", customer_name: "Ananya Iyer", phone: "+91 98450 12389", party_size: 3, seating_pref: "First Available", special_requests: "Ghee Podi Butter Dosa priority", entry_type: "remote", status: "waiting", estimated_wait_mins: 15, actual_wait_mins: 0, joined_at: Date.now()/1000 - 250, has_arrived: 0, delay_mins: 0 },
-    { id: "q-103", ticket_number: "WM-103", restaurant_id: "rest-1", customer_name: "Rohan Verma", phone: "+91 99102 38475", party_size: 2, seating_pref: "Outdoor Patio", special_requests: "", entry_type: "walk_in", status: "notified", estimated_wait_mins: 8, actual_wait_mins: 0, joined_at: Date.now()/1000 - 600, has_arrived: 1, delay_mins: 0 },
-  ],
-  'rest-2': [
-    { id: "q-201", ticket_number: "WM-201", restaurant_id: "rest-2", customer_name: "Sneha Kulkarni", phone: "+91 97654 32109", party_size: 4, seating_pref: "Family AC Section", special_requests: "Extra lemon & onions", entry_type: "remote", status: "waiting", estimated_wait_mins: 22, actual_wait_mins: 0, joined_at: Date.now()/1000 - 700, has_arrived: 1, delay_mins: 0 },
-    { id: "q-202", ticket_number: "WM-202", restaurant_id: "rest-2", customer_name: "Vikram Sen", phone: "+91 98310 99887", party_size: 2, seating_pref: "First Available", special_requests: "", entry_type: "remote", status: "waiting", estimated_wait_mins: 28, actual_wait_mins: 0, joined_at: Date.now()/1000 - 350, has_arrived: 0, delay_mins: 0 },
-  ],
-  'rest-3': [
-    { id: "q-301", ticket_number: "WM-301", restaurant_id: "rest-3", customer_name: "Farhan Qureshi", phone: "+91 98211 55667", party_size: 2, seating_pref: "Counter / Car Stand", special_requests: "Extra green chutney", entry_type: "remote", status: "waiting", estimated_wait_mins: 8, actual_wait_mins: 0, joined_at: Date.now()/1000 - 200, has_arrived: 1, delay_mins: 0 },
-  ],
-  'rest-4': [
-    { id: "q-401", ticket_number: "WM-401", restaurant_id: "rest-4", customer_name: "Aditya Roy", phone: "+91 98860 33445", party_size: 4, seating_pref: "Brewery Floor", special_requests: "Celebrating promotion", entry_type: "remote", status: "waiting", estimated_wait_mins: 30, actual_wait_mins: 0, joined_at: Date.now()/1000 - 600, has_arrived: 1, delay_mins: 0 },
-  ],
-  'rest-5': [],
-  'rest-6': [],
-  'rest-7': [],
-  'rest-8': [],
-  'rest-9': [],
-  'rest-10': [],
-  'rest-11': [
-    { id: "q-111", ticket_number: "WM-111", restaurant_id: "rest-11", customer_name: "Pooja Nair", phone: "+91 98330 44556", party_size: 3, seating_pref: "Beachside Counter", special_requests: "Extra cheese on pav bhaji", entry_type: "remote", status: "waiting", estimated_wait_mins: 9, actual_wait_mins: 0, joined_at: Date.now()/1000 - 350, has_arrived: 1, delay_mins: 0 },
-    { id: "q-112", ticket_number: "WM-112", restaurant_id: "rest-11", customer_name: "Kunal Mehta", phone: "+91 98201 66778", party_size: 2, seating_pref: "First Available", special_requests: "", entry_type: "walk_in", status: "waiting", estimated_wait_mins: 7, actual_wait_mins: 0, joined_at: Date.now()/1000 - 180, has_arrived: 1, delay_mins: 0 },
-  ],
-  'rest-12': [
-    { id: "q-121", ticket_number: "WM-121", restaurant_id: "rest-12", customer_name: "Sarah D'Souza", phone: "+91 98670 11223", party_size: 2, seating_pref: "Standing Counter", special_requests: "Gluten-free crust if available", entry_type: "remote", status: "waiting", estimated_wait_mins: 18, actual_wait_mins: 0, joined_at: Date.now()/1000 - 500, has_arrived: 1, delay_mins: 0 },
-    { id: "q-122", ticket_number: "WM-122", restaurant_id: "rest-12", customer_name: "Rahul Kapoor", phone: "+91 98110 33445", party_size: 4, seating_pref: "First Available", special_requests: "Extra hot honey drizzle", entry_type: "remote", status: "notified", estimated_wait_mins: 20, actual_wait_mins: 0, joined_at: Date.now()/1000 - 700, has_arrived: 1, delay_mins: 0 },
-  ]
-};
+// EMPTIED: no simulated / AI / fake guests are seeded. Only real human
+// Join Queue submissions create queue entries (POST /api/queue/join).
+let localMockQueues = {};
 
 // ==========================================
 // 1. TRI-INTERFACE NAVIGATION & SWITCHING
@@ -1352,7 +1328,11 @@ function switchInterface(role) {
     return;
   }
   // Host Stand auto-polling only applies to the owner tab.
-  if (role !== 'owner') stopHostStandPolling();
+  if (role !== 'owner') {
+    stopHostStandPolling();
+    // Switching away from the owner tab re-locks any unlocked host stand.
+    clearAllHostPasswords();
+  }
   currentInterface = role;
   const custDiv = document.getElementById('customerInterface');
   const ownerDiv = document.getElementById('ownerInterface');
@@ -1730,10 +1710,9 @@ function renderFounderData(data) {
         if (q.status === 'delayed') statusBadge = `<span class="badge-tag bg-amber-100 text-amber-800">Delayed</span>`;
         const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
         const source = (q.source || '').toLowerCase();
-        const isGhost = source === 'ghost' || q.is_ghost || q.isGhost || q.entry_type === 'ghost';
         const isWalkIn = source === 'walk-in' || channel === 'walk_in';
-        const channelLabel = isWalkIn ? '🚶 Walk-In' : (isGhost ? '👻 Ghost' : '📱 Remote');
-        const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : (isGhost ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-indigo-100 text-indigo-700 border border-indigo-200');
+        const channelLabel = isWalkIn ? '🚶 Walk-In' : '📱 Remote';
+        const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
         const id = q.id || q.ticket_number;
         const nameJs = jsEscape(q.customer_name || '');
         const venueJs = jsEscape(q.restaurant_name || '');
@@ -2686,11 +2665,34 @@ function updateTicketUI() {
   }
 
   const d = activeTicketData;
+
+  // Normalize estimated remaining mins: handle Firestore Timestamps / raw ms timestamps
+  const toMs = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+    if (typeof v === 'string') { const t = Date.parse(v); return isNaN(t) ? null : t; }
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+  const targetTs = toMs(d.estimated_call_time ?? d.estimatedCallTime ?? d.estimated_call_timestamp ?? d.target_call_time);
+  if (targetTs != null) {
+    const mins = Math.max(0, Math.round((targetTs - Date.now()) / 60000));
+    d.estimated_remaining_mins = Math.min(60, Math.max(0, mins));
+  } else {
+    d.estimated_remaining_mins = Math.min(60, Math.max(0, Number(d.estimated_remaining_mins ?? 0)));
+  }
   const pill = document.getElementById('activeTicketPill');
 
   // Always find the real restaurant name from allRestaurants (never fall back to "Partner Venue")
   const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
   const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
+
+  // Reset step 4 (Seated) unless actually seated/completed
+  const step4Icon = document.getElementById('step4Icon');
+  if (step4Icon && !(d.status === 'seated' || d.status === 'completed')) {
+    step4Icon.className = "w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1";
+    step4Icon.textContent = "4";
+  }
 
   if (d.status === 'notified') {
     acknowledgedAlertForTicket = null;
@@ -2712,7 +2714,11 @@ function updateTicketUI() {
   pill.classList.remove('hidden');
   pill.classList.add('flex');
 
-  if (d.status === 'seated' || d.status === 'cancelled') {
+  // Keep the active-ticket session persisted while the diner is seated so the
+  // Live Queue Pass can transition straight into the 1–5★ rating screen. Only a
+  // cancelled ticket clears the stored session here; a seated session is fully
+  // cleared after rating submission or an explicit Skip (see clearCurrentTicket).
+  if (d.status === 'cancelled') {
     localStorage.removeItem('waitmate_active_ticket');
   }
 
@@ -2777,7 +2783,7 @@ function updateTicketUI() {
   } else if (isArrivedWaiting) {
     // Arrived at Venue — Waiting for Host screen
     document.title = "✓ Checked In at Entrance • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600";
     document.getElementById('ticketStatusMsg').textContent = "You're checked in at the entrance. The host will notify you when your table is ready.";
 
@@ -2794,7 +2800,7 @@ function updateTicketUI() {
 
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
@@ -2850,7 +2856,7 @@ function updateTicketUI() {
   } else {
     // Normal waiting
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
-    document.getElementById('ticketEtaCountdown').textContent = `~${d.estimated_remaining_mins} mins remaining`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
     tableNearAlert.classList.add('hidden');
@@ -2859,7 +2865,7 @@ function updateTicketUI() {
 
   // Update Arrived button appearance based on state
   if (isArrivedWaiting && arrivedBtn) {
-    arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
+    arrivedBtn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
     arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
   } else if (isTableReady && arrivedBtn) {
     // Show "Confirm Seated" button when notified
@@ -2920,6 +2926,7 @@ function clearCurrentTicket() {
   acknowledgedAlertForTicket = null;
   graceUntil = null;
   localStorage.removeItem('waitmate_ticket_id');
+  localStorage.removeItem('waitmate_active_ticket');
   if (pollTimer) clearInterval(pollTimer);
   document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
   document.getElementById('activeTicketPill').classList.add('hidden');
@@ -3082,14 +3089,14 @@ async function copySharePassLink() {
     const icon = document.getElementById('copyShareIcon');
     const label = document.getElementById('copyShareLabel');
     if (icon) {
-      icon.innerHTML = '<polyline points="20 12 14 18 8 12"></polyline><path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12"></path>';
+      icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
       icon.setAttribute('data-copied', '1');
     }
     if (label) label.textContent = 'Copied!';
     showToast("Link copied to clipboard", "success");
     setTimeout(() => {
       if (icon) {
-        icon.innerHTML = '<rect width="16" height="12" x="2" y="7" rx="2"></rect><path d="M16 7h-2V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2z"></path>';
+        icon.innerHTML = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>';
         icon.removeAttribute('data-copied');
       }
       if (label) label.textContent = 'Copy Link';
@@ -3212,7 +3219,7 @@ async function dinerArrivedAction() {
 
   const btn = document.getElementById('btnArrivedAction');
   if (btn) {
-    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>✓ Arrival Confirmed • Host Notified</span>`;
+    btn.innerHTML = `<i data-lucide="check-check" class="w-4 h-4"></i> <span>Arrival Confirmed • Host Notified</span>`;
     btn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
     lucide.createIcons();
   }
@@ -3820,6 +3827,18 @@ async function submitDinerFeedback(e) {
   }
 }
 
+// Diner explicitly skips rating: close the rating screen and reset the session
+// without saving a review. The ticket is marked as handled so the background
+// poll cannot re-open the rating prompt for this visit.
+function skipDinerFeedback() {
+  const ticketId = (document.getElementById('fbTicketId') || {}).value || currentTicketId || (activeTicketData && activeTicketData.id);
+  if (ticketId) markTicketRated(ticketId);
+  document.getElementById('feedbackModal').classList.add('hidden');
+  clearCurrentTicket();
+  showToast("Rating skipped. Thanks for dining with us!", "info");
+  loadRestaurants();
+}
+
 // ==========================================
 // 9. RESTAURANT OWNER HOST STAND LOGIC
 // ==========================================
@@ -3837,13 +3856,6 @@ async function switchHostVenue(venueId) {
   currentHostVenueId = venueId;
   await loadHostStand();
 }
-
-function toggleHostGhostGuests(checked) {
-  hostShowGhostGuests = !!checked;
-  renderHostDashboard();
-}
-
-
 
 async function loadHostStand() {
   if (isAnyPasswordModalOpen()) return;
@@ -3924,7 +3936,7 @@ function renderHostDashboard() {
   const stats = hostData.live_stats;
   const rel = hostData.reliability;
   const queue = hostData.queue || [];
-  const visibleQueue = hostShowGhostGuests ? queue : queue.filter(q => !(q && (q.is_ghost || q.isGhost || q.entry_type === 'ghost')));
+  const visibleQueue = queue;
 
   document.getElementById('hostVenueName').textContent = r.name;
   document.getElementById('hostVenueLocationSub').textContent = `${r.address} • Host Stand Dashboard`;
@@ -3979,11 +3991,10 @@ function renderHostDashboard() {
 
     const join = hostJoinInfo(q);
     const source = (q.source || q['source'] || '').toLowerCase();
-    const isGhost = source === 'ghost' || q.is_ghost || q.isGhost || q.entry_type === 'ghost';
     const isWalkIn = source === 'walk-in' || q.channel === 'walk_in' || q['09_channel'] === 'walk_in';
     const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
-    const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : (isGhost ? '👻 Ghost' : '🌐 Remote Join');
-    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : (isGhost ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-indigo-100 text-indigo-700 border border-indigo-200');
+    const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
+    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
 
     return `
       <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
@@ -3998,7 +4009,7 @@ function renderHostDashboard() {
         </td>
 
         <td class="py-3 px-4">
-          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}${isGhost ? '<span class="badge-tag bg-purple-100 text-purple-800 border border-purple-300">Ghost</span>' : ''}</div>
+          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}</div>
           ${q.special_requests ? `<div class="text-[10px] text-amber-700 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
