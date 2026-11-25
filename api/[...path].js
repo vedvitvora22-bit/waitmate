@@ -970,9 +970,16 @@ async function route(request, response, pathParts) {
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
-    const promised = Number(ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 10);
-    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, promised + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
-    return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, promised_wait_mins: promised, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
+    const availableTables = Math.max(1, Number(restaurant?.available_tables || 0));
+    const partiesAheadOfTables = Math.max(0, ahead + (availableTables > 0 ? 0 : 0) - availableTables + (ahead > 0 ? 0 : 0));
+    // Recompute live wait from current queue position so a #1 party reflects base prep pace.
+    const livePartiesAhead = Math.max(0, ahead - Math.max(0, availableTables - 1));
+    const partiesAheadOfTables2 = Math.max(0, ahead > 0 ? Math.max(0, entries.filter(e=>e.restaurant_id===ticket.restaurant_id && ["waiting","notified","delayed"].includes(e.status) && Number(e.joined_at) < Number(ticket.joined_at)).length - availableTables + 1) : 0);
+    const promised = restaurant ? getEstimatedWaitMinutes(restaurant, Math.max(0, ahead === 0 ? 0 : Math.max(0, ahead - availableTables + 1)), availableTables) : Number(ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 10);
+    // When 0 parties ahead, reflect venue base prep pace (5-10 mins)
+    const promisedFinal = ahead === 0 ? (restaurant ? Math.max(5, Math.min(10, Number(restaurant.base_prep_time || 8))) : 8) : promised;
+    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, promisedFinal + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
+    return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, promised_wait_mins: promisedFinal, estimated_wait_mins: promisedFinal, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
   }
 
   if (request.method === "GET" && path.startsWith("/api/host/queue/")) {
