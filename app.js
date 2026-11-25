@@ -738,12 +738,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
       if (activeTicketData) {
-        const pill = document.getElementById('activeTicketPill');
-        if (pill) {
-          pill.classList.remove('hidden');
-          pill.classList.add('flex');
-        }
         startTicketPolling();
+        // Paint the floating bottom bar with the restored ticket's venue + rank
+        // immediately instead of waiting for the first poll tick.
+        renderActivePassPill();
       }
       // Resume a pending seated rating immediately on the customer view.
       if (seatedUnrated && currentInterface === 'customer') {
@@ -2792,6 +2790,41 @@ async function attemptTicketReSync() {
   }
 }
 
+// Re-render the floating bottom "Active Pass" bar so it always matches the
+// user's current ticket (venue name + live rank). Clears the bar and drops any
+// stale localStorage session when there is no active, non-terminal ticket.
+// Hidden whenever the Live Queue Pass modal is open (see openTicketModal).
+function renderActivePassPill() {
+  const pill = document.getElementById('activeTicketPill');
+  if (!pill) return;
+
+  if (!activeTicketData && !currentTicketId) {
+    pill.classList.add('hidden');
+    pill.classList.remove('flex');
+    localStorage.removeItem('waitmate_active_ticket');
+    localStorage.removeItem('waitmate_ticket_id');
+    return;
+  }
+
+  const d = activeTicketData;
+  if (!d) {
+    pill.classList.add('hidden');
+    pill.classList.remove('flex');
+    return;
+  }
+
+  const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
+  const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
+
+  const venueEl = document.getElementById('activePillVenue');
+  const posEl = document.getElementById('activePillPos');
+  if (venueEl) venueEl.textContent = venueName;
+  if (posEl) posEl.textContent = `#${d.position_in_line ?? '-'}`;
+
+  pill.classList.remove('hidden');
+  pill.classList.add('flex');
+}
+
 function updateTicketUI() {
   if (!activeTicketData) {
     document.getElementById('activeTicketPill').classList.add('hidden');
@@ -2799,6 +2832,13 @@ function updateTicketUI() {
   }
 
   const d = activeTicketData;
+
+  // Terminal / gone tickets clear the floating bar and the stored session
+  // automatically: completed, left (no_show), cancelled, not-found.
+  if (['cancelled', 'no_show', 'completed', 'left'].includes(d.status)) {
+    clearCurrentTicket();
+    return;
+  }
 
   // Normalize estimated remaining mins: handle Firestore Timestamps / raw ms timestamps
   const toMs = (v) => {
@@ -2835,6 +2875,9 @@ function updateTicketUI() {
   if (graceUntil && Date.now() > graceUntil) graceUntil = null;
   lastTicketStatus = d.status;
 
+  // Re-render the floating bottom bar with this ticket's venue + live rank.
+  renderActivePassPill();
+
   if (d.status === 'notified') {
     pill.classList.add('emerald-pulse');
     pill.classList.remove('bg-orange-500');
@@ -2844,16 +2887,6 @@ function updateTicketUI() {
     pill.classList.remove('emerald-pulse');
     pill.classList.remove('bg-emerald-500');
     pill.classList.add('bg-orange-500');
-  }
-  pill.classList.remove('hidden');
-  pill.classList.add('flex');
-
-  // Keep the active-ticket session persisted while the diner is seated so the
-  // Live Queue Pass can transition straight into the 1–5★ rating screen. Only a
-  // cancelled ticket clears the stored session here; a seated session is fully
-  // cleared after rating submission or an explicit Skip (see clearCurrentTicket).
-  if (d.status === 'cancelled') {
-    localStorage.removeItem('waitmate_active_ticket');
   }
 
   const arrivalStatusEl = document.getElementById('ticketArrivalStatus');
@@ -3056,12 +3089,10 @@ const openTicketModalImpl = function openTicketModal() {
 
 function closeTicketModal() {
   document.getElementById('ticketModal').classList.add('hidden', 'pointer-events-none');
-  // Restore the floating bottom bar when the pass closes and a ticket is still active.
-  const pill = document.getElementById('activeTicketPill');
-  if (pill && (currentTicketId || activeTicketData)) {
-    pill.classList.remove('hidden');
-    pill.classList.add('flex');
-  }
+  // Restore the floating bottom bar (with the current venue + live rank) when
+  // the pass closes and a non-terminal ticket is still active. Hidden again
+  // automatically if there is no active ticket.
+  renderActivePassPill();
   lucide.createIcons();
 }
 
