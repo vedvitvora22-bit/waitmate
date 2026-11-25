@@ -2893,7 +2893,7 @@ function updateTicketUI() {
       !isTicketRated(d.id)
     ) {
       d._hasPromptedFeedback = true;
-      closeTicketModal();
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       openFeedbackModal(d);
     }
   } else {
