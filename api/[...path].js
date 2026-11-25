@@ -997,34 +997,6 @@ async function route(request, response, pathParts) {
         throw error;
       }
     }
-    // Cold-start reconstruction: if ticket not found but query params provide fallback hints,
-    // reconstruct a minimal active ticket so the diner's "View Live Pass" never shows 404.
-    if (!ticket && request.query) {
-      const { restaurant_id, name, party_size, ticket_number } = request.query;
-      if (restaurant_id && name) {
-        ticket = {
-          id,
-          ticket_number: ticket_number || `WM-${id.slice(-3)}`,
-          restaurant_id,
-          customer_name: name,
-          phone: "",
-          party_size: Number(party_size || 2),
-          seating_pref: "First Available",
-          special_requests: "",
-          entry_type: "remote",
-          status: "waiting",
-          estimated_wait_mins: 10,
-          actual_wait_mins: 0,
-          joined_at: Date.now() - 300000,
-          notified_at: null,
-          seated_at: null,
-          has_arrived: false,
-          delay_mins: 0
-        };
-        // Cache for subsequent requests
-        global._tickets[id] = { ...ticket };
-      }
-    }
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     let restaurant;
     try {
