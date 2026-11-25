@@ -297,8 +297,7 @@
           <div class="relative flex-1 min-h-0 p-6 sm:p-8 flex items-center justify-center">
             <div class="relative w-full max-w-md mx-auto">
               <!-- Reliability Score Badge with visual confidence bar -->
-              <div class="relative bg-white rounded-2xl border-2 border-emerald-300 shadow-xl p-8 overflow-hidden">
-                <div class="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-emerald-500/15 blur-2xl animate-pulse-ring" style="animation-delay: 0.2s;"></div>
+              <div class="relative bg-white rounded-2xl border border-[#e2e8f0] shadow-sm p-8 overflow-hidden">
                 <div class="absolute -bottom-6 -left-6 w-32 h-32 rounded-full bg-amber-500/10 blur-2xl animate-pulse-ring" style="animation-delay: 0.7s;"></div>
                 
                 <div class="relative z-10 flex flex-col items-center gap-4">
@@ -319,17 +318,9 @@
                   
                   <div class="text-center">
                     <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Reliability Score</span>
-                    <div class="relative">
-                      <svg width="140" height="140" class="transform -rotate-90">
-                        <circle cx="70" cy="70" r="60" fill="none" stroke="#e2e8f0" stroke-width="8"/>
-                        <circle id="reliabilityScoreRing" cx="70" cy="70" r="60" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="23" style="filter: drop-shadow(0 0 8px rgba(16,185,129,0.6));" class="animate-pulse-ring-slow"/>
-                      </svg>
-                      <div class="absolute inset-0 flex items-center justify-center">
-                        <div class="flex items-baseline gap-1">
-                          <span class="text-5xl font-heading font-extrabold text-emerald-700">94%</span>
-                          <span class="text-lg font-bold text-emerald-600 self-end mb-1">Grade A</span>
-                        </div>
-                      </div>
+                    <div class="flex items-center justify-center gap-3">
+                      <span class="text-5xl font-heading font-extrabold text-slate-900">94%</span>
+                      <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-sm font-bold border border-emerald-200">Grade A</span>
                     </div>
                   </div>
                   
@@ -378,7 +369,7 @@
             <button class="onboarding-dot w-2.5 h-2.5 rounded-full bg-slate-300 transition-all" data-step="2" role="tab" aria-selected="false" aria-label="Step 2 of 3"></button>
             <button class="onboarding-dot w-2.5 h-2.5 rounded-full bg-orange-500 transition-all" data-step="3" role="tab" aria-selected="true" aria-label="Step 3 of 3"></button>
           </div>
-          <button onclick="completeOnboarding()" class="onboarding-cta px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-orange-500/30 flex items-center gap-2">Explore Mumbai Restaurants <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+          <button onclick="completeOnboarding()" class="onboarding-cta px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-orange-500/30 flex items-center gap-2 whitespace-nowrap">Continue <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
         </div>
       </div>
       
@@ -1071,6 +1062,14 @@
             </div>
           </div>
 
+        </div>
+
+        <!-- Ticket Expired state (shown when a pass passes its arrival window) -->
+        <div id="ticketExpiredState" class="hidden p-6 text-center bg-rose-50 border border-rose-200 rounded-2xl">
+          <div class="text-rose-700 font-bold text-xl mb-2">Ticket Expired</div>
+          <p class="text-slate-600 text-sm mb-4">This pass has passed its arrival window and is no longer active. Join a fresh queue below.</p>
+          <button onclick="joinFreshQueue()" id="btnJoinFreshQueue" class="py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm shadow-sm">Join a Fresh Queue</button>
+          <span id="expiredTicketNumber" class="mt-3 block text-xs text-slate-400 font-mono">#–</span>
         </div>
 
         <!-- Dotted Ticket Divider -->

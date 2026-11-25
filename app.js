@@ -393,6 +393,36 @@ const RATED_STORAGE_KEY = 'waitmate_rated_tickets';
 let favorites = new Set();
 const FAVORITES_STORAGE_KEY = 'wm_favorites';
 
+// Unique device id used to enforce one active queue ticket per device.
+// Generated once and persisted in localStorage; sent with every join request.
+const DEVICE_ID_KEY = 'waitmate_device_id';
+let deviceId = null;
+function getOrCreateDeviceId() {
+  if (deviceId) return deviceId;
+  try {
+    deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+      const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
+      deviceId = uuid;
+      localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    }
+  } catch (e) {
+    deviceId = 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
+  }
+  return deviceId;
+}
+
+// Returns true when a stored ticket is still active (waiting / arrived, not
+// expired or any terminal state), so a device can't hold two active queues.
+function isLocalTicketActive(ticket) {
+  if (!ticket) return false;
+  const st = String(ticket.status || '').toLowerCase();
+  if (st === 'expired' || st === 'cancelled' || st === 'seated' || st === 'no_show' || st === 'completed' || st === 'left') return false;
+  return st === 'waiting' || st === 'arrived' || ticket.has_arrived === true;
+}
+
 function loadFavorites() {
   try {
     const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
@@ -683,6 +713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
   await initPushNotifications();
   loadFavorites();
+  getOrCreateDeviceId(); // generate/persist the device id used for one-active-ticket-per-device
   startRestaurantsRefresh();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking.
@@ -691,8 +722,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // title when there is no active waitlist session.
   try {
     const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
-    // Hard-terminal states never resume (no rating is owed for these).
-    const hardTerminal = ['cancelled', 'completed', 'no_show'];
+    // Hard-terminal states never resume (no rating is owed for these). Expired
+    // tickets are cleared so the diner can join fresh with a "Ticket Expired" state.
+    const hardTerminal = ['cancelled', 'completed', 'no_show', 'expired'];
     // A seated-but-unrated visit must resume on the rating screen after a reload
     // rather than dropping the diner back to the browsing view.
     const seatedUnrated = !!(saved && saved.data && saved.data.status === 'seated' && !saved.data.rated);
@@ -2500,6 +2532,19 @@ async function submitJoinQueue(e) {
   }
   localStorage.setItem('waitmate_guest_name', name);
 
+  // One active ticket per device: block a second join if this device already
+  // holds an active (waiting / arrived, not expired) ticket saved locally.
+  const savedActive = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
+  if (savedActive && savedActive.data && isLocalTicketActive(savedActive.data)) {
+    currentTicketId = savedActive.id;
+    activeTicketData = savedActive.data;
+    localStorage.setItem('waitmate_ticket_id', currentTicketId);
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify(savedActive));
+    renderActivePassPill();
+    showDeviceBlockedDialog(savedActive.data);
+    return;
+  }
+
   const submitBtn = document.getElementById('joinSubmitBtn');
   isSubmitting = true;
   submitBtn.disabled = true;
@@ -2513,7 +2558,8 @@ async function submitJoinQueue(e) {
     party_size: partySize,
     seating_pref: seatingPref,
     special_requests: specialReq,
-    entry_type: joinChannel
+    entry_type: joinChannel,
+    device_id: getOrCreateDeviceId()
   };
 
   let res;
@@ -2539,7 +2585,22 @@ async function submitJoinQueue(e) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
       lucide.createIcons();
-      showToast(data.error || 'Unable to join the queue right now. Please try again.', "error");
+      // One active ticket per device: the backend blocked a duplicate join.
+      // Surface the clear message and offer a button to view the existing pass.
+      if (data.blocked && data.existing_ticket) {
+        const existing = data.existing_ticket;
+        activeTicketData = {
+          ...existing,
+          restaurant: existing.restaurant || { name: existing.restaurant_name || 'Unknown Venue' }
+        };
+        currentTicketId = existing.id;
+        localStorage.setItem('waitmate_ticket_id', currentTicketId);
+        localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+        renderActivePassPill();
+        showDeviceBlockedDialog(activeTicketData);
+      } else {
+        showToast(data.error || 'Unable to join the queue right now. Please try again.', "error");
+      }
       return;
     }
 
@@ -2664,6 +2725,36 @@ async function submitJoinQueue(e) {
   }
 }
 
+// Render the clear "Ticket Expired" state inside the pass modal, clear the
+// active pass bar, and expose a "Join a Fresh Queue" path.
+function renderExpiredTicketState(d) {
+  const pill = document.getElementById('activeTicketPill');
+  if (pill) { pill.classList.add('hidden'); pill.classList.remove('flex'); }
+  const modal = document.getElementById('ticketModal');
+  if (modal) modal.classList.remove('hidden', 'pointer-events-none');
+  const expiredEl = document.getElementById('ticketExpiredState');
+  const ticketNumEl = document.getElementById('ticketNumber');
+  const expiredTicketNum = document.getElementById('expiredTicketNumber');
+  if (ticketNumEl) ticketNumEl.textContent = d.ticket_number || '#–';
+  if (expiredTicketNum) expiredTicketNum.textContent = d.ticket_number || '#–';
+  if (expiredEl) expiredEl.classList.remove('hidden');
+  const countdown = document.getElementById('ticketEtaCountdown');
+  if (countdown) countdown.textContent = 'Expired';
+  const statusMsg = document.getElementById('ticketStatusMsg');
+  if (statusMsg) {
+    statusMsg.textContent = 'This pass has passed its arrival window and is no longer active.';
+    statusMsg.className = 'text-xs text-rose-600 font-medium mt-1';
+  }
+}
+
+// Clear the expired ticket and open the join queue modal for the same venue so
+// the diner can join fresh.
+function joinFreshQueue() {
+  const restId = (activeTicketData && activeTicketData.restaurant_id) || selectedRestaurantId;
+  clearCurrentTicket();
+  if (restId) openJoinModal(restId, 'remote');
+}
+
 // ==========================================
 // 5. DIGITAL PASS TRACKING & LIVE UPDATES
 // ==========================================
@@ -2712,6 +2803,15 @@ async function fetchTicketStatus() {
     }
     let data = {};
     try { data = await res.json(); } catch (parseErr) { return; }
+    // A ticket expired server-side (stale unarrived) surfaces a clear
+    // "Ticket Expired" state and clears the active pass bar so the diner can
+    // join fresh.
+    if (data && data.status === 'expired') {
+      showToast('Ticket Expired', 'error');
+      activeTicketData = data;
+      updateTicketUI();
+      return;
+    }
     // Preserve local arrived/grace state if it exists, only merge server updates
     if (activeTicketData) {
       const localArrived = activeTicketData.has_arrived;
@@ -2816,6 +2916,13 @@ function updateTicketUI() {
   }
 
   const d = activeTicketData;
+
+  // Expired passes show a clear "Ticket Expired" state and clear the active
+  // pass bar so the diner can join fresh.
+  if (d.status === 'expired') {
+    renderExpiredTicketState(d);
+    return;
+  }
 
   // Terminal / gone tickets clear the floating bar and the stored session
   // automatically: completed, left (no_show), cancelled, not-found.
