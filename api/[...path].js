@@ -296,7 +296,9 @@ async function fetchQueueEntries() {
 
 async function fetchQueueEntry(id) {
   const doc = await getDocument("queue_entries", id);
-  return normalizeQueueEntry(doc);
+  const normalized = normalizeQueueEntry(doc);
+  // A legacy ghost ticket must never be served, even by direct id lookup.
+  return isGhostTicket(normalized) ? null : normalized;
 }
 
 // Force the seated invariants (status = seated, has_arrived = true, seated IST
