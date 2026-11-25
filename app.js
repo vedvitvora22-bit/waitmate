@@ -1552,8 +1552,25 @@ async function loadFounderDashboard() {
       const statusEl = document.getElementById('fndGlobalBannerStatus');
       if (statusEl) statusEl.textContent = globalAnnouncementText ? `Active: "${globalAnnouncementText}"` : 'None active';
     }
+
+    // Surface any failed founder endpoint (401/403/500 or network error) to the
+    // console instead of silently rendering an empty dashboard.
+    const endpointChecks = [
+      ['analytics', analyticsRes],
+      ['restaurants', restaurantsRes],
+      ['queues', queuesRes],
+      ['reviews', reviewsRes],
+      ['settings', settingsRes]
+    ];
+    for (const [name, res] of endpointChecks) {
+      if (res.status === 'rejected') {
+        console.error(`[Founder] /api/founder/${name} request failed:`, res.reason);
+      } else if (!res.value.ok) {
+        console.error(`[Founder] /api/founder/${name} returned HTTP ${res.value.status}`);
+      }
+    }
   } catch (err) {
-    console.warn("Founder dashboard load failed:", err);
+    console.error("Founder dashboard load failed:", err);
   }
   // Build the live summary from whichever source actually populated data, so the
   // dashboard never stays blank when the analytics endpoint is slow or returns
@@ -1576,6 +1593,17 @@ async function loadFounderDashboard() {
   const platformAvgReliability = reliabilityScores.length
     ? Math.round(reliabilityScores.reduce((a, b) => a + b, 0) / reliabilityScores.length)
     : 92;
+  // Seated totals come from the analytics summary when available (it scans all
+  // historical queue_entries), otherwise fall back to counting seated entries in
+  // the live queue cache so the metric is never hardcoded to zero.
+  const analyticsSummary = (data && data.summary) || {};
+  const seatedFromCache = queues.filter(q => q.status === 'seated');
+  const totalSeatedParties = analyticsSummary.total_seated_parties != null
+    ? analyticsSummary.total_seated_parties
+    : seatedFromCache.length;
+  const totalSeatedDiners = analyticsSummary.total_seated_diners != null
+    ? analyticsSummary.total_seated_diners
+    : seatedFromCache.reduce((s, q) => s + Number(q.party_size || 0), 0);
 
   renderFounderData({
     summary: {
@@ -1584,8 +1612,8 @@ async function loadFounderDashboard() {
       cities_list: [...new Set(venues.map(r => r.city || 'Mumbai'))],
       active_parties_in_queue: activeParties,
       active_diners_in_queue: waitingDiners,
-      total_seated_parties: 0,
-      total_seated_diners: 0,
+      total_seated_parties: totalSeatedParties,
+      total_seated_diners: totalSeatedDiners,
       platform_avg_reliability: platformAvgReliability
     },
     restaurants: venues,
@@ -1620,22 +1648,27 @@ function jsEscape(unsafe) {
   return String(unsafe).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
 
+function setFounderText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 function renderFounderData(data) {
   const sum = data.summary || {};
-  document.getElementById('fndTotalVenues').textContent = sum.total_restaurants || 0;
-  document.getElementById('fndCitiesSummary').textContent = 'Across Mumbai dining hubs';
-  document.getElementById('fndWaitingDiners').textContent = sum.active_diners_in_queue || 0;
-  document.getElementById('fndWaitingParties').textContent = `${sum.active_parties_in_queue || 0} parties in queues`;
-  document.getElementById('fndSeatedDiners').textContent = `${sum.total_seated_diners || 0}`;
-  document.getElementById('fndAvgReliability').textContent = `${sum.platform_avg_reliability || 92}%`;
+  setFounderText('fndTotalVenues', sum.total_restaurants || 0);
+  setFounderText('fndCitiesSummary', 'Across Mumbai dining hubs');
+  setFounderText('fndWaitingDiners', sum.active_diners_in_queue || 0);
+  setFounderText('fndWaitingParties', `${sum.active_parties_in_queue || 0} parties in queues`);
+  setFounderText('fndSeatedDiners', `${sum.total_seated_diners || 0}`);
+  setFounderText('fndAvgReliability', `${sum.platform_avg_reliability || 92}%`);
   const walkawaySaved = Math.min(98, 82 + (sum.total_seated_diners || 0));
-  document.getElementById('fndWalkawaySaved').textContent = `${walkawaySaved}% Walkaway Saved`;
+  setFounderText('fndWalkawaySaved', `${walkawaySaved}% Walkaway Saved`);
 
   // Render Restaurants Network Table (Founder control row per venue)
   const restTbody = document.getElementById('fndRestaurantsTable');
-  const venues = data.restaurants || founderRestaurantsCache || [];
+  const venues = (data.restaurants || founderRestaurantsCache || []);
   if (restTbody) {
-    document.getElementById('fndVenueCountBadge').textContent = `${venues.length} venues`;
+    setFounderText('fndVenueCountBadge', `${venues.length} venues`);
     if (venues.length > 0) {
       restTbody.innerHTML = venues.map(r => {
         const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true, total_waiting_people: 0 };

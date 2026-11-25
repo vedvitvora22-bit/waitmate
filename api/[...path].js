@@ -137,24 +137,9 @@ function reliabilityFallback() {
 }
 
 async function findRestaurantById(id) {
-  try {
-    const doc = await getDocument("restaurants", id);
-    if (doc) {
-      const pwdMap = global._pwdMap || {};
-      if (pwdMap[id]) {
-        return { ...doc, ...pwdMap[id] };
-      }
-      return doc;
-    }
-  } catch (error) {
-    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      // fall through to in-memory sources below
-    } else {
-      throw error;
-    }
-  }
-  const fb = fallbackRestaurants.find(r => r.id === id) || (global._customRestaurants || []).find(r => r.id === id);
-  return fb ? { ...fb, ...(global._pwdMap?.[id] || {}) } : null;
+  const doc = await getDocument("restaurants", id);
+  if (doc) return doc;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +323,6 @@ async function safeCommit(writes) {
 
 // ---------------------------------------------------------------------------
 // Permanent, monotonic ticket-number generator.
-//
 // A guest's ticketNumber (e.g. "WM-101") is generated EXACTLY ONCE, at the
 // moment they join (customer Join-Queue form or host add_walkin), and is then
 // stored verbatim inside the Firestore queue document (01_ticket_number). It is
@@ -350,86 +334,52 @@ async function safeCommit(writes) {
 // across concurrent Vercel invocations, so two guests joining at the same
 // instant can never receive the same ticketNumber. The transform creates the
 // counter document on first use (starting from 0 -> first number is 101).
-// If Firestore is unreachable (in-memory fallback mode) we degrade to a
-// process-local monotonic counter so numbers are still unique and stable.
+// If Firestore is unreachable, the error propagates - NO memory fallback.
 // ---------------------------------------------------------------------------
-global._ticketSeqFallback = global._ticketSeqFallback || 100;
 
 async function nextTicketNumber() {
   const counterDoc = `projects/${PROJECT_ID}/databases/(default)/documents/counters/ticket_seq`;
-  try {
-    const result = await commitWrites([
-      {
-        transform: {
-          document: counterDoc,
-          fieldTransforms: [{ fieldPath: "seq", increment: { integerValue: "1" } }]
-        }
+  const result = await commitWrites([
+    {
+      transform: {
+        document: counterDoc,
+        fieldTransforms: [{ fieldPath: "seq", increment: { integerValue: "1" } }]
       }
-    ]);
-    const transformResults = result && result.writeResults && result.writeResults[0] && result.writeResults[0].transformResults;
-    const seqValue = transformResults && transformResults[0] && transformResults[0].fields && transformResults[0].fields.seq && transformResults[0].fields.seq.integerValue;
-    const seq = Number(seqValue);
-    if (Number.isFinite(seq) && seq > 0) {
-      return `WM-${100 + seq}`;
     }
-  } catch (error) {
-    // 429/503/403/404 or unconfigured Firebase: fall through to memory counter.
+  ]);
+  const transformResults = result && result.writeResults && result.writeResults[0] && result.writeResults[0].transformResults;
+  const seqValue = transformResults && transformResults[0] && transformResults[0].fields && transformResults[0].fields.seq && transformResults[0].fields.seq.integerValue;
+  const seq = Number(seqValue);
+  if (Number.isFinite(seq) && seq > 0) {
+    return `WM-${100 + seq}`;
   }
-  global._ticketSeqFallback += 1;
-  return `WM-${global._ticketSeqFallback}`;
+  throw new Error("Failed to generate ticket number from Firestore counter");
 }
 
 // Recompute and persist a restaurant's aggregate queue fields (queue_count,
-// total_waiting_people, active_diners, occupied/available tables). Best-effort:
-// it never throws, and it always mirrors the computed values into the in-memory
-// pwdMap so GET /api/restaurants and the Host Stand stay consistent even when
-// Firestore is in quota-exceeded fallback mode.
+// total_waiting_people, active_diners, occupied/available tables). 
+// Throws on Firestore failure - NO silent memory fallback.
 async function updateRestaurantAggregates(restaurantId) {
-  try {
-    const entries = allQueueEntries(Object.values(global._tickets || {}));
-    const active = entries.filter(e => e.restaurant_id === restaurantId && ["waiting", "notified", "delayed"].includes(e.status));
-    const seated = entries.filter(e => e.restaurant_id === restaurantId && e.status === "seated");
-    const queueCount = active.length;
-    const totalWaitingPeople = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
-    const activeDiners = [...active, ...seated].reduce((s, e) => s + Number(e.party_size || 0), 0);
-    let restaurant = null;
-    try { restaurant = await getRawRestaurant(restaurantId); } catch (_) { restaurant = null; }
-    if (!restaurant) return;
-    const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
-    const occupiedTables = Math.min(totalTables, seated.length);
-    const availableTables = Math.max(0, totalTables - occupiedTables);
-    const aggregates = { queue_count: queueCount, total_waiting_people: totalWaitingPeople, active_diners: activeDiners, occupied_tables: occupiedTables, available_tables: availableTables };
-    global._pwdMap = global._pwdMap || {};
-    global._pwdMap[restaurantId] = { ...(global._pwdMap[restaurantId] || {}), ...aggregates };
-    await safeCommit([setDocument("restaurants", restaurantId, { ...restaurant, ...aggregates })]);
-  } catch (e) {
-    console.warn("updateRestaurantAggregates skipped:", e?.message || e);
-  }
+  const entries = await fetchQueueEntries();
+  const allEntries = allQueueEntries(entries);
+  const active = allEntries.filter(e => e.restaurant_id === restaurantId && ["waiting", "notified", "delayed"].includes(e.status));
+  const seated = allEntries.filter(e => e.restaurant_id === restaurantId && e.status === "seated");
+  const queueCount = active.length;
+  const totalWaitingPeople = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
+  const activeDiners = [...active, ...seated].reduce((s, e) => s + Number(e.party_size || 0), 0);
+  const restaurant = await getRawRestaurant(restaurantId);
+  if (!restaurant) return;
+  const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
+  const occupiedTables = Math.min(totalTables, seated.length);
+  const availableTables = Math.max(0, totalTables - occupiedTables);
+  const aggregates = { queue_count: queueCount, total_waiting_people: totalWaitingPeople, active_diners: activeDiners, occupied_tables: occupiedTables, available_tables: availableTables };
+  await safeCommit([setDocument("restaurants", restaurantId, { ...restaurant, ...aggregates })]);
 }
 
-// Raw restaurant lookup that preserves password_hash for write-backs, falling
-// back to fallback seeds and Founder-added custom restaurants when Firestore is unavailable.
+// Raw restaurant lookup from Firestore ONLY. Throws on failure - NO memory fallback.
 async function getRawRestaurant(id) {
-  try {
-    const doc = await getDocument("restaurants", id);
-    if (doc) {
-      const pwdMap = global._pwdMap || {};
-      if (pwdMap[id]) {
-        return { ...doc, ...pwdMap[id] };
-      }
-      return doc;
-    }
-  } catch (error) {
-    if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      // fall through to in-memory sources below
-    } else {
-      throw error;
-    }
-  }
-  const fb = fallbackRestaurants.find(r => r.id === id);
-  if (fb) return { ...fb, ...(global._pwdMap?.[id] || {}) };
-  const custom = (global._customRestaurants || []).find(r => r.id === id);
-  if (custom) return { ...custom, ...(global._pwdMap?.[id] || {}) };
+  const doc = await getDocument("restaurants", id);
+  if (doc) return doc;
   return null;
 }
 
@@ -440,41 +390,17 @@ function publicRestaurant(r) {
 }
 
 async function ensureRestaurants() {
-  const deleted = global._deletedRestaurantIds || [];
-  const pwdMap = global._pwdMap || {};
-  const publicFallback = fallbackRestaurants.map(r => publicRestaurant({ ...r, ...(pwdMap[r.id] || {}) }));
-  const publicCustom = (global._customRestaurants || [])
-    .filter(r => !deleted.includes(r.id))
-    .map(r => publicRestaurant({ ...r, ...(pwdMap[r.id] || {}) }));
-let firestorePublic = [];
-    try {
-      const docs = await listCollection("restaurants");
-      firestorePublic = docs.filter(r => !deleted.includes(r.id)).map(publicRestaurant);
-    } catch (error) {
-      // Firestore quota (429) / 503 / 403 / 404 -> degrade to in-memory fallback only.
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
-  const byId = {};
-  for (const r of [...publicFallback, ...publicCustom]) byId[r.id] = r;
-  for (const r of firestorePublic) byId[r.id] = r; // Firestore wins when reachable
-  // Ensure every default venue carries its assigned meal_times even when the
-  // Firestore document was created without them (keeps customer filters
-  // and the wait engine deterministic across local + production).
-  const fallbackMeals = {};
-  for (const r of publicFallback) {
-    if (r.meal_times && r.meal_times.length) fallbackMeals[r.id] = r.meal_times;
+  const docs = await listCollection("restaurants");
+  const publicRestaurants = docs.map(publicRestaurant);
+  
+  // Seed default restaurants if Firestore is empty
+  if (!publicRestaurants.length) {
+    await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
+    const seededDocs = await listCollection("restaurants");
+    return seededDocs.map(publicRestaurant);
   }
-  for (const r of Object.values(byId)) {
-    if (!r.meal_times || r.meal_times.length === 0) {
-      r.meal_times = fallbackMeals[r.id] || ["Lunch", "Dinner"];
-    }
-  }
-  if (!firestorePublic.length && !global._customRestaurants.length) {
-    try {
-      await safeCommit(fallbackRestaurants.map(restaurant => setDocument("restaurants", restaurant.id, restaurant)));
-    } catch { /* best-effort seed; in-memory fallback already covers it */ }
-  }
-  return Object.values(byId).filter(r => !deleted.includes(r.id));
+  
+  return publicRestaurants;
 }
 
 const PROTO_PROFILES = {
@@ -758,25 +684,9 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "GET" && path === "/api/restaurants") {
-    // Lightweight storage-status probe: only verify that Firebase auth is
-    // reachable (the access token is cached at module scope, so this is ~free
-    // when warm). We deliberately DO NOT do a separate listCollection() probe
-    // here — ensureRestaurants() below is the single authoritative restaurants
-    // read, so the hot GET path issues one restaurants query, not two.
-    let storageStatus = "firebase";
-    let storageReason = null;
-    try {
-      await getAccessToken();
-    } catch (error) {
-      storageStatus = "memory";
-      storageReason = String(error.message || error || "Firebase unreachable").slice(0, 250);
-    }
     const restaurants = await ensureRestaurants();
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const queueEntries = allQueueEntries(firestoreEntries);
-    // GET stays a fast, non-blocking read: no background simulation ticks
-    // are triggered here, so customer page loads never block on writes.
     let globalAnnouncement = "";
     try {
       const g = await getDocument("settings", "global_announcement");
@@ -787,14 +697,9 @@ async function route(request, response, pathParts) {
       const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
       const realParties = realActive.length;
       const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
-      // Exact live sum of active diners (waiting + notified + seated) across all
-      // sources (walk-in, remote) currently in Firebase.
       const activeDinerEntries = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","seated"].includes(entry.status));
       const realActiveDiners = activeDinerEntries.reduce((s,e)=>s+Number(e.party_size||0),0);
       const liveStats = await getLiveStats(restaurant, queueEntries);
-      // IST time-of-day meal-slot baseline (pure math, zero Firestore writes) with
-      // real Firebase testers added on top. Drives realistic wait times and the
-      // "X diners live" counter.
       const metrics = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
       liveStats.estimated_wait_mins = metrics.estimated_wait_mins;
       liveStats.queue_count = realParties;
@@ -804,9 +709,8 @@ async function route(request, response, pathParts) {
     const body = { 
       restaurants: result,
       global_announcement: globalAnnouncement,
-      storage_status: storageReason ? `memory: ${storageReason}` : "firebase",
-      storage_backend: storageStatus,
-      ...(storageReason ? { storage_error: storageReason, storage_reason: storageReason } : {})
+      storage_status: "firebase",
+      storage_backend: "firebase"
     };
     return send(response, 200, body);
   }
@@ -856,27 +760,16 @@ async function route(request, response, pathParts) {
 
     // Handle background re-sync (_rejoin flag from frontend after cold start)
     if (body._rejoin && body._original_ticket_id) {
-      let existingTicket;
-      try {
-        existingTicket = await fetchQueueEntry(body._original_ticket_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          existingTicket = global._tickets[body._original_ticket_id] || null;
-        } else {
-          throw error;
-        }
-      }
+      const existingTicket = await fetchQueueEntry(body._original_ticket_id);
       if (existingTicket) {
         // Ticket exists, return it with the same ID
-        global._tickets[body._original_ticket_id] = { ...existingTicket };
         const promised = existingTicket.promised_wait_mins ?? existingTicket.estimated_wait_mins ?? 10;
         return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: promised, promised_wait_mins: promised, message: "Ticket re-synced." });
       }
       // If original ticket truly gone, fall through to create new (but this shouldn't happen with localStorage persistence)
     }
 
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
 
     // Strict 60-second deduplication on real customer joins:
@@ -962,47 +855,16 @@ async function route(request, response, pathParts) {
       parties_ahead: partiesAhead,
       isRealHuman: true
     };
-    try {
-      await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        global._tickets[ticketId] = { ...ticket };
-      } else {
-        throw error;
-      }
-    }
-    global._tickets[ticketId] = global._tickets[ticketId] || { ...ticket };
+    await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
     return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, estimated_wait_mins: promisedWait, promised_wait_mins: promisedWait, parties_ahead: partiesAhead, position_in_line: partiesAhead + 1, message: `Spot confirmed! Your ticket is ${ticketNumber}.` });
   }
 
   if (request.method === "GET" && path.startsWith("/api/queue/ticket/")) {
     const id = pathParts[pathParts.length - 1];
-    let ticket;
-    try {
-      ticket = await fetchQueueEntry(id);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        ticket = global._tickets[id] || null;
-      } else {
-        throw error;
-      }
-    }
+    const ticket = await fetchQueueEntry(id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
-    let restaurant;
-    try {
-      restaurant = await getDocument("restaurants", ticket.restaurant_id);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        restaurant = null;
-      } else {
-        throw error;
-      }
-    }
-    if (!restaurant) {
-      restaurant = await findRestaurantById(ticket.restaurant_id).catch(() => null);
-    }
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const restaurant = await getDocument("restaurants", ticket.restaurant_id);
+    const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
@@ -1018,8 +880,7 @@ async function route(request, response, pathParts) {
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const suppliedPwd = request.headers["x-restaurant-password"] || request.query?.password;
     if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Restaurant password required." });
-    let firestoreQueue = [];
-    try { firestoreQueue = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreQueue = await fetchQueueEntries();
     const queue = allQueueEntries(firestoreQueue);
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
@@ -1049,8 +910,7 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/analytics") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const queueEntries = allQueueEntries(firestoreEntries);
     const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
@@ -1067,17 +927,9 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && path === "/api/queue/action") {
     const body = request.body || {};
-    let ticket;
-    try {
-      ticket = await fetchQueueEntry(body.ticket_id);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        ticket = global._tickets[body.ticket_id] || null;
-      } else {
-        throw error;
-      }
-    }
-    let updates = ticket ? { ...ticket } : null;
+    const ticket = await fetchQueueEntry(body.ticket_id);
+    if (!ticket) return send(response, 404, { error: "Ticket not found" });
+    let updates = { ...ticket };
     if (body.action === "seat_self") {
       if (!ticket) {
         const restId = body.restaurant_id || "rest-1";
@@ -1114,67 +966,14 @@ async function route(request, response, pathParts) {
         updates.has_arrived = true;
       }
     } else if (body.action === "arrived") {
-      if (!ticket) {
-        // Cold start: ticket not in memory but diner says they arrived.
-        // Return 200 OK with a reconstructed ticket so the frontend never sees "no active ticket".
-        const restId = body.restaurant_id || "rest-1";
-        const now = Date.now();
-        updates = {
-          id: body.ticket_id,
-          ticket_number: await nextTicketNumber(),
-          restaurant_id: restId,
-          customer_name: body.customer_name || "Arrived Guest",
-          phone: "",
-          party_size: 2,
-          seating_pref: "First Available",
-          special_requests: "",
-          entry_type: "remote",
-          status: "waiting",
-          estimated_wait_mins: 8,
-          actual_wait_mins: 0,
-          joined_at: now - 300000,
-          notified_at: null,
-          arrived_at: now,
-          arrived_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
-          seated_at: null,
-          seated_time_ist: null,
-          has_arrived: true,
-          delay_mins: 0
-        };
-      } else {
-        updates.has_arrived = true;
-        updates.arrived_at = Date.now();
-        updates.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
-        // Keep status as "waiting" - customer has arrived but not yet seated
-        updates.status = "waiting";
-      }
+      updates.has_arrived = true;
+      updates.arrived_at = Date.now();
+      updates.arrived_time_ist = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+      // Keep status as "waiting" - customer has arrived but not yet seated
+      updates.status = "waiting";
     } else if (body.action === "delay") {
-      if (!ticket) {
-        // Cold start: create a minimal delayed ticket and return 200 OK
-        const restId = body.restaurant_id || "rest-1";
-        updates = {
-          id: body.ticket_id,
-          ticket_number: await nextTicketNumber(),
-          restaurant_id: restId,
-          customer_name: body.customer_name || "Delayed Guest",
-          phone: "",
-          party_size: 2,
-          seating_pref: "First Available",
-          special_requests: "",
-          entry_type: "remote",
-          status: "delayed",
-          estimated_wait_mins: 10,
-          actual_wait_mins: 0,
-          joined_at: Date.now() - 300000,
-          notified_at: null,
-          seated_at: null,
-          has_arrived: false,
-          delay_mins: Number(body.minutes || 5)
-        };
-      } else {
-        updates.delay_mins = Number(ticket.delay_mins || 0) + Number(body.minutes || 5);
-        updates.status = "delayed";
-      }
+      updates.delay_mins = Number(ticket.delay_mins || 0) + Number(body.minutes || 5);
+      updates.status = "delayed";
     } else if (body.action === "cancel") {
       if (!ticket) {
         return send(response, 404, { error: "Ticket not found" });
@@ -1182,42 +981,14 @@ async function route(request, response, pathParts) {
       updates.status = "cancelled";
     } else if (body.action === "seated") {
       // Diner confirms they've been seated ("I'm at the Venue" post-seating check-in)
-      if (!ticket) {
-        // Cold start: reconstruct a seated ticket so the diner's pass stays valid
-        const restId = body.restaurant_id || "rest-1";
-        const now = Date.now();
-        updates = {
-          id: body.ticket_id,
-          ticket_number: await nextTicketNumber(),
-          restaurant_id: restId,
-          customer_name: body.customer_name || "Seated Guest",
-          phone: "",
-          party_size: 2,
-          seating_pref: "First Available",
-          special_requests: "",
-          entry_type: "remote",
-          status: "seated",
-          estimated_wait_mins: 8,
-          actual_wait_mins: 10,
-          joined_at: now - 600000,
-          notified_at: null,
-          arrived_at: now,
-          arrived_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
-          seated_at: now,
-          seated_time_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
-          has_arrived: true,
-          delay_mins: 0
-        };
-      } else {
-        const now = Date.now();
-        updates.status = "seated";
-        updates.arrived_at = now;
-        updates.arrived_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
-        updates.seated_at = now;
-        updates.seated_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
-        updates.has_arrived = true;
-        updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
-      }
+      const now = Date.now();
+      updates.status = "seated";
+      updates.arrived_at = now;
+      updates.arrived_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+      updates.seated_at = now;
+      updates.seated_time_ist = new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST';
+      updates.has_arrived = true;
+      updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
     } else if (body.action === "rate") {
       // Save the post-seating 1-5 star rating and mark the ticket as rated.
       // A submitted rating always implies the party was seated, so enforce the
@@ -1253,32 +1024,14 @@ async function route(request, response, pathParts) {
       if (!updates.rated_at) updates.rated_at = Date.now();
       if (!updates.rated_time_ist) updates.rated_time_ist = formatIST(updates.rated_at);
     } else return send(response, 400, { error: "Unknown action" });
-    try {
-      await safeCommit([setDocument("queue_entries", updates.id, toNumberedEntry(updates))]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else {
-        throw error;
-      }
-    }
-    global._tickets[updates.id] = updates;
+    await safeCommit([setDocument("queue_entries", updates.id, toNumberedEntry(updates))]);
     return send(response, 200, { success: true, message: "Queue action saved.", ticket: updates });
   }
 
   if (request.method === "POST" && path === "/api/host/action") {
     const suppliedPwd = request.headers["x-restaurant-password"] || body.password;
     if (body.action === "notify" || body.action === "seat" || body.action === "remove") {
-      let ticket;
-      try {
-        ticket = await fetchQueueEntry(body.ticket_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          ticket = global._tickets[body.ticket_id] || null;
-        } else {
-          throw error;
-        }
-      }
+      const ticket = await fetchQueueEntry(body.ticket_id);
       if (!ticket) return send(response, 404, { error: "Ticket not found" });
       const restaurant = await findRestaurantById(ticket.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
@@ -1297,130 +1050,45 @@ async function route(request, response, pathParts) {
         updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000)); 
       }
       if (body.action === "remove") updates.status = "no_show";
-      try {
-        await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-        } else {
-          throw error;
-        }
-      }
-      global._tickets[ticket.id] = updates;
+      await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
       return send(response, 200, { success: true, message: "Host action saved." });
     }
     if (body.action === "toggle_queue") {
-      let restaurant;
-      try {
-        restaurant = await getRawRestaurant(body.restaurant_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          restaurant = null;
-        } else {
-          throw error;
-        }
-      }
+      const restaurant = await getRawRestaurant(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
         return send(response, 401, { error: "Invalid restaurant password." });
       }
       const newState = Boolean(body.is_open);
-      try {
-        await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-        } else {
-          throw error;
-        }
-      }
-      global._pwdMap = global._pwdMap || {};
-      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
-      global._pwdMap[restaurant.id].is_queue_open = newState;
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
       return send(response, 200, { success: true, message: "Queue status updated." });
     }
 
     if (body.action === "update_announcement") {
-      let restaurant;
-      try {
-        restaurant = await getRawRestaurant(body.restaurant_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          restaurant = null;
-        } else {
-          throw error;
-        }
-      }
-      if (!restaurant) {
-        restaurant = null;
-      }
+      const restaurant = await getRawRestaurant(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
         return send(response, 401, { error: "Invalid restaurant password." });
       }
       const announcement = String(body.announcement || '');
-      try {
-        await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, announcement })]);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-        } else {
-          throw error;
-        }
-      }
-      global._pwdMap = global._pwdMap || {};
-      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
-      global._pwdMap[restaurant.id].announcement = announcement;
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, announcement })]);
       return send(response, 200, { success: true, message: "Announcement published.", announcement });
     }
 
     if (body.action === "update_wait_estimate") {
-      let restaurant;
-      try {
-        restaurant = await getRawRestaurant(body.restaurant_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          restaurant = null;
-        } else {
-          throw error;
-        }
-      }
-      if (!restaurant) {
-        restaurant = null;
-      }
+      const restaurant = await getRawRestaurant(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
         return send(response, 401, { error: "Invalid restaurant password." });
       }
-      try {
-        await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-        } else {
-          throw error;
-        }
-      }
-      global._pwdMap = global._pwdMap || {};
-      if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
-      global._pwdMap[restaurant.id].manual_override_wait = body.manual_wait_mins;
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
       return send(response, 200, { success: true, message: "Wait time estimate updated." });
     }
     if (body.action === "add_walkin") {
-      let restaurant;
-      try {
-        restaurant = await findRestaurantById(body.restaurant_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          restaurant = null;
-        } else {
-          throw error;
-        }
-      }
+      const restaurant = await findRestaurantById(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
       if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Invalid restaurant password." });
-      let firestoreWalkinEntries = [];
-      try { firestoreWalkinEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+      const firestoreWalkinEntries = await fetchQueueEntries();
       const entries = allQueueEntries(firestoreWalkinEntries);
       // Permanent ticket number from the atomic counter (generated once).
       const ticketNumber = await nextTicketNumber();
@@ -1434,18 +1102,9 @@ async function route(request, response, pathParts) {
       const partiesAheadWalkin = Math.max(0, realPartiesWalkin - availableTablesWalkin);
       const promisedWalkin = getEstimatedWaitMinutes(restaurant, partiesAheadWalkin, availableTablesWalkin);
       const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: promisedWalkin, promised_wait_mins: promisedWalkin, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0, parties_ahead: realPartiesWalkin };
-      try {
-        await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
-        // Update aggregates after adding walk-in guest
-        await updateRestaurantAggregates(body.restaurant_id);
-      } catch (error) {
-        if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-          global._tickets[ticketId] = { ...ticket };
-        } else {
-          throw error;
-        }
-      }
-      global._tickets[ticketId] = global._tickets[ticketId] || { ...ticket };
+      await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
+      // Update aggregates after adding walk-in guest
+      await updateRestaurantAggregates(body.restaurant_id);
       return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, message: "Walk-in guest added." });
     }
     return send(response, 400, { error: "Unknown host action" });
@@ -1540,27 +1199,14 @@ async function route(request, response, pathParts) {
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
 
     // Remove queue entries for this restaurant from Firestore
-    try {
-      const entries = await fetchQueueEntries();
-      const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
-        delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
-      }));
-      if (deletes.length) await safeCommit(deletes);
-    } catch (error) {
-      if (!(error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError)) throw error;
-    }
+    const entries = await fetchQueueEntries();
+    const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
+      delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
+    }));
+    if (deletes.length) await safeCommit(deletes);
 
     // Remove the restaurant document from Firestore
-    try {
-      await safeCommit([{ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
-    } catch (error) {
-      if (!(error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError)) throw error;
-    }
-
-    // Tombstone so deleted venues stay deleted even without Firestore
-    global._deletedRestaurantIds = global._deletedRestaurantIds || [];
-    if (!global._deletedRestaurantIds.includes(restaurantId)) global._deletedRestaurantIds.push(restaurantId);
-    global._customRestaurants = (global._customRestaurants || []).filter(r => r.id !== restaurantId);
+    await safeCommit([{ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
 
     return send(response, 200, { success: true, message: "Restaurant removed from WaitMate Mumbai network." });
   }
@@ -1571,11 +1217,6 @@ async function route(request, response, pathParts) {
     const id = `rest-${Date.now().toString().slice(-6)}`;
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", meal_times: normalizeMealTimes(body.meal_times), image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
-
-    global._customRestaurants = global._customRestaurants || [];
-    global._pwdMap = global._pwdMap || {};
-    global._pwdMap[id] = { password_hash: restaurant.password_hash };
-    global._customRestaurants.push(sanitizeRestaurant(restaurant));
 
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
   }
@@ -1589,8 +1230,6 @@ async function route(request, response, pathParts) {
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
     const newHash = hashPassword(nextPwd);
-    global._pwdMap = global._pwdMap || {};
-    global._pwdMap[restaurant.id] = { ...(global._pwdMap[restaurant.id] || {}), password_hash: newHash };
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Restaurant password updated successfully." });
   }
@@ -1602,8 +1241,6 @@ async function route(request, response, pathParts) {
     const nextPwd = String(body.new_password || "").trim();
     if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
     const newHash = hashPassword(nextPwd);
-    global._pwdMap = global._pwdMap || {};
-    global._pwdMap[restaurant.id] = { ...(global._pwdMap[restaurant.id] || {}), password_hash: newHash };
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Password reset successfully." });
   }
@@ -1818,10 +1455,30 @@ async function route(request, response, pathParts) {
     let firestoreEntries = [];
     try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
     const queueEntries = allQueueEntries(firestoreEntries);
-    const result = restaurants.map(r => {
+    const result = [];
+    for (const r of restaurants) {
       const realActive = queueEntries.filter(e => e.restaurant_id === r.id && ["waiting","notified","delayed"].includes(e.status));
-      return { ...sanitizeRestaurant(r), live_stats: getLiveStats(r, queueEntries), reliability: reliabilityFromRestaurant(r), announcement: r.announcement || '', active_parties: realActive.length };
-    });
+      const seated = queueEntries.filter(e => e.restaurant_id === r.id && e.status === "seated");
+      const rated = queueEntries.filter(e => e.restaurant_id === r.id && e.rated && Number(e.rating) > 0);
+      const ratingCount = rated.length;
+      const averageRating = ratingCount
+        ? Math.round((rated.reduce((s, e) => s + Number(e.rating || 0), 0) / ratingCount) * 10) / 10
+        : Number(r.average_rating || 0);
+      const liveStats = await getLiveStats(r, queueEntries);
+      liveStats.queue_count = realActive.length;
+      liveStats.total_waiting_people = realActive.reduce((s, e) => s + Number(e.party_size || 0), 0);
+      result.push({
+        ...sanitizeRestaurant(r),
+        live_stats: liveStats,
+        reliability: reliabilityFromRestaurant(r),
+        announcement: r.announcement || '',
+        active_parties: realActive.length,
+        seated_parties: seated.length,
+        seated_diners: seated.reduce((s, e) => s + Number(e.party_size || 0), 0),
+        average_rating: averageRating,
+        rating_count: ratingCount
+      });
+    }
     return send(response, 200, { success: true, restaurants: result });
   }
 
