@@ -592,6 +592,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
+  allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
+  renderRestaurantsGrid();
+
   // ---- App Launch Splash Screen: pre-load data while logo is centered ----
   const splashEl = document.getElementById('appSplash');
   const splashParams = new URLSearchParams(window.location.search);
