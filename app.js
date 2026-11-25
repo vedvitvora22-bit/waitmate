@@ -393,36 +393,6 @@ const RATED_STORAGE_KEY = 'waitmate_rated_tickets';
 let favorites = new Set();
 const FAVORITES_STORAGE_KEY = 'wm_favorites';
 
-// Unique device id used to enforce one active queue ticket per device.
-// Generated once and persisted in localStorage; sent with every join request.
-const DEVICE_ID_KEY = 'waitmate_device_id';
-let deviceId = null;
-function getOrCreateDeviceId() {
-  if (deviceId) return deviceId;
-  try {
-    deviceId = localStorage.getItem(DEVICE_ID_KEY);
-    if (!deviceId) {
-      const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
-      deviceId = uuid;
-      localStorage.setItem(DEVICE_ID_KEY, deviceId);
-    }
-  } catch (e) {
-    deviceId = 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
-  }
-  return deviceId;
-}
-
-// Returns true when a stored ticket is still active (waiting / arrived, not
-// expired or any terminal state), so a device can't hold two active queues.
-function isLocalTicketActive(ticket) {
-  if (!ticket) return false;
-  const st = String(ticket.status || '').toLowerCase();
-  if (st === 'expired' || st === 'cancelled' || st === 'seated' || st === 'no_show' || st === 'completed' || st === 'left') return false;
-  return st === 'waiting' || st === 'arrived' || ticket.has_arrived === true;
-}
-
 function loadFavorites() {
   try {
     const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
@@ -713,7 +683,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
   await initPushNotifications();
   loadFavorites();
-  getOrCreateDeviceId(); // generate/persist the device id used for one-active-ticket-per-device
   startRestaurantsRefresh();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking.
@@ -722,9 +691,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // title when there is no active waitlist session.
   try {
     const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
-    // Hard-terminal states never resume (no rating is owed for these). Expired
-    // tickets are cleared so the diner can join fresh with a "Ticket Expired" state.
-    const hardTerminal = ['cancelled', 'completed', 'no_show', 'expired'];
+    // Hard-terminal states never resume (no rating is owed for these).
+    const hardTerminal = ['cancelled', 'completed', 'no_show'];
     // A seated-but-unrated visit must resume on the rating screen after a reload
     // rather than dropping the diner back to the browsing view.
     const seatedUnrated = !!(saved && saved.data && saved.data.status === 'seated' && !saved.data.rated);
@@ -750,9 +718,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         openFeedbackModal(activeTicketData);
       }
     } else if (saved && saved.id) {
-      if (saved.data && saved.data.status === 'expired') {
-        showToast('Ticket Expired – your pass has passed its arrival window. Join a fresh queue.', 'error');
-      }
       clearCurrentTicket();
     }
   } catch (e) { /* ignore corrupt storage */ }
@@ -1705,66 +1670,93 @@ function renderFounderData(data) {
   const walkawaySaved = Math.min(98, 82 + (sum.total_seated_diners || 0));
   setFounderText('fndWalkawaySaved', `${walkawaySaved}% Walkaway Saved`);
 
-  // Render Restaurants Network Table (Founder control row per venue)
   try {
-    const restTbody = document.getElementById('fndRestaurantsTable');
-    const venues = (data.restaurants || founderRestaurantsCache || []);
-    if (restTbody) {
-      setFounderText('fndVenueCountBadge', `${venues.length} venues`);
-      if (venues.length > 0) {
-        restTbody.innerHTML = venues.map(r => {
-          const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true, total_waiting_people: 0 };
-          const rel = r.reliability || { score: 95, grade: 'A+', avg_variance_mins: 1.5 };
-          const isOpen = Boolean(stats.is_queue_open);
-          const id = r.id;
-          const nameJs = jsEscape(r.name);
-          return `
-            <tr class="hover:bg-slate-50 transition">
-              <td class="py-3 px-4">
-                <div class="font-bold text-slate-900">${escapeHtml(r.name)}</div>
-                <div class="text-[11px] text-slate-600">📍 ${escapeHtml(r.city || 'Mumbai')} • ${escapeHtml(r.category || '')}</div>
-              </td>
-              <td class="py-3 px-4">
-                <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
-                  ${r.type === 'food_truck' ? '🚚 Food Truck' : '🍽️ Dine-in'}
-                </span>
-                <span class="font-bold text-slate-700 ml-1">${escapeHtml(r.price_range)}</span>
-                <div class="mt-1.5 flex flex-wrap gap-1">
-                  ${((r.meal_times || ['Lunch','Dinner']).map((m) => `<span class="meal-tag px-1.5 py-0.5 rounded text-[9px] font-bold border bg-orange-50 text-orange-800 border-orange-100">${escapeHtml(m)}</span>`).join(''))}
-                </div>
-              </td>
-              <td class="py-3 px-4">
-                <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
-                <div class="text-[10px] text-slate-600">Wait: ~${stats.estimated_wait_mins}m ${stats.has_manual_override ? '<span class="text-orange-600 font-bold ml-1">Manual Override</span>' : ''}</div>
-              </td>
-              <td class="py-3 px-4">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-black ${rel.score >= 85 ? 'text-emerald-700' : rel.score >= 75 ? 'text-amber-700' : 'text-rose-700'}">${rel.score}%</span>
-                  <span class="badge-tag ${rel.score >= 85 ? 'bg-emerald-50 text-emerald-800' : rel.score >= 75 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'} text-[10px] font-bold">Grade ${rel.grade}</span>
-                </div>
-                <div class="text-[10px] text-slate-600">± ${rel.avg_variance_mins || 1.5}m variance</div>
-              </td>
-              <td class="py-3 px-4 text-right">
-                <div class="flex items-center justify-end gap-1.5">
-                  <button onclick="openVenueQrModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
-                    <i data-lucide="qr-code" class="w-3 h-3"></i> <span>QR Code</span>
-                  </button>
-                  <button onclick="openFounderResetPasswordModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
-                    <i data-lucide="key" class="w-3 h-3"></i> Change Password
-                  </button>
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join('');
-      } else {
-        restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-600">No restaurants registered yet.</td></tr>`;
-      }
+  // Render Restaurants Network Table (Founder control row per venue)
+  const restTbody = document.getElementById('fndRestaurantsTable');
+  const venues = (data.restaurants || founderRestaurantsCache || []);
+  if (restTbody) {
+    setFounderText('fndVenueCountBadge', `${venues.length} venues`);
+    if (venues.length > 0) {
+      restTbody.innerHTML = venues.map(r => {
+        const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true, total_waiting_people: 0 };
+        const rel = r.reliability || { score: 95, grade: 'A+', avg_variance_mins: 1.5 };
+        const isOpen = Boolean(stats.is_queue_open);
+        const id = r.id;
+        const nameJs = jsEscape(r.name);
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${escapeHtml(r.name)}</div>
+              <div class="text-[11px] text-slate-600">📍 ${escapeHtml(r.city || 'Mumbai')} • ${escapeHtml(r.category || '')}</div>
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge-tag bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
+                ${r.type === 'food_truck' ? '🚚 Food Truck' : '🍽️ Dine-in'}
+              </span>
+              <span class="font-bold text-slate-700 ml-1">${escapeHtml(r.price_range)}</span>
+              <div class="mt-1.5 flex flex-wrap gap-1">
+                ${((r.meal_times || ['Lunch','Dinner']).map((m) => `<span class="meal-tag px-1.5 py-0.5 rounded text-[9px] font-bold border bg-orange-50 text-orange-800 border-orange-100">${escapeHtml(m)}</span>`).join(''))}
+              </div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${stats.queue_count} parties (${stats.total_waiting_people || 0} guests)</div>
+              <div class="text-[10px] text-slate-600">Wait: ~${stats.estimated_wait_mins}m ${stats.has_manual_override ? '<span class="text-orange-600 font-bold ml-1">Manual Override</span>' : ''}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-1.5">
+                <span class="font-black ${rel.score >= 85 ? 'text-emerald-700' : rel.score >= 75 ? 'text-amber-700' : 'text-rose-700'}">${rel.score}%</span>
+                <span class="badge-tag ${rel.score >= 85 ? 'bg-emerald-50 text-emerald-800' : rel.score >= 75 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'} text-[10px] font-bold">Grade ${rel.grade}</span>
+              </div>
+              <div class="text-[10px] text-slate-600">± ${rel.avg_variance_mins || 1.5}m variance</div>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="founderToggleQueue('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition ${isOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}">
+                  ${isOpen ? 'Pause Queue' : 'Open Queue'}
+                </button>
+                <button onclick="founderOpenHostStand('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="login" class="w-3 h-3"></i> Host Stand
+                </button>
+                <button onclick="openFounderEditRestaurantModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1">
+                  <i data-lucide="edit-3" class="w-3 h-3"></i> Edit
+                </button>
+                <button onclick="openVenueQrModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="qr-code" class="w-3 h-3"></i> <span>Generate QR Code</span>
+                </button>
+                <button onclick="openFounderResetPasswordModal('${id}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1">
+                  <i data-lucide="key" class="w-3 h-3"></i> Reset Pwd
+                </button>
+                <button onclick="founderClearVenueQueue('${id}', '${nameJs}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Clear Queue
+                </button>
+                <button onclick="founderDeleteRestaurant('${id}', '${nameJs}')" class="px-2.5 py-1 rounded text-xs font-bold transition bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Remove
+                </button>
+              </div>
+              <div class="flex items-center justify-end gap-1.5 mt-1">
+                <input type="number" id="fnd-wait-${id}" min="0" max="180" placeholder="Wait" class="w-16 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-orange-500 focus:outline-none">
+                <button onclick="founderSetManualWait('${id}')" class="px-2 py-1 bg-orange-50 text-orange-700 rounded text-[10px] font-bold hover:bg-orange-100 border border-orange-200 transition">Set Wait</button>
+                <input type="number" id="fnd-score-${id}" min="0" max="100" placeholder="Score" class="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                <button onclick="founderSetReliability('${id}')" class="px-2 py-1 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold hover:bg-emerald-100 border border-emerald-200 transition">Set Score</button>
+              </div>
+              <div class="flex items-center justify-end gap-1.5 mt-1">
+                <input type="text" id="fnd-ann-${id}" placeholder="Announcement" class="w-32 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                <button onclick="founderSetAnnouncement('${id}')" class="px-2 py-1 bg-amber-50 text-amber-700 rounded text-[10px] font-bold hover:bg-amber-100 border border-amber-200 transition">Publish</button>
+                <button onclick="founderSetAnnouncement('${id}', '')" class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] hover:bg-slate-200 border border-slate-200 transition">Clear</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      restTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-600">No restaurants registered yet.</td></tr>`;
     }
+  }
+
   } catch (err) { console.error(err); }
 
-  // Render Live Cross-Platform Queue Stream (every active party, all venues)
   try {
+  // Render Live Cross-Platform Queue Stream (every active party, all venues)
   const queueTbody = document.getElementById('fndLiveQueuesTable');
   const queues = data.recent_queues || founderQueuesCache || [];
   if (queueTbody) {
@@ -1829,10 +1821,12 @@ function renderFounderData(data) {
     } else {
       queueTbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-400">No live queue activity currently.</td></tr>`;
     }
+  }
+
   } catch (err) { console.error(err); }
 
-  // Render Reliability Audit Watchdog — all reviews across the network
   try {
+  // Render Reliability Audit Watchdog — all reviews across the network
   const reviewList = document.getElementById('fndRecentReviewsList');
   const reviews = data.recent_reviews || founderReviewsCache || [];
   if (reviewList) {
@@ -1883,6 +1877,8 @@ ${reviews.map(rev => {
   } catch (err) { console.error(err); }
 
   lucide.createIcons();
+}
+
 async function founderToggleQueue(restId) {
   try {
     const res = await fetch('/api/founder/restaurant/toggle', {
