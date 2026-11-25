@@ -42,9 +42,12 @@ function togglePasswordVisibility(inputId) {
 function getSafeEntries(data) {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object') {
-    if (Array.isArray(data.entries)) return data.entries;
-    if (Array.isArray(data.queue)) return data.queue;
-    if (Array.isArray(data.restaurants)) return data.restaurants;
+  if (Array.isArray(data.entries)) return data.entries;
+  if (Array.isArray(data.queue)) return data.queue;
+  if (Array.isArray(data.queues)) return data.queues;
+  if (Array.isArray(data.restaurants)) return data.restaurants;
+  if (Array.isArray(data.venues)) return data.venues;
+  if (Array.isArray(data.reviews)) return data.reviews;
   }
   return [];
 }
