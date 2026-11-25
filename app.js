@@ -3558,6 +3558,29 @@ function initFbStarRating() {
   });
 }
 
+// Paint the post-seating 1–5★ feedback widget. Referenced by openFeedbackModal()
+// (reset to 0) and the star buttons in initFbStarRating(); without this the rating
+// modal threw before un-hiding, so seated diners never saw the rating screen.
+function updateFbStarDisplay(rating) {
+  const starBtns = document.querySelectorAll('#fbStarRating .fb-star-btn');
+  const ratingDisplay = document.getElementById('fbStarDisplay');
+  const ratingInput = document.getElementById('fbStarInput');
+
+  starBtns.forEach(btn => {
+    const star = parseInt(btn.dataset.star);
+    if (star <= rating) {
+      btn.classList.remove('text-slate-300');
+      btn.classList.add('text-amber-400');
+    } else {
+      btn.classList.remove('text-amber-400');
+      btn.classList.add('text-slate-300');
+    }
+  });
+
+  if (ratingDisplay) ratingDisplay.textContent = rating > 0 ? `${rating} / 5` : '';
+  if (ratingInput) ratingInput.value = String(rating);
+}
+
 function resetReviewWidget() {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
   const ratingInput = document.getElementById('reviewRatingInput');
@@ -3979,7 +4002,10 @@ function renderHostDashboard() {
   const stats = hostData.live_stats;
   const rel = hostData.reliability;
   const queue = hostData.queue || [];
-  const visibleQueue = queue;
+  // Host waiting table shows only live parties. Seated (and no_show/cancelled)
+  // guests drop off cleanly here while their Firestore doc stays alive for the
+  // diner's 1–5★ rating screen.
+  const visibleQueue = queue.filter(q => q && ['waiting', 'notified', 'delayed'].includes(q.status));
 
   document.getElementById('hostVenueName').textContent = r.name;
   document.getElementById('hostVenueLocationSub').textContent = `${r.address} • Host Stand Dashboard`;
