@@ -663,6 +663,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ---- App Launch Splash Screen: exactly 750ms centered logo with pulse ----
   const splashEl = document.getElementById('appSplash');
 
+  // Determine whether to skip the splash + onboarding entirely: founder access
+  // or a shared ticket/pass deep-link should go straight to the app.
+  const _skipParams = new URLSearchParams(window.location.search);
+  const _isFounder = window.location.pathname === '/founder' ||
+    window.location.pathname.endsWith('/founder') ||
+    _skipParams.get('founder') === '1' ||
+    window.location.hash === '#founder';
+  const _hasTicketLink = !!(_skipParams.get('ticket') || _skipParams.get('passId'));
+  const _skipSplash = _isFounder || _hasTicketLink;
+
   // Fire initial data fetches immediately while the splash is visible.
   const dataPromise = (async () => {
     try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
@@ -670,11 +680,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
   })();
 
-  // Exactly 750ms splash visibility, no deep-link shortcuts for the brand experience
   const SPLASH_DURATION_MS = 750;
-  const splashReadyAt = Date.now() + SPLASH_DURATION_MS;
-
-  let splashResolved = false;
 
   function finishSplash() {
     if (splashEl) {
@@ -687,16 +693,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Exactly 750ms splash visibility, then transition directly (data continues in background).
-  await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
-  if (!splashResolved) { splashResolved = true; finishSplash(); }
-  await new Promise(resolve => setTimeout(resolve, 300));
+  if (_skipSplash) {
+    // Skip splash and onboarding entirely for founder / shared-ticket deep-links.
+    if (splashEl) {
+      splashEl.classList.add('is-hidden');
+      splashEl.setAttribute('aria-hidden', 'true');
+    }
+    const om = document.getElementById('onboardingModal');
+    if (om) om.classList.add('hidden');
+    // No artificial 750ms wait; proceed to the relevant interface immediately.
+  } else {
+    // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
+    // splash (z-index 9998 vs splash 9999). The splash covers it until it fades.
+    initOnboarding();
+
+    // Exactly 750ms splash visibility, then fade out ONLY the splash so the user
+    // lands directly on Slide 1 without ever flashing the customer discovery screen.
+    await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
+    finishSplash();
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
 
   // ---- end splash ----
-
-  // Initialize onboarding tour after splash screen
-  initOnboarding();
-
   try {
     const _params = new URLSearchParams(window.location.search);
     const _hash = (window.location.hash || '').toLowerCase();
