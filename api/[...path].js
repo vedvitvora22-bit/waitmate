@@ -769,12 +769,28 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/host/verify-password") {
-    const restaurant = await findRestaurantById(body.restaurant_id);
+    const restId = body.restaurant_id;
+    const password = body.password || "";
+    let restaurant = null;
+    let firestoreFailed = false;
+    try {
+      restaurant = await findRestaurantById(restId);
+    } catch (error) {
+      firestoreFailed = true;
+      console.warn(`[verify-password] Firestore read failed for ${restId}:`, error.message || error);
+    }
+    if (!restaurant) {
+      // Firestore unavailable or restaurant not in Firestore: fall back to the
+      // offline catalogue so every venue (incl. Chai Sutta Bar, Sardar Pav
+      // Bhaji, Juhu Tawa Junction, The Rameshwaram Cafe, etc.) always unlocks
+      // with its correct owner password.
+      restaurant = fallbackRestaurants.find(r => r.id === restId || String(r.name || "").toLowerCase() === String(restId || "").toLowerCase());
+    }
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    if (!verifyRestaurantPassword(restaurant, body.password)) {
+    if (!verifyRestaurantPassword(restaurant, password)) {
       return send(response, 401, { error: "Incorrect restaurant password." });
     }
-    return send(response, 200, { success: true, message: "Access granted." });
+    return send(response, 200, { success: true, message: "Access granted.", firestore_unavailable: firestoreFailed });
   }
 
   if (request.method === "POST" && path === "/api/queue/join") {
@@ -1778,9 +1794,13 @@ module.exports = async function handler(request, response) {
     await route(request, response, pathParts);
   } catch (error) {
     console.error("WaitMate API error:", error);
-    if (error.status === 503 || error.status === 403) return send(response, 503, { error: "Firebase permissions are not configured yet." });
-    if (error.status === 404) return send(response, 503, { error: "Firebase database is not available yet." });
-    if (error instanceof SyntaxError) return send(response, 503, { error: "Firebase credentials are malformed." });
+    // Surface the exact underlying cause (missing FIREBASE_SERVICE_ACCOUNT env
+    // var, malformed credentials, RSA signing failure, Firestore 403/429, etc.)
+    // so the failure can be diagnosed as a config issue vs a Firestore rule issue.
+    const underlying = String(error.message || error || "Firebase permissions are not configured yet.");
+    if (error.status === 503 || error.status === 403) return send(response, 503, { error: "Firebase permissions are not configured yet.", details: underlying });
+    if (error.status === 404) return send(response, 503, { error: "Firebase database is not available yet.", details: underlying });
+    if (error instanceof SyntaxError) return send(response, 503, { error: "Firebase credentials are malformed.", details: underlying });
     return send(response, 500, { error: error.message || "Unexpected server error." });
   }
 };
