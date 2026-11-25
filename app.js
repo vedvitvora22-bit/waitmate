@@ -2810,7 +2810,7 @@ function updateTicketUI() {
   } else if (isArrivedWaiting) {
     // Arrived at Venue — Waiting for Host screen
     document.title = "✓ Checked In at Entrance • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600";
     document.getElementById('ticketStatusMsg').textContent = "You're checked in at the entrance. The host will notify you when your table is ready.";
 
@@ -2827,7 +2827,7 @@ function updateTicketUI() {
 
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
-    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
@@ -2883,7 +2883,7 @@ function updateTicketUI() {
   } else {
     // Normal waiting
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
-    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + ' mins remaining'}`;
+    document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
     tableNearAlert.classList.add('hidden');
