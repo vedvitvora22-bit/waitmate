@@ -657,24 +657,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Wait for exactly 750ms AND data to settle (but never block past splash duration)
-  const waitForMin = new Promise(resolve => {
-    const tick = () => {
-      if (Date.now() >= splashReadyAt) return resolve();
-      setTimeout(tick, 16);
-    };
-    tick();
-  });
+  // Exactly 750ms splash visibility, then transition directly (data continues in background).
+  await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
+  if (!splashResolved) { splashResolved = true; finishSplash(); }
+  await new Promise(resolve => setTimeout(resolve, 300));
 
-  await Promise.race([
-    Promise.all([dataPromise, waitForMin.then(() => dataPromise)]),
-    new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS + 50)),
-  ]).then(() => { if (!splashResolved) { splashResolved = true; finishSplash(); } });
-
-  // Allow the fade-out animation to play before continuing initialization.
-  if (splashEl) {
-    await new Promise(resolve => setTimeout(resolve, 320));
-  }
   // ---- end splash ----
 
   // Initialize onboarding tour after splash screen
