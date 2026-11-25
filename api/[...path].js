@@ -1278,6 +1278,17 @@ async function route(request, response, pathParts) {
       updates.review_comment = updates.comment;
       updates.rated_at = Date.now();
       updates.rated_time_ist = formatIST(updates.rated_at);
+    } else if (body.action === "skip") {
+      // Diner dismissed the rating screen without submitting stars. Close the
+      // visit exactly once by persisting rated:true (and the seated invariants)
+      // so the real-time listener never re-opens the rating prompt for this
+      // ticket on reloads or other devices.
+      if (!ticket) return send(response, 404, { error: "Ticket not found" });
+      markSeated(updates);
+      updates.rated = true;
+      updates.skipped = true;
+      if (!updates.rated_at) updates.rated_at = Date.now();
+      if (!updates.rated_time_ist) updates.rated_time_ist = formatIST(updates.rated_at);
     } else return send(response, 400, { error: "Unknown action" });
     try {
       await safeCommit([setDocument("queue_entries", updates.id, toNumberedEntry(updates))]);

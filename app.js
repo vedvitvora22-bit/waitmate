@@ -3828,11 +3828,27 @@ async function submitDinerFeedback(e) {
 }
 
 // Diner explicitly skips rating: close the rating screen and reset the session
-// without saving a review. The ticket is marked as handled so the background
-// poll cannot re-open the rating prompt for this visit.
-function skipDinerFeedback() {
+// without saving a review. The ticket is marked as rated so the background poll
+// cannot re-open the rating prompt for this visit. We first persist rated:true on
+// the server (Firestore) and only THEN clear the local session, so the visit is
+// closed exactly once across reloads and other devices.
+async function skipDinerFeedback() {
   const ticketId = (document.getElementById('fbTicketId') || {}).value || currentTicketId || (activeTicketData && activeTicketData.id);
+  // Mark rated locally first so the in-flight poll can't re-open the prompt.
   if (ticketId) markTicketRated(ticketId);
+  // Persist rated:true (and the seated invariants) on the server before reset.
+  if (ticketId) {
+    try {
+      await fetch('/api/queue/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId, action: 'skip' })
+      });
+    } catch (err) {
+      // Offline: the local rated flag still prevents the prompt from reappearing.
+      console.warn('Skip sync warning:', err);
+    }
+  }
   document.getElementById('feedbackModal').classList.add('hidden');
   clearCurrentTicket();
   showToast("Rating skipped. Thanks for dining with us!", "info");
