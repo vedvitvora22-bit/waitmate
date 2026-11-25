@@ -7,6 +7,7 @@ const {
   commitWrites,
   setDocument,
   PROJECT_ID,
+  getProjectId,
   encodeSegment,
   isMemoryFallbackActive
 } = require("./_firestore");
@@ -711,7 +712,7 @@ async function route(request, response, pathParts) {
         demo_mode: String(process.env.DEMO_MODE || "").toLowerCase() === "true",
         restaurants: 0,
         active_queue_entries: 0,
-        firestore_project_id: PROJECT_ID
+        firestore_project_id: getProjectId()
       });
     }
     const restaurants = await listCollection("restaurants");
@@ -724,7 +725,7 @@ async function route(request, response, pathParts) {
       demo_mode: String(process.env.DEMO_MODE || "").toLowerCase() === "true",
       restaurants: restaurants.length,
       active_queue_entries: activeQueue.length,
-      firestore_project_id: PROJECT_ID
+      firestore_project_id: getProjectId()
     });
   }
 
@@ -748,7 +749,7 @@ async function route(request, response, pathParts) {
       reason: firestore_error,
       timestamp: new Date().toISOString(),
       timestamp_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
-      firestore_project_id: PROJECT_ID
+      firestore_project_id: getProjectId()
     });
   }
 

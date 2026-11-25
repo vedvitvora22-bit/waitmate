@@ -329,6 +329,8 @@ function isMemoryFallbackActive() {
   return useMemoryFallback;
 }
 
+function getProjectId() { return PROJECT_ID; }
+
 module.exports = {
   getAccessToken,
   firestoreRequest,
@@ -339,6 +341,7 @@ module.exports = {
   toFirestoreFields,
   fromFirestoreFields,
   PROJECT_ID,
+  getProjectId,
   encodeSegment,
   enableMemoryFallback,
   isMemoryFallbackActive
