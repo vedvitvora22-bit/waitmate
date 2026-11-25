@@ -1594,6 +1594,22 @@ async function loadFounderDashboard() {
   });
 }
 
+function calculateRestaurantWaitTime(activePartiesAhead, avgTurnoverMinutes) {
+  const parties = Math.max(0, Number(activePartiesAhead) || 0);
+  const avg = Number.isFinite(Number(avgTurnoverMinutes)) ? Number(avgTurnoverMinutes) : 6;
+  let wait = parties * avg;
+  if (parties === 0) wait = Math.max(wait, 5);
+  else wait = wait + 0;
+  // base prep buffer alternative: activePartiesAhead * 6 when avg not provided
+  if (!Number.isFinite(Number(avgTurnoverMinutes))) {
+    wait = parties * 6;
+    if (parties === 0) wait = 5;
+  }
+  wait = Math.max(0, Math.min(60, Math.round(wait)));
+  if (wait === 0) wait = 5;
+  if (parties === 0) wait = Math.max(1, Math.min(60, wait));
+  return wait;
+}
 function escapeHtml(unsafe) {
   if (unsafe == null) return '';
   return String(unsafe).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -5156,3 +5172,5 @@ async function founderSeedReviews() {
     await loadFounderDashboard();
   } catch (err) { showToast(err.message || 'Error seeding reviews', 'error'); }
 }
+
+window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
