@@ -371,7 +371,7 @@ async function safeCommit(writes) {
 
 async function nextTicketNumber() {
   const counterDoc = `projects/${PROJECT_ID}/databases/(default)/documents/counters/ticket_seq`;
-  const result = await commitWrites([
+  await commitWrites([
     {
       transform: {
         document: counterDoc,
@@ -379,10 +379,11 @@ async function nextTicketNumber() {
       }
     }
   ]);
-  const transformResults = result && result.writeResults && result.writeResults[0] && result.writeResults[0].transformResults;
-  const tr = transformResults && transformResults[0];
-  const seqValue = tr && tr.transformResult && tr.transformResult.integerValue;
-  const seq = Number(seqValue);
+  // Read back the counter to get the current seq value after the atomic increment.
+  // Firestore's commit response may not include transformResults in all cases,
+  // so reading the document directly is more reliable.
+  const counter = await getDocument("counters", "ticket_seq");
+  const seq = Number(counter?.seq || 0);
   if (Number.isFinite(seq) && seq > 0) {
     return `WM-${100 + seq}`;
   }
