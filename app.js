@@ -35,6 +35,20 @@ function togglePasswordVisibility(inputId) {
   if (window.lucide) lucide.createIcons();
 }
 
+// Normalize any API payload into a guaranteed Array. Accepts a bare array, or
+// an object wrapping the array under .entries / .queue, and falls back to []
+// for null / undefined / error objects / scalars so callers never crash on
+// .find(), .filter(), .map(), or .length.
+function getSafeEntries(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.entries)) return data.entries;
+    if (Array.isArray(data.queue)) return data.queue;
+    if (Array.isArray(data.restaurants)) return data.restaurants;
+  }
+  return [];
+}
+
 // Refresh /api/restaurants every 15s so all open browsers stay in sync with the
 // same server-computed waits and queue counts. Polling is skipped entirely while
 // the tab is hidden (document.hidden) to avoid wasting radio/battery in the
@@ -189,8 +203,26 @@ async function renderUnlockedHostStand(venueId, pwd) {
       openOwnerPasswordModal(venueId);
       return;
     }
-    if (!res.ok) throw new Error('Host API unavailable');
-    hostData = await res.json();
+    if (!res.ok) {
+      let errMsg = 'Host API unavailable';
+      try { const e = await res.json(); if (e && e.error) errMsg = e.error; } catch { /* ignore parse */ }
+      showToast(errMsg, 'error');
+      throw new Error(errMsg);
+    }
+    let raw = {};
+    try { raw = await res.json(); } catch (parseErr) { raw = {}; }
+    // If the backend returned an error-shaped body (e.g. { error: "..." }),
+    // surface it and fall back to local mock data instead of crashing.
+    if (raw && typeof raw === 'object' && raw.error && !raw.restaurant && !raw.queue) {
+      showToast(raw.error || 'Host API returned an error.', 'error');
+      throw new Error(raw.error || 'Host API error');
+    }
+    hostData = {
+      restaurant: raw.restaurant || null,
+      live_stats: raw.live_stats || { queue_count: 0, estimated_wait_mins: 10, is_queue_open: true },
+      reliability: raw.reliability || { score: 95, grade: 'A+' },
+      queue: getSafeEntries(raw.queue)
+    };
   } catch (err) {
     const r = (allRestaurants || []).find(x => x.id === venueId) || (typeof fallbackRestaurants !== 'undefined' ? fallbackRestaurants : {});
     const q = (typeof localMockQueues !== 'undefined' && localMockQueues[venueId]) ? localMockQueues[venueId] : [];
@@ -198,7 +230,7 @@ async function renderUnlockedHostStand(venueId, pwd) {
       restaurant: r,
       live_stats: r.live_stats || { queue_count: 0, estimated_wait_mins: 10, is_queue_open: true },
       reliability: r.reliability || { score: 95, grade: 'A+' },
-      queue: q
+      queue: getSafeEntries(q)
     };
   }
   detectNewHostJoins(venueId);
@@ -1539,15 +1571,15 @@ async function loadFounderDashboard() {
 
     if (restaurantsRes.status === 'fulfilled' && restaurantsRes.value.ok) {
       const r = await restaurantsRes.value.json();
-      founderRestaurantsCache = r.restaurants || [];
+      founderRestaurantsCache = getSafeEntries(r);
     }
     if (queuesRes.status === 'fulfilled' && queuesRes.value.ok) {
       const q = await queuesRes.value.json();
-      founderQueuesCache = q.queues || [];
+      founderQueuesCache = getSafeEntries(q);
     }
     if (reviewsRes.status === 'fulfilled' && reviewsRes.value.ok) {
       const rv = await reviewsRes.value.json();
-      founderReviewsCache = rv.reviews || [];
+      founderReviewsCache = getSafeEntries(rv);
     }
     if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
       const s = await settingsRes.value.json();
@@ -1933,7 +1965,14 @@ async function loadRestaurants() {
     const res = await fetch('/api/restaurants', { cache: 'no-store' });
     if (!res.ok) throw new Error('API response not ok');
     const data = await res.json();
-    allRestaurants = data.restaurants || [];
+    // If the backend returned an error-shaped body (e.g. { error: "..." })
+    // with HTTP 200, surface it and fall back to offline data instead of
+    // rendering an empty grid or crashing on .find()/filter().
+    if (data && typeof data === 'object' && data.error && !Array.isArray(data.restaurants)) {
+      showToast(data.error || 'Unable to load restaurants.', 'error');
+      throw new Error(data.error || 'Unable to load restaurants');
+    }
+    allRestaurants = getSafeEntries(data);
 
     // Global Network Banner pushed by the Founder (visible across all venues)
     if (data.global_announcement !== undefined) {
@@ -4090,10 +4129,10 @@ function hostJoinInfo(q) {
 
 function renderHostDashboard() {
   if (!hostData) return;
-  const r = hostData.restaurant;
-  const stats = hostData.live_stats;
-  const rel = hostData.reliability;
-  const queue = hostData.queue || [];
+  const r = hostData.restaurant || { name: 'Venue', address: '', category: '', image_url: '' };
+  const stats = hostData.live_stats || { queue_count: 0, total_waiting_people: 0, estimated_wait_mins: 0, is_queue_open: true };
+  const rel = hostData.reliability || { score: 95, grade: 'A' };
+  const queue = getSafeEntries(hostData.queue);
   // Host waiting table shows only live parties. Seated (and no_show/cancelled)
   // guests drop off cleanly here while their Firestore doc stays alive for the
   // diner's 1–5★ rating screen.
