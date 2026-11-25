@@ -2456,6 +2456,7 @@ async function submitJoinQueue(e) {
     localStorage.setItem('waitmate_ticket_id', currentTicketId);
 
     // Immediately persist the full ticket object locally so cold starts / 404s never wipe it
+    const promisedWait = data.promised_wait_mins ?? data.estimated_wait_mins ?? 10;
     const joinedTicket = {
       id: data.ticket_id,
       ticket_number: data.ticket_number,
@@ -2467,7 +2468,8 @@ async function submitJoinQueue(e) {
       special_requests: specialReq,
       entry_type: joinChannel,
       status: 'waiting',
-      estimated_wait_mins: data.estimated_wait_mins ?? 10,
+      estimated_wait_mins: promisedWait,
+      promised_wait_mins: promisedWait,
       actual_wait_mins: 0,
       joined_at: Date.now() / 1000,
       notified_at: null,
@@ -2488,7 +2490,7 @@ async function submitJoinQueue(e) {
       }),
       position_in_line: data.position_in_line ?? 1,
       parties_ahead: data.parties_ahead ?? 0,
-      estimated_remaining_mins: data.estimated_wait_mins ?? 10,
+      estimated_remaining_mins: promisedWait,
       restaurant: {
         name: selectedJoinVenue?.name || (allRestaurants.find(r => r.id === restId)?.name) || 'Unknown Venue',
         category: selectedJoinVenue?.category || '',
@@ -2538,6 +2540,7 @@ async function submitJoinQueue(e) {
       entry_type: joinChannel,
       status: 'waiting',
       estimated_wait_mins: estWait,
+      promised_wait_mins: estWait,
       actual_wait_mins: 0,
       joined_at: Date.now() / 1000,
       notified_at: null,
@@ -2893,7 +2896,7 @@ function updateTicketUI() {
       !isTicketRated(d.id)
     ) {
       d._hasPromptedFeedback = true;
-      closeTicketModal();
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       openFeedbackModal(d);
     }
   } else {
@@ -2954,13 +2957,24 @@ const openTicketModalImpl = function openTicketModal() {
     showToast("You don't have an active queue ticket yet. Join a queue first!", "info");
     return;
   }
+  // Hide the floating bottom bar while the pass modal is open so it can never
+  // overlap or block taps on the pass action buttons (Share / WhatsApp / Copy / Leave Queue).
+  const pill = document.getElementById('activeTicketPill');
+  if (pill) { pill.classList.add('hidden'); pill.classList.remove('flex'); }
   updateTicketUI();
-  document.getElementById('ticketModal').classList.remove('hidden');
+  document.getElementById('ticketModal').classList.remove('hidden', 'pointer-events-none');
   lucide.createIcons();
 };
 
 function closeTicketModal() {
-  document.getElementById('ticketModal').classList.add('hidden');
+  document.getElementById('ticketModal').classList.add('hidden', 'pointer-events-none');
+  // Restore the floating bottom bar when the pass closes and a ticket is still active.
+  const pill = document.getElementById('activeTicketPill');
+  if (pill && (currentTicketId || activeTicketData)) {
+    pill.classList.remove('hidden');
+    pill.classList.add('flex');
+  }
+  lucide.createIcons();
 }
 
 function clearCurrentTicket() {
@@ -3785,9 +3799,12 @@ function renderHourlyPatternChart(patterns) {
 function openFeedbackModal(ticket) {
   document.getElementById('fbTicketId').value = ticket.id;
   document.getElementById('fbRestaurantId').value = ticket.restaurant_id;
-  document.getElementById('fbPromisedWait').textContent = `${ticket.estimated_wait_mins} mins`;
-  document.getElementById('fbActualWait').textContent = `${ticket.actual_wait_mins || ticket.estimated_wait_mins} mins`;
-  // Reset the 1–5 star selector for this seated visit
+  document.getElementById('fbPromisedWait').textContent = `${ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 0} mins`;
+  document.getElementById('fbActualWait').textContent = `${ticket.actual_wait_mins || ticket.estimated_wait_mins || 0} mins`;
+  // Hide the floating bottom bar while the rating screen is open so it cannot
+  // block taps on Submit / Skip on small screens.
+  const pill = document.getElementById('activeTicketPill');
+  if (pill) { pill.classList.add('hidden'); pill.classList.remove('flex'); }
   document.getElementById('fbStarInput').value = '0';
   updateFbStarDisplay(0);
   document.getElementById('fbNoteInput').value = '';
@@ -4105,7 +4122,7 @@ function renderHostDashboard() {
 
         <td class="py-3 px-4">
           <div class="text-slate-800 font-medium">Joined ${join.relative}</div>
-          <div class="text-[10px] text-slate-600">Promised: ${q.estimated_wait_mins}m</div>
+          <div class="text-[10px] text-slate-600">Promised: ${q.promised_wait_mins ?? q.estimated_wait_mins ?? 0}m</div>
         </td>
 
         <td class="py-3 px-4">
@@ -5174,3 +5191,38 @@ async function founderSeedReviews() {
 }
 
 window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
+
+(() => {
+  console.log("👀 Watching for Rating UI when customer is marked 'seated'...");
+
+  const checkRatingUI = () => {
+    const bodyText = document.body.innerText.toLowerCase();
+    const hasRatingKeywords =
+      bodyText.includes("rate your") ||
+      bodyText.includes("submit rating") ||
+      bodyText.includes("how was your") ||
+      bodyText.includes("experience");
+
+    const starButtons = Array.from(document.querySelectorAll("button, svg, [role='button']")).filter(el => {
+      const label = (el.getAttribute("aria-label") || el.innerText || "").toLowerCase();
+      return label.includes("star") || label.includes("★") || label.includes("rate");
+    });
+
+    const passStillOpen = bodyText.includes("leave queue") || bodyText.includes("need +5 mins");
+
+    if (hasRatingKeywords || starButtons.length >= 5) {
+      console.log("%c✅ SUCCESS: Rating UI & Star Buttons are visible to the customer!", "color: #16a34a; font-weight: bold; font-size: 14px;");
+      console.table({
+        "Rating Screen Detected": hasRatingKeywords ? "✅ YES" : "⚠️ Partial",
+        "Star / Rating Buttons Found": starButtons.length,
+        "Old Queue Pass Closed": !passStillOpen ? "✅ YES" : "❌ FAIL (Pass buttons still visible)"
+      });
+      observer.disconnect();
+    }
+  };
+
+  const observer = new MutationObserver(() => checkRatingUI());
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+  checkRatingUI();
+})();

@@ -115,14 +115,7 @@
       <!-- Center / Right: 3 Live Dedicated Interfaces -->
       <div class="flex items-center gap-2 sm:gap-3">
         
-        <!-- Active Ticket Pill (Appears when customer has active queue ticket) -->
-        <button id="activeTicketPill" onclick="openActiveBoardingPass()" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/25 hover:bg-orange-600 hover:brightness-110 active:scale-[0.98] transition cursor-pointer">
-          <span class="w-2 h-2 rounded-full bg-white live-pulse"></span>
-          <span>My Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
-          <span class="ml-1 text-[10px] opacity-80">View →</span>
-        </button>
-
-        <!-- 3-Way Role Mode Switcher Tabs -->
+      <!-- 3-Way Role Mode Switcher Tabs -->
         <div class="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
           
           <!-- 1. Customer View -->
@@ -681,12 +674,12 @@
   <!-- ========================================================================= -->
   <!-- MODAL 2: LIVE DIGITAL QUEUE TICKET PASS & TRACKER                         -->
   <!-- ========================================================================= -->
-  <div id="ticketModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="ticketModal" class="fixed inset-0 z-50 hidden pointer-events-none flex items-start sm:items-center justify-center overflow-y-auto overflow-x-hidden py-6 px-3 sm:py-10 sm:px-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeTicketModal()"></div>
-    <div class="modal-content relative w-full max-w-md z-10">
+    <div class="modal-content relative w-full max-w-[420px] mx-auto z-10">
       
       <!-- Boarding Pass Style Digital Ticket -->
-      <div class="ticket-container bg-white text-slate-900 border border-slate-200 shadow-2xl">
+      <div class="ticket-container bg-white text-slate-900 border border-slate-200 shadow-2xl" style="height:auto;max-height:none;overflow:visible;">
         <div class="ticket-notch-left"></div>
         <div class="ticket-notch-right"></div>
 
@@ -1158,6 +1151,9 @@
         <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md">
           Submit Verified Check-in & Update Score
         </button>
+        <button type="button" onclick="skipDinerFeedback()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition">
+          Skip / Close
+        </button>
       </form>
     </div>
   </div>
@@ -1211,7 +1207,7 @@
   <script>
     (function () {
       try {
-        var TARGET = 'waitmate-20261124-v36';
+        var TARGET = 'waitmate-20261125-v38';
         if (localStorage.getItem('wm_build') === TARGET) return;
         if (!('serviceWorker' in navigator)) { localStorage.setItem('wm_build', TARGET); return; }
         var hadRegs = false, hadCaches = false;
@@ -1681,6 +1677,15 @@
       </form>
     </div>
   </div>
+
+  <!-- Floating Active Pass Bar -->
+  <button type="button" id="activeTicketPill" onclick="openTicketModal()" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto z-50 pointer-events-auto items-center justify-between gap-2 px-4 py-2.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition cursor-pointer">
+    <span class="flex items-center gap-2 min-w-0">
+      <span class="w-2 h-2 rounded-full bg-white live-pulse shrink-0"></span>
+      <span class="truncate">🎟️ Active Pass: <strong id="activePillVenue">The Rameshwaram Cafe</strong> (<span id="activePillPos">#2</span>)</span>
+    </span>
+    <span class="shrink-0">• View →</span>
+  </button>
 
 </body>
 </html>

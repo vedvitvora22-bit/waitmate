@@ -319,38 +319,21 @@ function markSeated(updates) {
   return updates;
 }
 
-// Merge Firestore queue entries with the in-memory ticket store. In-memory
-// entries win on id collisions so local writes are never shadowed by stale copies.
-function allQueueEntries(firestoreEntries) {
+// Returns ONLY Firestore queue entries (no in-memory merge).
+// In-memory fallbacks REMOVED: all live data must come from Firestore.
+async function allQueueEntries(firestoreEntries) {
   const byId = {};
   for (const entry of (firestoreEntries || [])) {
-    const normalized = normalizeQueueEntry(entry);
-    if (normalized && normalized.id) byId[normalized.id] = normalized;
-  }
-  for (const entry of Object.values(global._tickets || {})) {
     const normalized = normalizeQueueEntry(entry);
     if (normalized && normalized.id) byId[normalized.id] = normalized;
   }
   return Object.values(byId);
 }
 
+// Strict Firestore commit: throws on ANY error, NO memory fallback.
+// Callers must handle errors explicitly - no silent degradation.
 async function safeCommit(writes) {
-  try {
-    return await commitWrites(writes);
-  } catch (error) {
-    // Firestore quota exhaustion (429 RESOURCE_EXHAUSTED) or a transient 503 /
-    // 403 / 404 / malformed-credentials error must NEVER bubble up as a user
-    // facing "Quota exceeded" toast. The caller has already mirrored the write
-    // into the in-memory store (global._tickets / _customRestaurants / _reviews
-    // / _pwdMap), so we acknowledge the write as a memory fallback and let the
-    // handler return 200 OK. Reads (GET /api/restaurants, queue/review reads)
-    // merge the same in-memory store, so the UI updates immediately.
-    if (error.status === 429 || error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-      console.warn("Firestore write served from in-memory fallback:", error.status || error.code || error.message || error);
-      return { ok: true, fallback: "memory" };
-    }
-    throw error;
-  }
+  return await commitWrites(writes);
 }
 
 // ---------------------------------------------------------------------------
@@ -650,7 +633,6 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
   const id = restaurant.id;
   const isOpen = Boolean(restaurant.is_queue_open);
   const manual = restaurant.manual_override_wait;
-  const basePrep = Number(restaurant.base_prep_time || 10);
   const realP = Number(realWaitingParties || 0);
   const realG = Number(realWaitingGuests || 0);
 
@@ -659,42 +641,29 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
   const mealTimes = restaurantMealTimes(restaurant);
   const servesCurrent = !mealTimes || mealTimes.includes(capitalizeSlot(slot));
 
+  // Baseline simulation for "active diners" display counter only (not for wait calculation)
   let baselineParties = 0;
   let baselineDiners = 0;
-  let baselineWait = 0;
   if (servesCurrent) {
     const pr = MEAL_SLOT_BASELINE_PARTIES[slot] || [0, 1];
     baselineParties = seededDrawRange(id, bucket, pr[0], pr[1]);
-    const wr = MEAL_SLOT_BASELINE_WAIT[slot] || [0, 3];
-    baselineWait = seededDrawRange(id, bucket, wr[0], wr[1]);
     baselineDiners = Math.round(baselineParties * AVG_PARTY_SIZE);
   }
 
-  const totalActiveParties = isOpen ? (baselineParties + realP) : 0;
-
-  let estimated = 0;
-  if (!isOpen) {
-    estimated = 0;
-  } else if (manual !== null && manual !== undefined) {
-    estimated = Math.min(60, Number(manual));
-  } else {
-    const totalTables = Number(restaurant.total_tables || 1);
-    const openTables = totalTables > 0 ? totalTables : 1;
-    const partiesAhead = Math.max(0, totalActiveParties - openTables);
-    estimated = Math.floor(partiesAhead * (basePrep * 0.6)) + baselineWait;
-    if (totalActiveParties === 0) estimated = servesCurrent ? baselineWait : 0;
-    estimated = Math.min(60, Math.max(0, estimated));
-  }
+  // Wait calculation uses ONLY real parties (to match /api/join and displayed queue_count)
+  const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
+  const partiesAhead = Math.max(0, realP - availableTables);
+  const estimated = getEstimatedWaitMinutes(restaurant, partiesAhead, availableTables);
 
   const activeDiners = baselineDiners + realG;
   return {
-    queue_count: totalActiveParties,
+    queue_count: realP,
     total_waiting_people: realG,
     estimated_wait_mins: estimated,
     algorithmic_wait_mins: estimated,
     has_manual_override: manual !== null && manual !== undefined,
     is_queue_open: isOpen,
-    active_parties: totalActiveParties,
+    active_parties: realP,
     active_guests: activeDiners,
     baseline_parties: baselineParties,
     baseline_diners: baselineDiners,
@@ -707,28 +676,44 @@ function capitalizeSlot(s) {
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/_([a-z])/g, (_, c) => ' ' + c.toUpperCase());
 }
 
+// ---------------------------------------------------------------------------
+// SINGLE SHARED WAIT-TIME FORMULA
+// Used by: browsing card (GET /api/restaurants), join endpoint (/api/queue/join),
+// ticket display (/api/queue/ticket/:id), and frontend boarding pass.
+// ---------------------------------------------------------------------------
+// partiesAhead = count of active (waiting/notified/delayed) parties already in line
+// before this guest. Does NOT include the joining guest.
+// availableTables = restaurant.available_tables (tables free to seat new parties)
+// basePrep = restaurant.base_prep_time (typical dining duration in minutes)
+// Formula: wait = partiesAhead * (basePrep * 0.6), clamped to [5, 60]
+// If manual_override_wait is set, use that instead (clamped to 60).
+// ---------------------------------------------------------------------------
+function getEstimatedWaitMinutes(restaurant, partiesAhead, availableTables) {
+  const manual = restaurant.manual_override_wait;
+  if (manual !== null && manual !== undefined) {
+    return Math.min(60, Math.max(5, Number(manual)));
+  }
+  const basePrep = Number(restaurant.base_prep_time || 12);
+  const perPartyMinutes = basePrep * 0.6;
+  const wait = Math.floor(partiesAhead * perPartyMinutes);
+  return Math.min(60, Math.max(5, wait));
+}
+
 
 async function getLiveStats(restaurant, queueEntries) {
   const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting", "notified", "delayed"].includes(entry.status));
   const queueCount = active.length;
   const people = active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
   const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
-  const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
-  const basePrep = Number(restaurant.base_prep_time || 12);
-  // Estimated wait = (waitingParties / activeTables) * avgTurnTimeMinutes
-  // avgTurnTimeMinutes approximated by base_prep_time (typical dining duration)
-  // Floor at 0 when tables are open (queueCount <= availableTables)
-  let algorithmic = 0;
-  if (queueCount > 0) {
-    const partiesAheadOfOpenTables = Math.max(0, queueCount - availableTables);
-    algorithmic = Math.floor((partiesAheadOfOpenTables / availableTables) * basePrep);
-  }
+  // Parties ahead of open tables = parties waiting beyond what tables can immediately seat
+  const partiesAhead = Math.max(0, queueCount - availableTables);
+  const estimated = getEstimatedWaitMinutes(restaurant, partiesAhead, availableTables);
   const manual = restaurant.manual_override_wait;
   return {
     queue_count: queueCount,
     total_waiting_people: people,
-    estimated_wait_mins: manual !== null && manual !== undefined ? Math.min(60, Number(manual)) : algorithmic,
-    algorithmic_wait_mins: algorithmic,
+    estimated_wait_mins: estimated,
+    algorithmic_wait_mins: estimated,
     has_manual_override: manual !== null && manual !== undefined,
     is_queue_open: Boolean(restaurant.is_queue_open)
   };
@@ -884,7 +869,8 @@ async function route(request, response, pathParts) {
       if (existingTicket) {
         // Ticket exists, return it with the same ID
         global._tickets[body._original_ticket_id] = { ...existingTicket };
-        return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: existingTicket.estimated_wait_mins ?? 10, message: "Ticket re-synced." });
+        const promised = existingTicket.promised_wait_mins ?? existingTicket.estimated_wait_mins ?? 10;
+        return send(response, 200, { success: true, ticket_id: body._original_ticket_id, ticket_number: existingTicket.ticket_number, estimated_wait_mins: promised, promised_wait_mins: promised, message: "Ticket re-synced." });
       }
       // If original ticket truly gone, fall through to create new (but this shouldn't happen with localStorage persistence)
     }
@@ -914,22 +900,24 @@ async function route(request, response, pathParts) {
         duplicate: true,
         ticket_id: duplicateEntry.id,
         ticket_number: duplicateEntry.ticket_number,
-        estimated_wait_mins: duplicateEntry.estimated_wait_mins ?? 10,
+        estimated_wait_mins: duplicateEntry.promised_wait_mins ?? duplicateEntry.estimated_wait_mins ?? 10,
+        promised_wait_mins: duplicateEntry.promised_wait_mins ?? duplicateEntry.estimated_wait_mins ?? 10,
         parties_ahead: duplicateEntry.parties_ahead ?? 0,
         position_in_line: (duplicateEntry.parties_ahead ?? 0) + 1,
         message: "You already have an active spot for this party."
       });
     }
 
-    // Compute the exact same baseline + live queue calculation that the
-    // restaurant discovery card (GET /api/restaurants) shows, so the Digital
-    // Boarding Pass starts at the promised wait time instead of snapping down
-    // to a hardcoded value on Join Queue.
+    // Compute the exact same wait calculation that the restaurant discovery
+    // card (GET /api/restaurants) shows, so the Digital Boarding Pass starts
+    // at the promised wait time. We compute partiesAhead as the number of
+    // active parties already in line beyond what available tables can seat.
     const realActive = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status));
     const realParties = realActive.length;
     const realGuests = realActive.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
-    const liveStats = await getLiveStats(restaurant, entries);
-    const estWait = Number.isFinite(liveStats.estimated_wait_mins) ? liveStats.estimated_wait_mins : 10;
+    const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
+    const partiesAheadOfTables = Math.max(0, realParties - availableTables);
+    const promisedWait = getEstimatedWaitMinutes(restaurant, partiesAheadOfTables, availableTables);
 
     const revTs = String(9999999999999 - Date.now()).padStart(13, "0");
     const ticketId = `q-${revTs}-${Math.floor(100 + Math.random() * 900)}`;
@@ -941,7 +929,8 @@ async function route(request, response, pathParts) {
     // Entry channel: "walk_in" when the diner is already at the venue (QR/deep
     // link or the in-modal channel selector), otherwise "remote".
     const isWalkin = body.entry_type === "walk_in" || body.entry_type === "walkin" || body.channel === "walk_in";
-    const partiesAhead = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status) && Number(entry.joined_at) < joinedAt).length;
+    // parties_ahead stored on ticket = total active parties already in line (for display)
+    const partiesAhead = realParties;
     const ticket = {
       id: ticketId,
       ticket_number: ticketNumber,
@@ -957,7 +946,8 @@ async function route(request, response, pathParts) {
       entry_type: isWalkin ? "walk_in" : "remote",
       source: (isWalkin ? "walk-in" : "remote"),
       status: "waiting",
-      estimated_wait_mins: estWait,
+      estimated_wait_mins: promisedWait,
+      promised_wait_mins: promisedWait,
       actual_wait_mins: 0,
       createdAt: joinedAt,
       joined_at: joinedAt,
@@ -982,7 +972,7 @@ async function route(request, response, pathParts) {
       }
     }
     global._tickets[ticketId] = global._tickets[ticketId] || { ...ticket };
-    return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, estimated_wait_mins: estWait, parties_ahead: partiesAhead, position_in_line: partiesAhead + 1, message: `Spot confirmed! Your ticket is ${ticketNumber}.` });
+    return send(response, 200, { success: true, ticket_id: ticketId, ticket_number: ticketNumber, estimated_wait_mins: promisedWait, promised_wait_mins: promisedWait, parties_ahead: partiesAhead, position_in_line: partiesAhead + 1, message: `Spot confirmed! Your ticket is ${ticketNumber}.` });
   }
 
   if (request.method === "GET" && path.startsWith("/api/queue/ticket/")) {
@@ -1017,8 +1007,9 @@ async function route(request, response, pathParts) {
     const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
-    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, Number(ticket.estimated_wait_mins ?? 10) + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
-    return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
+    const promised = Number(ticket.promised_wait_mins ?? ticket.estimated_wait_mins ?? 10);
+    const remaining = ticket.status === "waiting" || ticket.status === "delayed" ? Math.max(1, promised + Number(ticket.delay_mins ?? 0) - elapsed) : 0;
+    return send(response, 200, { ...ticket, position_in_line: position, parties_ahead: ahead, estimated_remaining_mins: remaining, promised_wait_mins: promised, is_table_near: ["waiting", "delayed"].includes(ticket.status) && (position <= 2 || remaining <= 7), is_table_ready: ticket.status === "notified", restaurant: restaurant ? { name: restaurant.name, address: restaurant.address, category: restaurant.category, image_url: restaurant.image_url } : null });
   }
 
   if (request.method === "GET" && path.startsWith("/api/host/queue/")) {
@@ -1434,9 +1425,15 @@ async function route(request, response, pathParts) {
       // Permanent ticket number from the atomic counter (generated once).
       const ticketNumber = await nextTicketNumber();
       const revTs2 = String(9999999999999 - Date.now()).padStart(13, "0");
-    const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
-    const now = Date.now();
-    const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: 10, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0 };
+      const ticketId = `q-${revTs2}-${Math.floor(100 + Math.random() * 900)}`;
+      const now = Date.now();
+      // Compute wait for walk-in using shared formula (parties already in line before this guest)
+      const realActiveWalkin = entries.filter(entry => entry.restaurant_id === body.restaurant_id && ["waiting","notified","delayed"].includes(entry.status));
+      const realPartiesWalkin = realActiveWalkin.length;
+      const availableTablesWalkin = Math.max(1, Number(restaurant.available_tables || 0));
+      const partiesAheadWalkin = Math.max(0, realPartiesWalkin - availableTablesWalkin);
+      const promisedWalkin = getEstimatedWaitMinutes(restaurant, partiesAheadWalkin, availableTablesWalkin);
+      const ticket = { id: ticketId, ticket_number: ticketNumber, restaurant_id: body.restaurant_id, restaurant_name: restaurant.name || "", customer_name: String(body.name || "Walk-in Guest").trim(), guest_name: String(body.name || "Walk-in Guest").trim(), phone: String(body.phone || ""), party_size: Number(body.party_size || 2), seating_pref: body.seating_pref || "First Available", special_requests: "", "09_channel": "walk_in", channel: "walk_in", entry_type: "walk_in", source: "walk-in", status: "waiting", estimated_wait_mins: promisedWalkin, promised_wait_mins: promisedWalkin, actual_wait_mins: 0, createdAt: now, joined_at: now, joined_time_ist: formatIST(now), notified_at: null, arrived_at: now, arrived_time_ist: formatIST(now), seated_at: null, seated_time_ist: null, has_arrived: true, delay_mins: 0, parties_ahead: realPartiesWalkin };
       try {
         await safeCommit([setDocument("queue_entries", ticketId, toNumberedEntry(ticket))]);
         // Update aggregates after adding walk-in guest
