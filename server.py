@@ -1527,7 +1527,7 @@ def verify_password(restaurant, password):
     if stored_hash:
         if hash_password(provided) == stored_hash or hash_password(lower) == stored_hash:
             return True
-    return lower == "waitmate123"
+    return False
 
 
 def format_time_ago(ts):
@@ -2310,12 +2310,15 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             description = data.get("description", "").strip()
             owner_name = data.get("owner_name", "Owner").strip()
             owner_phone = data.get("owner_phone", "+91 98450 12345").strip()
-            password = data.get("password", "waitmate123")
+            password = data.get("password", "").strip()
             total_tables = int(data.get("total_tables", 15))
             base_prep_time = int(data.get("base_prep_time", 12))
 
             if not name or not category or not address:
                 self.send_json({"error": "Please provide Restaurant Name, Cuisine Category, and Address."}, 400)
+                return
+            if not password or len(password) < 8:
+                self.send_json({"error": "Owner dashboard password must be at least 8 characters."}, 400)
                 return
 
             if not image_url:

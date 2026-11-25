@@ -1687,5 +1687,37 @@
     <span class="shrink-0">• View →</span>
   </button>
 
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: HOW WAIT TIMES WORK (ETA vs RELIABILITY)                            -->
+  <!-- ========================================================================= -->
+  <div id="waitInfoModal" class="fixed inset-0 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeWaitInfoModal()"></div>
+    <div class="modal-content relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+      <div class="bg-slate-900 text-white p-5 flex items-start justify-between shrink-0">
+        <div>
+          <span class="text-orange-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="info" class="w-3.5 h-3.5"></i> How Wait Times Work
+          </span>
+          <h3 class="text-xl font-heading font-bold text-white mt-1">ETA vs Reliability</h3>
+        </div>
+        <button onclick="closeWaitInfoModal()" class="text-slate-400 hover:text-white p-1" aria-label="Close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="bg-orange-50/70 rounded-xl p-4 border border-orange-100">
+          <h4 class="text-sm font-bold text-orange-900 flex items-center gap-1.5"><i data-lucide="clock" class="w-4 h-4 text-orange-600"></i> Estimated Wait (ETA)</h4>
+          <p class="text-xs text-orange-900/80 mt-1.5 leading-relaxed">Predicts <strong>when</strong> your table will be ready based on live queue size, party size, and current table turnover speed.</p>
+        </div>
+        <div class="bg-emerald-50/70 rounded-xl p-4 border border-emerald-100">
+          <h4 class="text-sm font-bold text-emerald-900 flex items-center gap-1.5"><i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i> Reliability Score</h4>
+          <p class="text-xs text-emerald-900/80 mt-1.5 leading-relaxed">Shows <strong>how consistently</strong> past wait-time estimates at this restaurant matched actual seating times.</p>
+        </div>
+        <button onclick="closeWaitInfoModal()" class="w-full py-2.5 bg-slate-900 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition">Got it</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

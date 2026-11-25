@@ -2205,6 +2205,11 @@ function renderRestaurantsGrid() {
             ${r.description}
           </p>
 
+          <div class="flex items-center justify-end pt-1">
+            <button onclick="openWaitInfoModal()" class="text-[10px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition" aria-label="How wait times work">
+              <i data-lucide="info" class="w-3.5 h-3.5"></i> How wait times work
+            </button>
+          </div>
           <!-- Wait & Reliability Metric Strip -->
           <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
             
@@ -3576,6 +3581,19 @@ function closeReliabilityModal() {
   // Reset review widget
   resetReviewWidget();
 }
+
+function openWaitInfoModal() {
+  const m = document.getElementById('waitInfoModal');
+  if (m) m.classList.remove('hidden');
+  try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch (e) {}
+}
+function closeWaitInfoModal() {
+  const m = document.getElementById('waitInfoModal');
+  if (m) m.classList.add('hidden');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeWaitInfoModal();
+});
 
 function initStarRatingWidget() {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
