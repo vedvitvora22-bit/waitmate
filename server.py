@@ -2752,8 +2752,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Current Founder password is incorrect."}, 401)
                 return
 
-            if len(new_password) < 6:
-                self.send_json({"error": "New password must be at least 6 characters."}, 400)
+            if len(new_password) < 8:
+                self.send_json({"error": "New password must be at least 8 characters."}, 400)
                 return
 
             new_hash = _founder_hash(new_password)
@@ -2805,8 +2805,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing restaurant_id or new_password"}, 400)
                 return
 
-            if len(new_password) < 4:
-                self.send_json({"error": "Password must be at least 4 characters"}, 400)
+            if len(new_password) < 8:
+                self.send_json({"error": "Password must be at least 8 characters"}, 400)
                 return
 
             conn = get_db()
@@ -2846,8 +2846,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             if not name or not address or not password:
                 self.send_json({"error": "Restaurant name, address, and owner dashboard password are required."}, 400)
                 return
-            if len(password) < 4:
-                self.send_json({"error": "Owner dashboard password must be at least 4 characters."}, 400)
+            if len(password) < 8:
+                self.send_json({"error": "Owner dashboard password must be at least 8 characters."}, 400)
                 return
 
             rest_id = f"rest-{int(time.time() * 1000)}"
@@ -2904,8 +2904,8 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing required fields"}, 400)
                 return
 
-            if len(new_password) < 4:
-                self.send_json({"error": "New password must be at least 4 characters"}, 400)
+            if len(new_password) < 8:
+                self.send_json({"error": "New password must be at least 8 characters"}, 400)
                 return
 
             conn = get_db()

@@ -988,8 +988,8 @@ async function route(request, response, pathParts) {
       return send(response, 401, { error: "Current Founder password is incorrect." });
     }
     const nextPwd = String(body.new_password || "").trim();
-    if (nextPwd.length < 6) {
-      return send(response, 400, { error: "New password must be at least 6 characters." });
+    if (nextPwd.length < 8) {
+      return send(response, 400, { error: "New password must be at least 8 characters." });
     }
     global._founderPwdHash = hashPassword(nextPwd);
     await safeCommit([setDocument("settings", "founder", { password_hash: global._founderPwdHash })]);
@@ -1234,7 +1234,7 @@ async function route(request, response, pathParts) {
     const mealTimes = normalizeMealTimes(body.meal_times);
 
     if (!name || !address || !password) return send(response, 400, { error: "Restaurant name, address, and owner dashboard password are required." });
-    if (password.length < 4) return send(response, 400, { error: "Owner dashboard password must be at least 4 characters." });
+    if (password.length < 8) return send(response, 400, { error: "Owner dashboard password must be at least 8 characters." });
 
     const id = `rest-${Date.now()}`;
     const restaurant = {
@@ -1298,7 +1298,7 @@ async function route(request, response, pathParts) {
       return send(response, 401, { error: "Current password is incorrect." });
     }
     const nextPwd = String(body.new_password || "").trim();
-    if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
+    if (nextPwd.length < 8) return send(response, 400, { error: "New password must be at least 8 characters." });
     const newHash = hashPassword(nextPwd);
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Restaurant password updated successfully." });
@@ -1309,7 +1309,7 @@ async function route(request, response, pathParts) {
     const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const nextPwd = String(body.new_password || "").trim();
-    if (nextPwd.length < 4) return send(response, 400, { error: "New password must be at least 4 characters." });
+    if (nextPwd.length < 8) return send(response, 400, { error: "New password must be at least 8 characters." });
     const newHash = hashPassword(nextPwd);
     await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, password_hash: newHash })]);
     return send(response, 200, { success: true, message: "Password reset successfully." });

@@ -4467,9 +4467,9 @@ async function submitOwnerChangePassword(event) {
   const newPwd = (newInput ? newInput.value : '').trim();
 
   if (!currentPwd || !newPwd) return;
-  if (newPwd.length < 4) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'New password must be at least 4 characters';
+      errEl.textContent = 'New password must be at least 8 characters';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4566,9 +4566,9 @@ async function submitFounderResetPassword(event) {
   const newPwd = (input ? input.value : '').trim();
 
   if (!restaurantId || !newPwd) return;
-  if (newPwd.length < 4) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'Password must be at least 4 characters';
+      errEl.textContent = 'Password must be at least 8 characters';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4664,9 +4664,9 @@ async function submitFounderChangePassword(event) {
   const newPwd = (newInput ? newInput.value : '').trim();
 
   if (!currentPwd || !newPwd) return;
-  if (newPwd.length < 6) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'New password must be at least 6 characters.';
+      errEl.textContent = 'New password must be at least 8 characters.';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4764,8 +4764,8 @@ async function submitFounderAddRestaurant(event) {
     showToast('Please fill in all required fields.', 'error');
     return;
   }
-  if (password.length < 4) {
-    showToast('Owner dashboard password must be at least 4 characters.', 'error');
+  if (password.length < 8) {
+    showToast('Owner dashboard password must be at least 8 characters.', 'error');
     return;
   }
 
@@ -5176,7 +5176,7 @@ async function submitFounderEditRestaurant(event) {
   if (err) err.classList.add('hidden');
 
   if (!name || !category || !address) { showToast('Name, category and address are required.', 'error'); return; }
-  if (password && password.length < 4) { showToast('Owner password must be at least 4 characters.', 'error'); return; }
+  if (password && password.length < 8) { showToast('Owner password must be at least 8 characters.', 'error'); return; }
 
   const btn = document.getElementById('fndEditRestaurantSubmitBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }

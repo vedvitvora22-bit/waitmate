@@ -1268,7 +1268,7 @@
         </div>
         <button type="button" onclick="closeOwnerChangePasswordModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
       </div>
-      <p id="ownerChangePwdModalSub" class="text-xs text-slate-600">Enter your current password and a new password (min 4 characters) to update your restaurant dashboard password.</p>
+      <p id="ownerChangePwdModalSub" class="text-xs text-slate-600">Enter your current password and a new password (min 8 characters) to update your restaurant dashboard password.</p>
       <form id="ownerChangePwdForm" onsubmit="submitOwnerChangePassword(event)" class="space-y-3">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Current Password</label>
@@ -1280,9 +1280,9 @@
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 4 chars)</label>
+          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 8 chars)</label>
           <div class="relative">
-            <input type="password" id="ownerNewPwdInput" required minlength="4" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none pr-12">
+            <input type="password" id="ownerNewPwdInput" required minlength="8" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none pr-12">
             <button type="button" onclick="togglePasswordVisibility('ownerNewPwdInput')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-900 p-1" aria-label="Toggle password visibility">
               <i data-lucide="eye" class="w-5 h-5"></i>
             </button>
@@ -1308,13 +1308,13 @@
         </div>
         <button type="button" onclick="closeFounderResetPasswordModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
       </div>
-      <p id="founderResetPwdModalSub" class="text-xs text-slate-600">Enter a new password (min 4 characters) for the restaurant dashboard. This will immediately replace the existing password.</p>
+      <p id="founderResetPwdModalSub" class="text-xs text-slate-600">Enter a new password (min 8 characters) for the restaurant dashboard. This will immediately replace the existing password.</p>
       <form id="founderResetPwdForm" onsubmit="submitFounderResetPassword(event)" class="space-y-3">
         <input type="hidden" id="founderResetRestaurantId">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 4 chars)</label>
+          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 8 chars)</label>
           <div class="relative">
-            <input type="password" id="founderNewPwdInput" required minlength="4" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
+            <input type="password" id="founderNewPwdInput" required minlength="8" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
             <button type="button" onclick="togglePasswordVisibility('founderNewPwdInput')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1" aria-label="Toggle password visibility">
               <i data-lucide="eye" class="w-5 h-5"></i>
             </button>
@@ -1412,7 +1412,7 @@
         </div>
         <button type="button" onclick="closeFounderChangePasswordModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
       </div>
-      <p class="text-xs text-slate-500">Enter your current Founder password and a new password (min 6 characters) to update your command center master password.</p>
+      <p class="text-xs text-slate-500">Enter your current Founder password and a new password (min 8 characters) to update your command center master password.</p>
       <form id="founderChangePwdForm" onsubmit="submitFounderChangePassword(event)" class="space-y-3">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Current Password</label>
@@ -1424,9 +1424,9 @@
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 6 chars)</label>
+          <label class="block text-xs font-bold text-slate-700 mb-1">New Password (min 8 chars)</label>
           <div class="relative">
-            <input type="password" id="founderNewPwdInput" required minlength="6" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
+            <input type="password" id="founderNewPwdInput" required minlength="8" placeholder="Enter new password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
             <button type="button" onclick="togglePasswordVisibility('founderNewPwdInput')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1" aria-label="Toggle password visibility">
               <i data-lucide="eye" class="w-5 h-5"></i>
             </button>
@@ -1492,12 +1492,12 @@
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">Owner Dashboard Password *</label>
             <div class="relative">
-              <input type="password" id="fndNewPassword" required minlength="4" placeholder="Create dashboard password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
+              <input type="password" id="fndNewPassword" required minlength="8" placeholder="Create dashboard password" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
               <button type="button" onclick="togglePasswordVisibility('fndNewPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-900 p-1" aria-label="Toggle password visibility">
                 <i data-lucide="eye" class="w-5 h-5"></i>
               </button>
             </div>
-            <p class="text-[11px] text-slate-500 mt-1">Owners use this to unlock the host stand for this venue. Minimum 4 characters.</p>
+            <p class="text-[11px] text-slate-500 mt-1">Owners use this to unlock the host stand for this venue. Minimum 8 characters.</p>
           </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1613,7 +1613,7 @@
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">Owner Dashboard Password (new)</label>
             <div class="relative">
-              <input type="password" id="fndEditPassword" minlength="4" placeholder="Leave blank to keep current" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
+              <input type="password" id="fndEditPassword" minlength="8" placeholder="Leave blank to keep current" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-12">
               <button type="button" onclick="togglePasswordVisibility('fndEditPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1" aria-label="Toggle password visibility">
                 <i data-lucide="eye" class="w-5 h-5"></i>
               </button>
