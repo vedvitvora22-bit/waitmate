@@ -268,6 +268,7 @@ function toNumberedEntry(entry) {
     "10_status": e.status || "waiting",
     "11_has_arrived": Boolean(e.has_arrived),
     "12_promised_wait_mins": Number(promised || 0),
+    "device_id": String(e.device_id || ""),
     "source": normalizeSource(e.source, channel),
     "isRealHuman": Boolean(e.isRealHuman),
     "13_joined_time_ist": e.joined_time_ist || ist(joinedMs) || "",
@@ -297,6 +298,69 @@ function isGhostTicket(entry) {
   if (num.startsWith("WM-G")) return true;
   if (num && entry.isRealHuman !== true) return true;
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-expiry for stale unarrived tickets.
+//
+// A ticket that is still "waiting" and whose diner has NOT clicked "I've
+// Arrived at the Venue" (has_arrived !== true) is expired once its join age
+// exceeds the expiration window:
+//   windowMins = Math.max(estimated_wait_mins + 20, 45)
+// (i.e. estimated wait + 20 minutes, with a hard 45-minute floor).
+//
+// Expired tickets are persisted as status="expired" in Firestore and are
+// excluded from every active queue count so they never inflate diner numbers.
+// ---------------------------------------------------------------------------
+function ticketExpiryWindowMins(entry) {
+  const waitMins = Number(entry.estimated_wait_mins || entry.promised_wait_mins || 0);
+  return Math.max(waitMins + 20, 45);
+}
+
+function ticketExpiredAt(entry) {
+  const joinedMs = Number(entry.joined_at || entry.created_at || Date.now());
+  if (!Number.isFinite(joinedMs) || joinedMs <= 0) return Date.now() + ticketExpiryWindowMins(entry) * 60000;
+  return joinedMs + ticketExpiryWindowMins(entry) * 60000;
+}
+
+function isStaleUnarrivedTicket(entry) {
+  if (!entry) return false;
+  const st = String(entry.status || "").toLowerCase();
+  if (st !== "waiting") return false;
+  if (entry.has_arrived === true) return false;
+  return Date.now() > ticketExpiredAt(entry);
+}
+
+function isActiveTicketStatus(status) {
+  const st = String(status || "").toLowerCase();
+  return st === "waiting" || st === "arrived";
+}
+
+// Expire every stale unarrived ticket in `entries`, persisting status="expired"
+// to Firestore, refreshing affected restaurant aggregates, and returning the
+// entries (expired ones now marked "expired") plus the set of expired ids.
+async function expireStaleUnarrivedTickets(entries) {
+  const expiredIds = [];
+  const affectedRestaurants = new Set();
+  const out = [];
+  for (const raw of entries) {
+    const entry = normalizeQueueEntry(raw);
+    if (isStaleUnarrivedTicket(entry)) {
+      entry.status = "expired";
+      expiredIds.push(entry.id);
+      if (entry.restaurant_id) affectedRestaurants.add(entry.restaurant_id);
+      try {
+        await setDocument("queue_entries", entry.id, toNumberedEntry(entry));
+      } catch (err) {
+        console.error("expireStaleUnarrivedTickets: failed to persist", entry.id, err);
+      }
+    }
+    out.push(entry);
+  }
+  for (const restId of affectedRestaurants) {
+    try { await updateRestaurantAggregates(restId); } catch (err) { /* aggregates best-effort */ }
+  }
+  return { entries: out, expiredIds };
 }
 
 async function fetchQueueEntries() {
@@ -405,11 +469,10 @@ async function nextTicketNumber() {
 async function updateRestaurantAggregates(restaurantId) {
   const entries = await fetchQueueEntries();
   const allEntries = allQueueEntries(entries);
-  const active = allEntries.filter(e => e.restaurant_id === restaurantId && ["waiting", "notified", "delayed"].includes(e.status));
-  const seated = allEntries.filter(e => e.restaurant_id === restaurantId && e.status === "seated");
+  const active = allEntries.filter(e => e.restaurant_id === restaurantId && isActiveTicketStatus(e.status));
   const queueCount = active.length;
   const totalWaitingPeople = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
-  const activeDiners = [...active, ...seated].reduce((s, e) => s + Number(e.party_size || 0), 0);
+  const activeDiners = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
   const restaurant = await getRawRestaurant(restaurantId);
   if (!restaurant) return;
   const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
@@ -681,7 +744,7 @@ function getEstimatedWaitMinutes(restaurant, partiesAhead, availableTables) {
 
 
 async function getLiveStats(restaurant, queueEntries) {
-  const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting", "notified", "delayed"].includes(entry.status));
+  const active = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && isActiveTicketStatus(entry.status));
   const queueCount = active.length;
   const people = active.reduce((sum, entry) => sum + Number(entry.party_size || 0), 0);
   const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
@@ -728,7 +791,7 @@ async function route(request, response, pathParts) {
     }
     const restaurants = await listCollection("restaurants");
     const entries = await fetchQueueEntries();
-    const activeQueue = entries.filter(e => ["waiting", "notified", "delayed"].includes(e.status));
+    const activeQueue = entries.filter(e => isActiveTicketStatus(e.status));
     return send(response, 200, {
       storage,
       storage_status: storage === "firebase_firestore" ? "firebase" : "error",
@@ -767,7 +830,11 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/restaurants") {
     const restaurants = await ensureRestaurants();
     const firestoreEntries = await fetchQueueEntries();
-    const queueEntries = allQueueEntries(firestoreEntries);
+    let queueEntries = allQueueEntries(firestoreEntries);
+    // Auto-expire stale unarrived tickets whenever queues/restaurants are loaded
+    // so active counts never include tickets past their expiration window.
+    const { entries: expiredEntries } = await expireStaleUnarrivedTickets(queueEntries);
+    queueEntries = expiredEntries;
     let globalAnnouncement = "";
     try {
       const g = await getDocument("settings", "global_announcement");
@@ -775,10 +842,10 @@ async function route(request, response, pathParts) {
     } catch { /* ignore */ }
     const result = [];
     for (const restaurant of restaurants) {
-      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
+      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && isActiveTicketStatus(entry.status));
       const realParties = realActive.length;
       const realGuests = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
-      const activeDinerEntries = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","seated"].includes(entry.status));
+      const activeDinerEntries = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && isActiveTicketStatus(entry.status));
       const realActiveDiners = activeDinerEntries.reduce((s,e)=>s+Number(e.party_size||0),0);
       const liveStats = await getLiveStats(restaurant, queueEntries);
       const metrics = computePrototypeRestaurantMetrics(restaurant, realParties, realGuests);
@@ -869,6 +936,30 @@ async function route(request, response, pathParts) {
     const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
 
+    // Enforce one active ticket per device: a device that already holds an
+    // active (waiting / arrived, not expired) ticket at ANY restaurant cannot
+    // join a second queue.
+    const deviceId = String(body.device_id || "").trim();
+    if (deviceId) {
+      const existingActive = entries.find(entry =>
+        String(entry.device_id || "") === deviceId && isActiveTicketStatus(entry.status)
+      );
+      if (existingActive) {
+        return send(response, 409, {
+          success: false,
+          blocked: true,
+          error: `You already have an active ticket (#${existingActive.ticket_number} at ${existingActive.restaurant_name}). Finish or leave your current queue before joining another.`,
+          existing_ticket: {
+            id: existingActive.id,
+            ticket_number: existingActive.ticket_number,
+            restaurant_id: existingActive.restaurant_id,
+            restaurant_name: existingActive.restaurant_name,
+            status: existingActive.status
+          }
+        });
+      }
+    }
+
     // Strict 60-second deduplication on real customer joins:
     // restaurantId + guestName + partySize. Prevents accidental double-submits
     // from creating duplicate queue entries.
@@ -940,6 +1031,7 @@ async function route(request, response, pathParts) {
       entry_type: isWalkin ? "walk_in" : "remote",
       source: (isWalkin ? "walk-in" : "remote"),
       status: "waiting",
+      device_id: deviceId,
       estimated_wait_mins: promisedWait,
       promised_wait_mins: promisedWait,
       actual_wait_mins: 0,
@@ -964,11 +1056,19 @@ async function route(request, response, pathParts) {
     const id = pathParts[pathParts.length - 1];
     const ticket = await fetchQueueEntry(id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
+    // Auto-expire a stale unarrived ticket on read so the diner sees a clear
+    // "Ticket Expired" state instead of a stuck waiting pass.
+    if (isStaleUnarrivedTicket(ticket)) {
+      const { entries } = await expireStaleUnarrivedTickets([ticket]);
+      ticket.status = "expired";
+      ticket.expired = true;
+      Object.assign(ticket, entries[0] || {});
+    }
     const restaurant = await getDocument("restaurants", ticket.restaurant_id);
     const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     // Parties strictly ahead of this ticket (joined before this ticket)
-    const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && ["waiting", "notified", "delayed"].includes(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
+    const ahead = entries.filter(entry => entry.restaurant_id === ticket.restaurant_id && isActiveTicketStatus(entry.status) && Number(entry.joined_at) < Number(ticket.joined_at)).length;
     const position = ahead + 1;
     const elapsed = Math.floor((Date.now() - Number(ticket.joined_at || Date.now())) / 60000);
     const availableTables = Math.max(1, Number(restaurant?.available_tables || 0));
@@ -1006,8 +1106,11 @@ async function route(request, response, pathParts) {
     const suppliedPwd = request.headers["x-restaurant-password"] || request.query?.password;
     if (!verifyRestaurantPassword(restaurant, suppliedPwd)) return send(response, 401, { error: "Restaurant password required." });
     const firestoreQueue = await fetchQueueEntries();
-    const queue = allQueueEntries(firestoreQueue);
-    const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+    let queue = allQueueEntries(firestoreQueue);
+    // Auto-expire stale unarrived tickets whenever a host queue is loaded.
+    const { entries: expiredQueue } = await expireStaleUnarrivedTickets(queue);
+    queue = expiredQueue;
+    const entries = queue.filter(entry => entry.restaurant_id === id && ["waiting", "notified", "delayed"].includes(entry.status)).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
   }
 
@@ -1036,12 +1139,15 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
     const firestoreEntries = await fetchQueueEntries();
-    const queueEntries = allQueueEntries(firestoreEntries);
-    const active = queueEntries.filter(entry => ["waiting", "notified", "delayed"].includes(entry.status));
+    let queueEntries = allQueueEntries(firestoreEntries);
+    // Auto-expire stale unarrived tickets whenever founder data is loaded.
+    const { entries: expiredEntries } = await expireStaleUnarrivedTickets(queueEntries);
+    queueEntries = expiredEntries;
+    const active = queueEntries.filter(entry => isActiveTicketStatus(entry.status));
     const seated = queueEntries.filter(entry => entry.status === "seated");
     const enriched = [];
     for (const restaurant of restaurants) {
-      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && ["waiting","notified","delayed"].includes(entry.status));
+      const realActive = queueEntries.filter(entry => entry.restaurant_id === restaurant.id && isActiveTicketStatus(entry.status));
       const liveStats = await getLiveStats(restaurant, queueEntries);
       liveStats.queue_count = realActive.length;
       liveStats.total_waiting_people = realActive.reduce((s,e)=>s+Number(e.party_size||0),0);
@@ -1545,10 +1651,13 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
     const firestoreEntries = await fetchQueueEntries();
-    const queueEntries = allQueueEntries(firestoreEntries);
+    let queueEntries = allQueueEntries(firestoreEntries);
+    // Auto-expire stale unarrived tickets whenever founder data is loaded.
+    const { entries: expiredEntries } = await expireStaleUnarrivedTickets(queueEntries);
+    queueEntries = expiredEntries;
     const result = [];
     for (const r of restaurants) {
-      const realActive = queueEntries.filter(e => e.restaurant_id === r.id && ["waiting","notified","delayed"].includes(e.status));
+      const realActive = queueEntries.filter(e => e.restaurant_id === r.id && isActiveTicketStatus(e.status));
       const seated = queueEntries.filter(e => e.restaurant_id === r.id && e.status === "seated");
       const rated = queueEntries.filter(e => e.restaurant_id === r.id && e.rated && Number(e.rating) > 0);
       const ratingCount = rated.length;
@@ -1676,11 +1785,14 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/queues") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const firestoreEntries = await fetchQueueEntries();
-    const entries = allQueueEntries(firestoreEntries);
+    let entries = allQueueEntries(firestoreEntries);
+    // Auto-expire stale unarrived tickets whenever founder queues are loaded.
+    const { entries: expiredEntries } = await expireStaleUnarrivedTickets(entries);
+    entries = expiredEntries;
     const restaurants = await ensureRestaurants();
     const byId = {};
     for (const r of restaurants) byId[r.id] = r;
-    const active = entries.filter(e => ["waiting","notified","delayed"].includes(e.status));
+    const active = entries.filter(e => isActiveTicketStatus(e.status));
     const enriched = active.map(e => {
       const r = byId[e.restaurant_id];
       return {
@@ -1857,8 +1969,11 @@ async function route(request, response, pathParts) {
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const firestoreQueue = await fetchQueueEntries();
-    const queue = allQueueEntries(firestoreQueue);
-    const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+    let queue = allQueueEntries(firestoreQueue);
+    // Auto-expire stale unarrived tickets whenever founder host-stand queues are loaded.
+    const { entries: expiredQueue } = await expireStaleUnarrivedTickets(queue);
+    queue = expiredQueue;
+    const entries = queue.filter(entry => entry.restaurant_id === id && ["waiting", "notified", "delayed"].includes(entry.status)).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, {
       restaurant: sanitizeRestaurant(restaurant),
       live_stats: getLiveStats(restaurant, entries),

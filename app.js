@@ -1588,7 +1588,7 @@ async function loadFounderDashboard() {
   const reviews = (founderReviewsCache && founderReviewsCache.length)
     ? founderReviewsCache
     : (data && Array.isArray(data.recent_reviews) ? data.recent_reviews : []);
-  const activeQueues = queues.filter(q => ["waiting","notified","delayed"].includes(q.status));
+  const activeQueues = queues.filter(q => q && q.status === 'waiting');
   const waitingDiners = activeQueues.reduce((s, q) => s + Number(q.party_size || 0), 0);
   const activeParties = activeQueues.length;
   const totalRestaurants = venues.length;
@@ -2449,6 +2449,37 @@ function setSeatingPref(pref) {
       btn.className = "pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400";
     }
   });
+}
+
+// One active ticket per device: show a clear blocking message and offer a
+// button to view the diner's existing active pass instead of joining again.
+function showDeviceBlockedDialog(ticket) {
+  if (!ticket) return;
+  const ticketNum = ticket.ticket_number || ticket.ticket_id || 'your ticket';
+  const venue = (ticket.restaurant && ticket.restaurant.name) || ticket.restaurant_name || 'your venue';
+  const existing = document.getElementById('deviceBlockedModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'deviceBlockedModal';
+  modal.className = 'fixed inset-0 z-60 flex items-center justify-center bg-black/60';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 w-[92%] max-w-md shadow-2xl border border-slate-200">
+      <h3 class="font-bold text-slate-900 mb-1">Already in a queue</h3>
+      <p class="text-slate-600 text-sm mb-4">You already have an active ticket (#${escapeHtml(String(ticketNum))} at ${escapeHtml(String(venue))}). Finish or leave your current queue before joining another.</p>
+      <div class="flex gap-2">
+        <button onclick="closeDeviceBlockedModal(); openTicketModal()" class="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm">View My Active Pass</button>
+        <button onclick="closeDeviceBlockedModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm">Later</button>
+      </div>
+    </div>
+  `;
+  modal.onclick = (e) => { if (e.target === modal) closeDeviceBlockedModal(); };
+  document.body.appendChild(modal);
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeDeviceBlockedModal() {
+  const m = document.getElementById('deviceBlockedModal');
+  if (m) m.remove();
 }
 
 async function submitJoinQueue(e) {
@@ -4123,7 +4154,7 @@ function renderHostDashboard() {
   // Host waiting table shows only live parties. Seated (and no_show/cancelled)
   // guests drop off cleanly here while their Firestore doc stays alive for the
   // diner's 1–5★ rating screen.
-  const visibleQueue = queue.filter(q => q && ['waiting', 'notified', 'delayed'].includes(q.status));
+  const visibleQueue = queue.filter(q => q && q.status === 'waiting');
 
   document.getElementById('hostVenueName').textContent = r.name;
   document.getElementById('hostVenueLocationSub').textContent = `${r.address} • Host Stand Dashboard`;
