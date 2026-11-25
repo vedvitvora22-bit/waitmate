@@ -128,7 +128,7 @@ function parseBody(request) {
 }
 
 function reliabilityFallback() {
-  return { score: 92, grade: "A", verdict: "Verified demo data", badge_color: "emerald", avg_variance_mins: 2.5, total_verified_checkins: 0, on_time_pct: 90, early_pct: 5, slight_late_pct: 5, severe_late_pct: 0, recent_reviews: [] };
+  return { score: 92, grade: "A", verdict: "Sample estimate", badge_color: "emerald", avg_variance_mins: 2.5, total_verified_checkins: 0, on_time_pct: 90, early_pct: 5, slight_late_pct: 5, severe_late_pct: 0, recent_reviews: [] };
 }
 
 async function findRestaurantById(id) {
@@ -670,6 +670,15 @@ async function route(request, response, pathParts) {
     } catch (error) {
       storage = "firebase_unreachable";
       reason = String(error.message || error || "Firebase unreachable");
+      return send(response, 200, {
+        storage,
+        storage_status: "error",
+        reason,
+        demo_mode: String(process.env.DEMO_MODE || "").toLowerCase() === "true",
+        restaurants: 0,
+        active_queue_entries: 0,
+        firestore_project_id: PROJECT_ID
+      });
     }
     const restaurants = await listCollection("restaurants");
     const entries = await fetchQueueEntries();
@@ -702,6 +711,7 @@ async function route(request, response, pathParts) {
       storage_status: firestore_ok ? "firebase" : "error",
       firestore: firestore_ok ? "connected" : "unreachable",
       firestore_error,
+      reason: firestore_error,
       timestamp: new Date().toISOString(),
       timestamp_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
       firestore_project_id: PROJECT_ID
@@ -1216,7 +1226,7 @@ async function route(request, response, pathParts) {
     };
 
     await safeCommit([setDocument("restaurants", id, restaurant)]);
-    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
+    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${name}' was added to WaitMate India (demo).`, restaurant: sanitizeRestaurant(restaurant) });
   }
 
   if (request.method === "POST" && path === "/api/founder/restaurant/delete") {
@@ -1244,7 +1254,7 @@ async function route(request, response, pathParts) {
     const restaurant = { id, password_hash: hashPassword(body.password || "waitmate123"), name: body.name, category: body.category, type: body.type || "restaurant", city: body.city || "Mumbai", address: body.address, distance_km: 1.0, price_range: body.price_range || "₹₹", meal_times: normalizeMealTimes(body.meal_times), image_url: body.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80", description: body.description || "", owner_name: body.owner_name || "Owner", owner_phone: body.owner_phone || "", base_prep_time: Number(body.base_prep_time || 12), available_tables: Math.max(1, Math.floor(Number(body.total_tables || 16) / 4)), total_tables: Number(body.total_tables || 16), manual_override_wait: null, is_queue_open: true, created_at: Date.now() };
     await safeCommit([setDocument("restaurants", id, restaurant)]);
 
-    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
+    return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${body.name}' was added to WaitMate India (demo).`, restaurant: sanitizeRestaurant(restaurant) });
   }
 
   if (request.method === "POST" && path === "/api/host/change-password") {
@@ -1517,7 +1527,7 @@ async function route(request, response, pathParts) {
     const score = Math.max(0, Math.min(100, parseInt(body.score, 10) || 0));
     if (Number.isNaN(score)) return send(response, 400, { error: "Invalid reliability score" });
     const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
-    const verdicts = { "A+": "Exceptionally Accurate", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits" };
+    const verdicts = { "A+": "Highly Reliable", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits" };
     const badgeColors = { "A+": "emerald", "A": "emerald", "B": "amber", "C": "rose" };
     const updates = {
       ...restaurant,

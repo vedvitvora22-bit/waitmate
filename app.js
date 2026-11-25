@@ -588,7 +588,7 @@ async function sendTableReadyNotification(ticketData) {
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
+  document.title = "WaitMate India 🇮🇳 • Restaurant Queues & Reliability — Demo";
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
@@ -775,7 +775,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 96,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.9,
       total_verified_checkins: 31,
@@ -922,7 +922,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 97,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.2,
       total_verified_checkins: 30,
@@ -994,7 +994,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 95,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.1,
       total_verified_checkins: 42,
@@ -1480,7 +1480,7 @@ async function submitNewRestaurant(e) {
     try { data = await res.json(); } catch (parseErr) { data = {}; }
     if (!res.ok) throw new Error(data.error || 'Failed to register restaurant');
 
-    showToast(`🎉 "${name}" is now live on WaitMate!`, "success");
+    showToast(`🎉 "${name}" was added to WaitMate (demo)!`, "success");
     document.getElementById('ownerAddRestaurantForm').reset();
     
     // Refresh restaurants list across all views
@@ -1496,7 +1496,7 @@ async function submitNewRestaurant(e) {
     showToast(`Error adding restaurant: ${err.message}`, "error");
   } finally {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = `<i data-lucide="store" class="w-4 h-4 text-orange-400"></i> <span>Launch Restaurant on WaitMate Live Network</span>`;
+    submitBtn.innerHTML = `<i data-lucide="store" class="w-4 h-4 text-orange-400"></i> <span>Launch Restaurant on WaitMate (Demo)</span>`;
     lucide.createIcons();
   }
 }
@@ -2281,7 +2281,7 @@ function renderRestaurantsGrid() {
 
             <button onclick="openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
               <i data-lucide="bar-chart-2" class="w-3 h-3"></i>
-              <span>View Verified Accuracy History & Heatmap</span>
+              <span>View Reliability History & Heatmap</span>
             </button>
           </div>
 
@@ -2349,7 +2349,7 @@ function openJoinModal(venueId, channelOverride = null) {
   }
   document.getElementById('joinPreviewWait').textContent = `~${r.live_stats ? r.live_stats.estimated_wait_mins : 15} mins wait`;
   document.getElementById('joinPreviewAhead').textContent = `${r.live_stats ? r.live_stats.queue_count : 2} parties ahead of you`;
-  document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Accurate`;
+  document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Reliability`;
 
   // Reset defaults (empty fields for clean customer entry)
   setPartySize(2);
@@ -2940,7 +2940,7 @@ function updateTicketUI() {
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
     document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
-    document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
+    document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Wait times are estimates that improve as diners leave feedback.";
     tableNearAlert.classList.add('hidden');
     livePassAlertCard.classList.add('hidden');
   }
@@ -3021,7 +3021,7 @@ function clearCurrentTicket() {
   localStorage.removeItem('waitmate_ticket_id');
   localStorage.removeItem('waitmate_active_ticket');
   if (pollTimer) clearInterval(pollTimer);
-  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
+  document.title = "WaitMate India 🇮🇳 • Restaurant Queues & Reliability — Demo";
   document.getElementById('activeTicketPill').classList.add('hidden');
   closeTicketModal();
 }
@@ -3524,9 +3524,9 @@ async function openReliabilityModal(venueId) {
   document.getElementById('relModalVenueName').textContent = r.name;
   document.getElementById('relModalScoreNum').textContent = `${rel.score}%`;
   document.getElementById('relModalGrade').textContent = `Grade ${rel.grade}`;
-  document.getElementById('relModalVerdict').textContent = `${rel.verdict || 'Highly Accurate'} — ${rel.score >= 85 ? 'Consistently delivers on queue estimates.' : 'Noticeable variance during peak rush.'}`;
+  document.getElementById('relModalVerdict').textContent = `${rel.verdict || 'Highly Reliable'} — ${rel.score >= 85 ? 'Consistently delivers on queue estimates.' : 'Noticeable variance during peak rush.'}`;
   document.getElementById('relModalVariance').textContent = `± ${rel.avg_variance_mins} mins`;
-  document.getElementById('relModalTotalReviews').textContent = `${verifiedCheckins} verified check-ins`;
+  document.getElementById('relModalTotalReviews').textContent = `${verifiedCheckins} diner check-ins`;
 
   // Distribution Bars
   document.getElementById('distSpotOn').textContent = `${rel.on_time_pct}%`;
@@ -3781,7 +3781,7 @@ async function submitReview() {
 
     if (!res.ok) throw new Error(data.error || 'Failed to submit review');
 
-    showToast("Thanks! Your verified check-in is live.", "success");
+    showToast("Thanks! Your check-in was recorded.", "success");
 
     // Mark this visit as rated so the prompt doesn't reappear
     if (activeTicketData) markTicketRated(activeTicketData.id);
@@ -3818,7 +3818,7 @@ function renderHourlyPatternChart(patterns) {
           <div class="flex flex-col items-center">
             <span class="font-bold text-slate-700">${p.avg_wait}m</span>
             <div class="w-full h-16 bg-slate-200 rounded-md overflow-hidden flex flex-col justify-end my-1 p-0.5">
-              <div class="w-full ${barColor} rounded-sm" style="height: ${heightPct}%" title="${p.hour}: ${p.avg_wait}m wait (${p.reliability}% accurate)"></div>
+              <div class="w-full ${barColor} rounded-sm" style="height: ${heightPct}%" title="${p.hour}: ${p.avg_wait}m wait (${p.reliability}% reliability)"></div>
             </div>
             <span class="text-slate-600 font-medium truncate w-full">${p.hour.replace(':00', '')}</span>
             <span class="text-[9px] text-slate-600">${p.rush_level}</span>
@@ -3942,7 +3942,7 @@ async function submitDinerFeedback(e) {
     clearCurrentTicket();
     await loadRestaurants();
   } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Verified Check-in & Update Score'; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Check-in & Update Score'; }
   }
 }
 
@@ -4817,7 +4817,7 @@ async function submitFounderAddRestaurant(event) {
     localStorage.setItem('waitmate_custom_venues', JSON.stringify(customVenues));
 
     closeFounderAddRestaurantModal();
-    showToast(`🎉 "${name}" is now live on WaitMate Mumbai!`, 'success');
+    showToast(`🎉 "${name}" was added to WaitMate Mumbai (demo)!`, 'success');
     await loadFounderDashboard();
     await loadRestaurants();
   } catch (err) {

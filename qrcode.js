@@ -116,7 +116,7 @@ function downloadVenueQrPng() {
   ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.fillStyle = '#64748b';
   ctx.fillText(joinUrl, W / 2, 1276);
-  ctx.fillText('WaitMate India • Zero waiting, verified seating.', W / 2, 1308);
+  ctx.fillText('WaitMate India • Less waiting, smarter dining. (Demo)', W / 2, 1308);
 
   // WaitMate logo in header (same-origin; graceful fallback if it fails to load)
   const logo = new Image();

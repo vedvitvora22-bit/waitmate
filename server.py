@@ -1475,7 +1475,7 @@ def calculate_reliability(restaurant_id):
 
     if score >= 93:
         grade = "A+"
-        verdict = "Exceptionally Accurate"
+        verdict = "Highly Reliable"
         badge_color = "emerald"
     elif score >= 85:
         grade = "A"
@@ -2516,7 +2516,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 INSERT INTO queue_entries 
                 (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, has_arrived)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                ''', (ticket_id, "WM-101", rest_id, name, phone, 2, "First Available", "Verified arrival", "remote", "waiting", 8, now - 300))
+                ''', (ticket_id, "WM-101", rest_id, name, phone, 2, "First Available", "Sample arrival", "remote", "waiting", 8, now - 300))
                 conn.commit()
                 conn.close()
                 self.send_json({"success": True, "message": "Host stand notified! You have arrived at the entrance."})
@@ -2549,7 +2549,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                     INSERT INTO queue_entries
                     (id, ticket_number, restaurant_id, customer_name, phone, party_size, seating_pref, special_requests, entry_type, status, estimated_wait_mins, joined_at, seated_at, has_arrived)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    ''', (ticket_id, "WM-101", rest_id, name, "", 2, "First Available", "Verified arrival", "remote", "seated", 8, now - 600, now))
+                    ''', (ticket_id, "WM-101", rest_id, name, "", 2, "First Available", "Sample arrival", "remote", "seated", 8, now - 600, now))
                 msg = "You've been seated! Please rate your experience."
             elif action == "rate":
                 # Save the post-seating 1-5 star rating and mark the ticket as rated (no double rating)
@@ -2957,7 +2957,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
             updated_rel = calculate_reliability(rest_id)
             self.send_json({
                 "success": True, 
-                "message": "Dhanyavaad! Your verified check-in directly updated the restaurant's Reliability Score.",
+                "message": "Dhanyavaad! Your check-in feedback updated the restaurant's Reliability Score.",
                 "updated_reliability": updated_rel
             })
             return
@@ -3004,7 +3004,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
 
             self.send_json({
                 "success": True, 
-                "message": "Thanks! Your verified check-in is live.",
+                "message": "Thanks! Your check-in was recorded.",
                 "review": {
                     "id": review_id,
                     "restaurant_id": restaurant_id,
@@ -3092,7 +3092,7 @@ class WaitMateHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Invalid reliability score"}, 400)
                 return
             grade = "A+" if score >= 95 else "A" if score >= 90 else "B" if score >= 80 else "C"
-            verdicts = {"A+": "Exceptionally Accurate", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits"}
+            verdicts = {"A+": "Highly Reliable", "A": "Highly Reliable", "B": "Moderate Variance", "C": "Unpredictable Peak Waits"}
             badge_colors = {"A+": "emerald", "A": "emerald", "B": "amber", "C": "rose"}
             override = {
                 "score": score,

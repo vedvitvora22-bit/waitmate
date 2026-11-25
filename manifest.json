@@ -1,7 +1,7 @@
 {
   "name": "WaitMate India",
   "short_name": "WaitMate",
-  "description": "Live Restaurant Queues & Reliability Network — Mumbai",
+  "description": "Restaurant & food truck queue platform with estimated wait times and a diner-feedback Reliability Score — Mumbai (Demo with sample data)",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
