@@ -19,11 +19,6 @@ const now = Date.now();
 global._lastSimCache = global._lastSimCache || {};
 const LAST_SIM_COOLDOWN_MS = 120000;
 
-global._tickets = global._tickets || {};
-global._customRestaurants = global._customRestaurants || [];
-global._deletedRestaurantIds = global._deletedRestaurantIds || [];
-global._pwdMap = global._pwdMap || {};
-
 function founderPassword() {
   return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
 }
@@ -281,9 +276,22 @@ function toNumberedEntry(entry) {
 
 // Read helpers that normalize on the way out so callers always get the
 // canonical unprefixed shape regardless of how the document is stored.
+// Legacy "AI ghost queue" tickets (ticket_number "WM-G*", or any ticket that is
+// not a verified real human) must NEVER be displayed, counted, or written. They
+// were produced by the removed simulation worker and survive only as stale
+// Firestore documents. Real join/walk-in tickets always set isRealHuman:true and
+// receive a "WM-<digits>" number, so this filter never hides a genuine diner.
+function isGhostTicket(entry) {
+  if (!entry) return false;
+  const num = String(entry.ticket_number || "").trim().toUpperCase();
+  if (num.startsWith("WM-G")) return true;
+  if (num && entry.isRealHuman !== true) return true;
+  return false;
+}
+
 async function fetchQueueEntries() {
   const docs = await listCollection("queue_entries");
-  return docs.map(normalizeQueueEntry);
+  return docs.map(normalizeQueueEntry).filter(e => !isGhostTicket(e));
 }
 
 async function fetchQueueEntry(id) {
@@ -384,9 +392,7 @@ async function getRawRestaurant(id) {
 }
 
 function publicRestaurant(r) {
-  const merged = { ...r, ...(global._pwdMap?.[r.id] || {}) };
-  delete merged.password_hash;
-  return merged;
+  return r;
 }
 
 async function ensureRestaurants() {
@@ -654,32 +660,49 @@ async function route(request, response, pathParts) {
 
   // Diagnostic: reports the active storage backend and live data counts
   if (request.method === "GET" && path === "/api/health/storage") {
-    let storage = "in_memory_fallback";
-    let reason = "Firebase is not reachable or not configured";
+    let storage = "firebase_firestore";
+    let reason = null;
     try {
       await getAccessToken();
       await listCollection("restaurants");
-      storage = "firebase_firestore";
-      reason = null;
     } catch (error) {
+      storage = "firebase_unreachable";
       reason = String(error.message || error || "Firebase unreachable");
     }
-    let restaurants = [];
-    try { restaurants = await listCollection("restaurants"); } catch { /* ignore */ }
-    let entries = [];
-    try { entries = await fetchQueueEntries(); } catch { entries = Object.values(global._tickets || {}); }
-    const byId = {};
-    for (const e of entries) if (e && e.id) byId[e.id] = e;
-    for (const e of Object.values(global._tickets || {})) if (e && e.id) byId[e.id] = e;
-    const deleted = global._deletedRestaurantIds || [];
+    const restaurants = await listCollection("restaurants");
+    const entries = await fetchQueueEntries();
+    const activeQueue = entries.filter(e => ["waiting", "notified", "delayed"].includes(e.status));
     return send(response, 200, {
       storage,
-      storage_status: storage === "firebase_firestore" ? "firebase" : "memory",
+      storage_status: storage === "firebase_firestore" ? "firebase" : "error",
       reason,
       demo_mode: String(process.env.DEMO_MODE || "").toLowerCase() === "true",
-      restaurants: restaurants.filter(r => !deleted.includes(r.id)).length,
-      active_queue_entries: Object.values(byId).filter(e => ["waiting", "notified", "delayed"].includes(e.status)).length,
-      custom_overrides: (global._customRestaurants || []).filter(r => !deleted.includes(r.id)).length
+      restaurants: restaurants.length,
+      active_queue_entries: activeQueue.length,
+      firestore_project_id: PROJECT_ID
+    });
+  }
+
+  // Quick health check endpoint for production monitoring
+  if (request.method === "GET" && path === "/api/health") {
+    let firestore_ok = false;
+    let firestore_error = null;
+    try {
+      await getAccessToken();
+      await listCollection("restaurants");
+      firestore_ok = true;
+    } catch (error) {
+      firestore_error = String(error.message || error || "Firebase unreachable");
+    }
+    return send(response, firestore_ok ? 200 : 503, {
+      status: firestore_ok ? "ok" : "degraded",
+      storage: "firebase_firestore",
+      storage_status: firestore_ok ? "firebase" : "error",
+      firestore: firestore_ok ? "connected" : "unreachable",
+      firestore_error,
+      timestamp: new Date().toISOString(),
+      timestamp_ist: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
+      firestore_project_id: PROJECT_ID
     });
   }
 
@@ -817,6 +840,10 @@ async function route(request, response, pathParts) {
     // Permanent ticket number, generated once from the atomic counter. Never
     // derived from entries.length or the queue index, so it never changes.
     const ticketNumber = await nextTicketNumber();
+    // Defensive: a real human ticket must never carry the retired ghost prefix.
+    if (String(ticketNumber).toUpperCase().startsWith("WM-G")) {
+      return send(response, 500, { error: "Refused to issue a ghost ticket number." });
+    }
     const joinedAt = Date.now();
     const partySize = Number(body.party_size || 2);
     // Entry channel: "walk_in" when the diner is already at the venue (QR/deep
@@ -1125,18 +1152,7 @@ async function route(request, response, pathParts) {
     }
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const newState = !Boolean(restaurant.is_queue_open);
-    try {
-      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else {
-        throw error;
-      }
-    }
-    global._pwdMap = global._pwdMap || {};
-    if (!global._pwdMap[restaurant.id]) global._pwdMap[restaurant.id] = {};
-    global._pwdMap[restaurant.id].is_queue_open = newState;
+    await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, is_queue_open: newState })]);
     return send(response, 200, { success: true, new_state: newState ? 1 : 0, message: "Restaurant queue state updated." });
   }
 
@@ -1182,14 +1198,6 @@ async function route(request, response, pathParts) {
     };
 
     await safeCommit([setDocument("restaurants", id, restaurant)]);
-
-    global._customRestaurants = global._customRestaurants || [];
-    global._pwdMap = global._pwdMap || {};
-    global._pwdMap[id] = { password_hash: restaurant.password_hash };
-    const publicCopy = { ...restaurant };
-    delete publicCopy.password_hash;
-    global._customRestaurants.push(publicCopy);
-
     return send(response, 200, { success: true, restaurant_id: id, message: `Congratulations! '${name}' is now live on WaitMate India.`, restaurant: sanitizeRestaurant(restaurant) });
   }
 
@@ -1279,51 +1287,41 @@ async function route(request, response, pathParts) {
       created_at: now
     };
     if (ticketId) {
-      try {
-        const t = await fetchQueueEntry(ticketId);
-        if (t) {
-          // Idempotency: a ticket can only be rated once per visit. Ignore
-          // duplicate submissions instead of double-counting the score.
-          if (t.rated) return send(response, 200, { success: true, message: "Ticket already rated. Duplicate submission ignored.", ticket: t });
-          // A submitted rating implies the party was seated: enforce the seated
-          // invariants so status/seated_time_ist can never stay "notified"/null.
-          const merged = markSeated({ ...t });
-          merged.rated = true;
-          merged.rating = Number(rating);
-          merged.comment = String(comment || '').trim();
-          merged.review_comment = merged.comment;
-          merged.rated_at = now;
-          merged.rated_time_ist = review.rated_time_ist;
-          merged.restaurant_name = merged.restaurant_name || restaurantName;
-          delete merged.stars; // no duplicate "stars" field in queue_entries
-          const numbered = toNumberedEntry(merged);
-          await safeCommit([setDocument("queue_entries", ticketId, numbered)]);
-          // Update aggregates after rating (which changes status to seated)
-          await updateRestaurantAggregates(restaurantId);
-          const mem = { ...t, ...merged };
-          delete mem.stars;
-          global._tickets[ticketId] = mem;
-        }
-      } catch (e) { console.warn("ticket rating update failed:", e?.message || e); }
-      if (global._tickets && global._tickets[ticketId] && !global._tickets[ticketId].rated) global._tickets[ticketId] = { ...global._tickets[ticketId], ...review };
-    }
-    try {
-      const rest = await findRestaurantById(restaurantId);
-      if (rest) {
-        let entries = [];
-        try { entries = await fetchQueueEntries(); } catch (e) {}
-        const rated = entries.filter(e => e.restaurant_id === restaurantId && e.rated);
-        const ratingCount = rated.length;
-        const avgRating = ratingCount ? rated.reduce((s, e) => s + Number(e.rating || e.stars || 0), 0) / ratingCount : 0;
-        const recentCheckins = rated.slice(-10).reverse();
-        let score = Number(rest.reliability_score || 90) + delta;
-        score = Math.max(50, Math.min(99, score));
-        const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
-        await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade, rating_count: ratingCount, average_rating: avgRating, recent_checkins: recentCheckins, recent_reviews: recentCheckins })]);
+      const t = await fetchQueueEntry(ticketId);
+      if (t) {
+        // Idempotency: a ticket can only be rated once per visit. Ignore
+        // duplicate submissions instead of double-counting the score.
+        if (t.rated) return send(response, 200, { success: true, message: "Ticket already rated. Duplicate submission ignored.", ticket: t });
+        // A submitted rating implies the party was seated: enforce the seated
+        // invariants so status/seated_time_ist can never stay "notified"/null.
+        const merged = markSeated({ ...t });
+        merged.rated = true;
+        merged.rating = Number(rating);
+        merged.comment = String(comment || '').trim();
+        merged.review_comment = merged.comment;
+        merged.rated_at = now;
+        merged.rated_time_ist = review.rated_time_ist;
+        merged.restaurant_name = merged.restaurant_name || restaurantName;
+        delete merged.stars; // no duplicate "stars" field in queue_entries
+        const numbered = toNumberedEntry(merged);
+        await safeCommit([setDocument("queue_entries", ticketId, numbered)]);
+        // Update aggregates after rating (which changes status to seated)
+        await updateRestaurantAggregates(restaurantId);
       }
-    } catch (e) { console.warn("restaurant update failed:", e?.message || e); }
-    global._reviews = global._reviews || [];
-    global._reviews.push(review);
+    }
+    const rest = await findRestaurantById(restaurantId);
+    if (rest) {
+      const entries = await fetchQueueEntries();
+      const rated = entries.filter(e => e.restaurant_id === restaurantId && e.rated);
+      const ratingCount = rated.length;
+      const avgRating = ratingCount ? rated.reduce((s, e) => s + Number(e.rating || e.stars || 0), 0) / ratingCount : 0;
+      const recentCheckins = rated.slice(-10).reverse();
+      let score = Number(rest.reliability_score || 90) + delta;
+      score = Math.max(50, Math.min(99, score));
+      const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+      await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, grade, rating_count: ratingCount, average_rating: avgRating, recent_checkins: recentCheckins, recent_reviews: recentCheckins })]);
+    }
+    await safeCommit([setDocument("reviews", review.id, review)]);
     return send(response, 200, { success: true, message: "Review submitted successfully!", review });
   }
 
@@ -1334,18 +1332,9 @@ async function route(request, response, pathParts) {
       return send(response, 400, { error: "restaurantId query parameter is required" });
     }
 
-    let firestoreReviews = [];
-    try {
-      const docs = await listCollection("reviews");
-      firestoreReviews = docs.filter(r => r.restaurant_id === restaurantId);
-    } catch (error) {
-      // Firestore quota (429) / 503 / 403 / 404 -> degrade to in-memory reviews only.
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
-
-    const memoryReviews = (global._reviews || []).filter(r => r.restaurant_id === restaurantId);
-    const allReviews = [...firestoreReviews, ...memoryReviews];
-    const uniqueReviews = Object.values(allReviews.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+    const docs = await listCollection("reviews");
+    const firestoreReviews = docs.filter(r => r.restaurant_id === restaurantId);
+    const uniqueReviews = Object.values(firestoreReviews.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
 
     uniqueReviews.sort((a, b) => Number(b.created_at) - Number(a.created_at));
 
@@ -1379,12 +1368,8 @@ async function route(request, response, pathParts) {
 
     let seeded = 0;
     const writes = [];
-    const existingSeedCount = (global._reviews || []).filter(r => r.is_sample === 1).length;
     for (const restaurant of restaurants) {
       const restId = restaurant.id;
-      const alreadySeeded = (global._reviews || []).filter(r => r.restaurant_id === restId && r.is_sample === 1).length;
-      if (alreadySeeded >= 3) continue;
-
       const comments = SAMPLE_COMMENTS[restId] || ["Arrived exactly when the token said. Great food!", "Service was quick and the food was delicious.", "Fair wait estimate, solid neighborhood spot."];
       for (let i = 0; i < 3; i++) {
         const rating = [5, 4, 5][i % 3];
@@ -1403,18 +1388,13 @@ async function route(request, response, pathParts) {
           is_sample: 1,
           created_at: now - (3 - i) * 3600,
         };
-        // Best-effort Firestore write; in-memory state is the source of truth
-        // when Firestore quota is exhausted (429 / 503 / 404).
-        try {
-          writes.push(setDocument("reviews", reviewId, review));
-          if (writes.length >= 20) { await safeCommit(writes); writes.length = 0; }
-        } catch (e) { /* swallow; memory still holds the review */ }
-        (global._reviews = global._reviews || []).push(review);
+        writes.push(setDocument("reviews", reviewId, review));
+        if (writes.length >= 20) { await safeCommit(writes); writes.length = 0; }
         seeded++;
       }
     }
-    if (writes.length) { try { await safeCommit(writes); } catch (e) {} }
-    return send(response, 200, { success: true, message: `Seeded ${seeded} sample reviews across ${restaurants.length} restaurants.`, seeded, existingSeedCount });
+    if (writes.length) { await safeCommit(writes); }
+    return send(response, 200, { success: true, message: `Seeded ${seeded} sample reviews across ${restaurants.length} restaurants.`, seeded });
   }
 
   // -----------------------------------------------------------------------
@@ -1452,8 +1432,7 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/restaurants") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants();
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const queueEntries = allQueueEntries(firestoreEntries);
     const result = [];
     for (const r of restaurants) {
@@ -1488,12 +1467,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurantId = body.restaurant_id;
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
-    let restaurant;
-    try {
-      restaurant = await getRawRestaurant(restaurantId);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
-    }
+    const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open","meal_times"];
     const updates = { ...restaurant };
@@ -1511,16 +1485,7 @@ async function route(request, response, pathParts) {
     }
     if (!changed) return send(response, 400, { error: "No updatable fields provided" });
     if (Number.isFinite(Number(updates.total_tables))) updates.available_tables = Math.max(1, Math.floor(Number(updates.total_tables) / 4));
-    try {
-      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
-    global._pwdMap = global._pwdMap || {};
-    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
-    for (const k of ["is_queue_open","manual_override_wait","announcement"]) if (updates[k] !== undefined) global._pwdMap[restaurantId][k] = updates[k];
+    await safeCommit([setDocument("restaurants", restaurantId, updates)]);
     return send(response, 200, { success: true, message: "Restaurant updated.", restaurant: sanitizeRestaurant(updates) });
   }
 
@@ -1529,12 +1494,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurantId = body.restaurant_id;
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
-    let restaurant;
-    try {
-      restaurant = await getRawRestaurant(restaurantId);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
-    }
+    const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const score = Math.max(0, Math.min(100, parseInt(body.score, 10) || 0));
     if (Number.isNaN(score)) return send(response, 400, { error: "Invalid reliability score" });
@@ -1551,13 +1511,7 @@ async function route(request, response, pathParts) {
       avg_variance_mins: body.avg_variance_mins !== undefined ? Number(body.avg_variance_mins) : restaurant.avg_variance_mins || 2.5,
       total_verified_checkins: body.total_verified_checkins !== undefined ? Number(body.total_verified_checkins) : restaurant.total_verified_checkins || 0
     };
-    try {
-      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
+    await safeCommit([setDocument("restaurants", restaurantId, updates)]);
     return send(response, 200, { success: true, message: `Reliability Score overridden to ${score}% (Grade ${grade}).`, reliability: reliabilityFromRestaurant(updates) });
   }
 
@@ -1566,25 +1520,11 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurantId = body.restaurant_id;
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
-    let restaurant;
-    try {
-      restaurant = await getRawRestaurant(restaurantId);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
-    }
+    const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const announcement = String(body.announcement === undefined ? "" : body.announcement);
     const updates = { ...restaurant, announcement };
-    try {
-      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
-    global._pwdMap = global._pwdMap || {};
-    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
-    global._pwdMap[restaurantId].announcement = announcement;
+    await safeCommit([setDocument("restaurants", restaurantId, updates)]);
     return send(response, 200, { success: true, message: announcement ? "Announcement published." : "Announcement cleared.", announcement });
   }
 
@@ -1593,28 +1533,14 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurantId = body.restaurant_id;
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
-    let restaurant;
-    try {
-      restaurant = await getRawRestaurant(restaurantId);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { restaurant = null; } else { throw error; }
-    }
+    const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
     const manualWait = body.manual_wait_mins === null || body.manual_wait_mins === undefined || body.manual_wait_mins === "" ? null : Number(body.manual_wait_mins);
     if (manualWait !== null && (Number.isNaN(manualWait) || manualWait < 0 || manualWait > 180)) {
       return send(response, 400, { error: "Manual wait must be between 0 and 180 minutes" });
     }
     const updates = { ...restaurant, manual_override_wait: manualWait };
-    try {
-      await safeCommit([setDocument("restaurants", restaurantId, updates)]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
-    global._pwdMap = global._pwdMap || {};
-    if (!global._pwdMap[restaurantId]) global._pwdMap[restaurantId] = {};
-    global._pwdMap[restaurantId].manual_override_wait = manualWait;
+    await safeCommit([setDocument("restaurants", restaurantId, updates)]);
     return send(response, 200, { success: true, message: manualWait === null ? "Wait estimate reset to algorithmic." : `Wait estimate overridden to ${manualWait} mins.`, manual_override_wait: manualWait });
   }
 
@@ -1622,25 +1548,14 @@ async function route(request, response, pathParts) {
   if (request.method === "POST" && path === "/api/founder/announcement/global") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const value = String(body.announcement === undefined ? "" : body.announcement);
-    try {
-      await safeCommit([setDocument("settings", "global_announcement", { value, updated_at: Date.now() })]);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
+    await safeCommit([setDocument("settings", "global_announcement", { value, updated_at: Date.now() })]);
     return send(response, 200, { success: true, message: value ? "Global network banner published." : "Global network banner cleared.", announcement: value });
   }
 
   // Read runtime settings (global banner, etc.)
   if (request.method === "GET" && path === "/api/founder/settings") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    let settings = [];
-    try {
-      settings = await listCollection("settings");
-    } catch (error) {
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
+    const settings = await listCollection("settings");
     const found = settings.find(s => s.id === "global_announcement");
     return send(response, 200, { success: true, settings, global_announcement: found ? (found.value || "") : "" });
   }
@@ -1648,8 +1563,7 @@ async function route(request, response, pathParts) {
   // Live cross-platform queue stream: every active party across all venues
   if (request.method === "GET" && path === "/api/founder/queues") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const restaurants = await ensureRestaurants();
     const byId = {};
@@ -1674,8 +1588,7 @@ async function route(request, response, pathParts) {
   // Founder queue action on any ticket: notify / seat / remove / edit party size
   if (request.method === "POST" && path === "/api/founder/queue/action") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    let ticket;
-    try { ticket = await fetchQueueEntry(body.ticket_id); } catch (error) { if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) { ticket = global._tickets[body.ticket_id] || null; } else { throw error; } }
+    const ticket = await fetchQueueEntry(body.ticket_id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     const updates = { ...ticket };
     if (body.action === "notify") {
@@ -1695,16 +1608,9 @@ async function route(request, response, pathParts) {
     } else {
       return send(response, 400, { error: "Unknown queue action" });
     }
-    try {
-      await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
-      // Update aggregates after founder queue action
-      await updateRestaurantAggregates(ticket.restaurant_id);
-    } catch (error) {
-      if (error.status === 503 || error.status === 403 || error.status === 404 || error instanceof SyntaxError) {
-        console.warn("Firestore write skipped (demo/unconfigured mode):", error.status);
-      } else { throw error; }
-    }
-    global._tickets[ticket.id] = updates;
+    await safeCommit([setDocument("queue_entries", ticket.id, toNumberedEntry(updates))]);
+    // Update aggregates after founder queue action
+    await updateRestaurantAggregates(ticket.restaurant_id);
     return send(response, 200, { success: true, message: "Queue action updated.", ticket: updates });
   }
 
@@ -1713,13 +1619,11 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurantId = body.restaurant_id;
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => e.restaurant_id === restaurantId && ["waiting","notified","delayed"].includes(e.status));
     const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
-    for (const e of targets) delete global._tickets[e.id];
     // Update aggregates after clearing venue queue
     await updateRestaurantAggregates(restaurantId);
     return send(response, 200, { success: true, message: `Cleared ${targets.length} active ticket(s) from the venue queue.`, cleared: targets.length });
@@ -1728,14 +1632,12 @@ async function route(request, response, pathParts) {
   // Purge test / stale entries: all historical (non-active) queue entries
   if (request.method === "POST" && path === "/api/founder/queue/purge") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => !["waiting","notified","delayed"].includes(e.status));
     const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
     if (deletes.length) await safeCommit(deletes);
     const affectedIds = new Set(targets.map(e => e.restaurant_id));
-    for (const e of targets) delete global._tickets[e.id];
     // Update aggregates for all affected restaurants after purge
     for (const id of affectedIds) {
       await updateRestaurantAggregates(id);
@@ -1743,19 +1645,28 @@ async function route(request, response, pathParts) {
     return send(response, 200, { success: true, message: `Purged ${targets.length} stale/test queue entry(ies).`, purged: targets.length });
   }
 
+  // Permanently delete EVERY legacy AI ghost-queue ticket (ticket_number "WM-G*"
+  // or any non-real-human entry) from Firestore. Reads the RAW collection so the
+  // display filter above cannot hide the very documents we intend to delete.
+  if (request.method === "POST" && path === "/api/founder/queue/purge-ghosts") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const rawEntries = await listCollection("queue_entries");
+    const ghosts = rawEntries.filter(e => isGhostTicket(normalizeQueueEntry(e)));
+    const deletes = ghosts.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
+    if (deletes.length) await safeCommit(deletes);
+    const affectedIds = new Set(ghosts.map(e => normalizeQueueEntry(e).restaurant_id).filter(Boolean));
+    for (const id of affectedIds) {
+      await updateRestaurantAggregates(id);
+    }
+    return send(response, 200, { success: true, message: `Permanently deleted ${ghosts.length} ghost ticket(s).`, deleted: ghosts.length });
+  }
+
   // Full network review feed for the Reliability Audit Watchdog
   if (request.method === "GET" && path === "/api/founder/reviews") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    let firestoreReviews = [];
-    try {
-      const docs = await listCollection("reviews");
-      firestoreReviews = docs;
-    } catch (error) {
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
-    const memoryReviews = (global._reviews || []);
-    const allReviews = [...firestoreReviews, ...memoryReviews];
-    const unique = Object.values(allReviews.reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
+    const docs = await listCollection("reviews");
+    const firestoreReviews = docs;
+    const unique = Object.values(firestoreReviews.reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
     unique.sort((a, b) => Number(b.created_at || b.rated_at || 0) - Number(a.created_at || a.rated_at || 0));
     const restaurants = await ensureRestaurants();
     const byId = {};
@@ -1769,46 +1680,35 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const reviewId = path.split("/").pop();
     if (!reviewId) return send(response, 400, { error: "Missing review id" });
-    let firestoreReviews = [];
-    try {
-      const docs = await listCollection("reviews");
-      firestoreReviews = docs;
-    } catch (error) {
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
+    const docs = await listCollection("reviews");
+    const firestoreReviews = docs;
     const target = firestoreReviews.find(r => r.id === reviewId);
     const restaurantId = target ? target.restaurant_id : null;
     const deletes = [];
     if (target) deletes.push({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/reviews/${encodeSegment(reviewId)}` } });
     if (deletes.length) await safeCommit(deletes);
-    global._reviews = (global._reviews || []).filter(r => r.id !== reviewId);
     // Also un-rate the linked ticket so it can't be double counted
     if (target && target.ticket_id) {
-      try {
-        const t = await fetchQueueEntry(target.ticket_id);
-        if (t) {
-          const unticket = { ...t, rated: false, rating: null, review_comment: "", comment: "", rated_at: null, rated_time_ist: null };
-          await safeCommit([setDocument("queue_entries", target.ticket_id, toNumberedEntry(unticket))]);
-          global._tickets[target.ticket_id] = unticket;
-        }
-      } catch (e) { console.warn("un-rate ticket failed:", e?.message || e); }
+      const t = await fetchQueueEntry(target.ticket_id);
+      if (t) {
+        const unticket = { ...t, rated: false, rating: null, review_comment: "", comment: "", rated_at: null, rated_time_ist: null };
+        await safeCommit([setDocument("queue_entries", target.ticket_id, toNumberedEntry(unticket))]);
+      }
     }
     // Recalculate Reliability Score from remaining reviews
     if (restaurantId) {
-      try {
-        const all = await listCollection("reviews");
-        const rated = [...(all.filter(r => r.restaurant_id === restaurantId)), ...((global._reviews || []).filter(r => r.restaurant_id === restaurantId))];
-        const uniq = Object.values(rated.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
-        if (uniq.length) {
-          const avg = uniq.reduce((s, r) => s + Number(r.rating || 0), 0) / uniq.length;
-          const score = Math.max(50, Math.min(99, Math.round(55 + (avg - 1) * 11)));
-          const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
-          const rest = await findRestaurantById(restaurantId);
-          if (rest) {
-            await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, reliability_grade: grade, reliability_manual_override: false, total_verified_checkins: uniq.length, average_rating: avg })]);
-          }
+      const all = await listCollection("reviews");
+      const rated = all.filter(r => r.restaurant_id === restaurantId);
+      const uniq = Object.values(rated.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+      if (uniq.length) {
+        const avg = uniq.reduce((s, r) => s + Number(r.rating || 0), 0) / uniq.length;
+        const score = Math.max(50, Math.min(99, Math.round(55 + (avg - 1) * 11)));
+        const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+        const rest = await findRestaurantById(restaurantId);
+        if (rest) {
+          await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, reliability_grade: grade, reliability_manual_override: false, total_verified_checkins: uniq.length, average_rating: avg })]);
         }
-      } catch (e) { console.warn("recalculate reliability failed:", e?.message || e); }
+      }
     }
     return send(response, 200, { success: true, message: "Review deleted and Reliability Score recalculated." });
   }
@@ -1817,19 +1717,12 @@ async function route(request, response, pathParts) {
   if (request.method === "GET" && path === "/api/founder/export") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const restaurants = await ensureRestaurants().then(list => list.map(sanitizeRestaurant));
-    let firestoreEntries = [];
-    try { firestoreEntries = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreEntries = await fetchQueueEntries();
     const queueEntries = allQueueEntries(firestoreEntries);
-    let firestoreReviews = [];
-    try {
-      const docs = await listCollection("reviews");
-      firestoreReviews = docs;
-    } catch (error) {
-      if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error;
-    }
-    const settings = [];
-    try { settings = await listCollection("settings"); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) {} }
-    const reviews = Object.values([...firestoreReviews, ...((global._reviews || []))].reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
+    const docs = await listCollection("reviews");
+    const firestoreReviews = docs;
+    const settings = await listCollection("settings");
+    const reviews = Object.values(firestoreReviews.reduce((acc, r) => { if (r && r.id) acc[r.id] = r; return acc; }, {}));
     return send(response, 200, {
       success: true,
       exported_at: new Date().toISOString(),
@@ -1848,8 +1741,7 @@ async function route(request, response, pathParts) {
     const id = pathParts[pathParts.length - 1];
     const restaurant = await findRestaurantById(id);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    let firestoreQueue = [];
-    try { firestoreQueue = await fetchQueueEntries(); } catch (error) { if (error.status !== 503 && error.status !== 403 && error.status !== 404 && !(error instanceof SyntaxError)) throw error; }
+    const firestoreQueue = await fetchQueueEntries();
     const queue = allQueueEntries(firestoreQueue);
     const entries = queue.filter(entry => entry.restaurant_id === id).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
     return send(response, 200, {
