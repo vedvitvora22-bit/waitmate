@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
-const PROJECT_ID = "waimate-ind01";
-const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+let PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || null;
+let BASE = PROJECT_ID ? `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents` : null;
 let cachedAccessToken = null;
 let cachedAccessTokenExpiry = 0;
 
@@ -171,6 +171,9 @@ async function getAccessToken() {
     err.status = 503;
     throw err;
   }
+
+  PROJECT_ID = credentials.project_id || process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || PROJECT_ID;
+  BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
   const now = Math.floor(Date.now() / 1000);
   const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
