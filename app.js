@@ -630,43 +630,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
   renderRestaurantsGrid();
 
-  // ---- App Launch Splash Screen: pre-load data while logo is centered ----
+  // ---- App Launch Splash Screen: exactly 750ms centered logo with pulse ----
   const splashEl = document.getElementById('appSplash');
-  const splashParams = new URLSearchParams(window.location.search);
-  const splashPath = (window.location.pathname || '/').toLowerCase();
-  const splashHash = (window.location.hash || '').toLowerCase();
-  const isDeepLink = splashPath === '/founder' || splashPath.endsWith('/founder')
-    || splashParams.get('founder') === '1' || splashHash === '#founder'
-    || splashParams.get('passId') || splashParams.get('ticket') || splashParams.get('venue');
 
   // Fire initial data fetches immediately while the splash is visible.
   const dataPromise = (async () => {
     try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
     try { await loadActivePassData(); } catch (err) { console.warn('Splash pre-load: active pass failed', err); }
-    // Reviews are fetched per-venue on demand, but seed the cache with the first
-    // venue so the Customer grid is populated without an extra round-trip.
     try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
   })();
 
-  // Minimum splash visibility (1500ms) AND wait for data to resolve, capped at 3500ms.
-  // Deep links (founder / passId / ticket / venue) shorten this to 400ms for snappy checks.
-  const MIN_SPLASH_MS = isDeepLink ? 400 : 1500;
-  const MAX_SPLASH_MS = isDeepLink ? 1200 : 3500;
-  const splashReadyAt = Date.now() + MIN_SPLASH_MS;
-  const splashDeadline = Date.now() + MAX_SPLASH_MS;
+  // Exactly 750ms splash visibility, no deep-link shortcuts for the brand experience
+  const SPLASH_DURATION_MS = 750;
+  const splashReadyAt = Date.now() + SPLASH_DURATION_MS;
 
   let splashResolved = false;
 
-  // Safety timeout: never trap the user on the splash screen past the deadline,
-  // even if a fetch hangs on a slow/flaky mobile network.
-  const deadlineTimer = setTimeout(() => {
-    if (splashResolved) return;
-    splashResolved = true;
-    finishSplash();
-  }, Math.max(0, splashDeadline - Date.now()) + 1);
-
   function finishSplash() {
-    clearTimeout(deadlineTimer);
     if (splashEl) {
       splashEl.classList.add('is-fading');
       setTimeout(() => {
@@ -677,20 +657,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Wait for the minimum visibility window AND the data promise to settle, but
-  // never past the safety deadline. The data promise keeps running in the
-  // background so a slow fetch still populates the grid after the splash fades.
+  // Wait for exactly 750ms AND data to settle (but never block past splash duration)
   const waitForMin = new Promise(resolve => {
     const tick = () => {
       if (Date.now() >= splashReadyAt) return resolve();
-      setTimeout(tick, 40);
+      setTimeout(tick, 16);
     };
     tick();
   });
 
   await Promise.race([
     Promise.all([dataPromise, waitForMin.then(() => dataPromise)]),
-    new Promise(resolve => setTimeout(resolve, Math.max(0, splashDeadline - Date.now()) + 1)),
+    new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS + 50)),
   ]).then(() => { if (!splashResolved) { splashResolved = true; finishSplash(); } });
 
   // Allow the fade-out animation to play before continuing initialization.
@@ -698,6 +676,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await new Promise(resolve => setTimeout(resolve, 320));
   }
   // ---- end splash ----
+
+  // Initialize onboarding tour after splash screen
+  initOnboarding();
 
   try {
     const _params = new URLSearchParams(window.location.search);
@@ -2557,20 +2538,8 @@ async function submitJoinQueue(e) {
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
+      has_arrived: false,
       delay_mins: 0,
-      ...(joinChannel === 'walk_in' && {
-        arrived_at: Date.now() / 1000,
-        arrived_time_ist: new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }) + ' IST'
-      }),
       position_in_line: data.position_in_line ?? 1,
       parties_ahead: data.parties_ahead ?? 0,
       estimated_remaining_mins: promisedWait,
@@ -2628,20 +2597,8 @@ async function submitJoinQueue(e) {
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
+      has_arrived: false,
       delay_mins: 0,
-      ...(joinChannel === 'walk_in' && {
-        arrived_at: Date.now() / 1000,
-        arrived_time_ist: new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }) + ' IST'
-      }),
       position_in_line: (targetRest.live_stats ? targetRest.live_stats.queue_count : 0) + 1,
       parties_ahead: targetRest.live_stats ? targetRest.live_stats.queue_count : 0,
       estimated_remaining_mins: estWait,
@@ -4206,7 +4163,7 @@ function renderHostDashboard() {
   if (visibleQueue.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="py-8 text-center text-slate-600">
+        <td colspan="7" class="py-8 text-center text-slate-600">
           <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
           Queue is empty right now. Walk-ins and remote diners will appear here automatically.
         </td>
@@ -4234,6 +4191,26 @@ function renderHostDashboard() {
     const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
     const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
     const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+
+    // Customer Status column badge
+    let customerStatusBadge = '';
+    if (q.status === 'cancelled') {
+      customerStatusBadge = `<span class="badge-tag bg-rose-50 text-rose-700 border border-rose-200 font-bold">Cancelled Queue</span>`;
+    } else if (q.status === 'delayed') {
+      customerStatusBadge = `<span class="badge-tag bg-amber-50 text-amber-700 border border-amber-200 font-bold">+5 Mins Requested</span>`;
+    } else if (q.has_arrived) {
+      customerStatusBadge = `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">Arrived at Venue</span>`;
+    } else {
+      customerStatusBadge = `<span class="badge-tag bg-slate-50 text-slate-700 border border-slate-200">Awaiting Arrival</span>`;
+    }
+
+    // Disable Seat button if customer hasn't arrived
+    const seatDisabled = !q.has_arrived;
+    const seatButtonClass = seatDisabled 
+      ? 'px-2.5 py-1 bg-slate-300 text-slate-500 rounded font-bold text-[11px] cursor-not-allowed flex items-center gap-1' 
+      : 'px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1';
+    const seatButtonOnClick = seatDisabled ? '' : `onclick="hostAction('${q.id}', 'seat')" `;
+    const seatTooltip = seatDisabled ? ' title="Waiting for arrival"' : '';
 
     return `
       <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
@@ -4266,8 +4243,12 @@ function renderHostDashboard() {
           <div class="flex items-center gap-1.5 flex-wrap">
             ${statusPill}
             ${idx < 2 && ['waiting', 'delayed'].includes(q.status) ? `<span class="badge-tag bg-orange-100 text-orange-900 border border-orange-300 font-bold animate-pulse">🚨 Near (#${idx+1})</span>` : ''}
-            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `            <span class="text-[10px] text-slate-600">En route</span>`}
+            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `<span class="text-[10px] text-slate-600">En route</span>`}
           </div>
+        </td>
+
+        <td class="py-3 px-4">
+          ${customerStatusBadge}
         </td>
 
         <td class="py-3 px-4 text-right">
@@ -4279,7 +4260,7 @@ function renderHostDashboard() {
                 </button>
               ` : ''}
               
-              <button onclick="hostAction('${q.id}', 'seat')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1">
+              <button ${seatButtonOnClick}class="${seatButtonClass}"${seatTooltip}>
                 <i data-lucide="check" class="w-3 h-3"></i> Seat
               </button>
 
@@ -4310,7 +4291,10 @@ async function hostAction(ticketId, action) {
         action: action
       })
     });
-    if (!res.ok) throw new Error('Host API action failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Host API action failed');
+    }
     let data = {};
     try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || "Host action saved", "success");
@@ -4319,6 +4303,11 @@ async function hostAction(ticketId, action) {
     await loadRestaurants();
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
+    // Handle arrival requirement error specifically
+    if (err.message && err.message.includes("must click I've Arrived")) {
+      showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+      return;
+    }
     // Local simulation fallback
     const qList = localMockQueues[currentHostVenueId] || [];
     const entry = qList.find(x => x.id === ticketId);
@@ -4328,6 +4317,11 @@ async function hostAction(ticketId, action) {
         playNotificationChime();
         showToast("Table Ready alert sent to guest's Digital Boarding Pass!", "success");
       } else if (action === 'seat') {
+        // Enforce arrival requirement locally as well
+        if (!entry.has_arrived) {
+          showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+          return;
+        }
         entry.status = 'seated';
         entry.actual_wait_mins = Math.max(1, Math.floor((Date.now()/1000 - entry.joined_at)/60));
         showToast("Party successfully seated!", "success");
@@ -5180,14 +5174,23 @@ async function founderQueueAction(ticketId, action) {
       body: JSON.stringify({ ticket_id: ticketId, action })
     });
     if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
-    if (!res.ok) throw new Error('Queue action failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Queue action failed');
+    }
     const data = await res.json().catch(() => ({}));
     showToast(data.message || 'Queue action updated.', 'success');
     if (action === 'notify') playNotificationChime();
     await loadFounderDashboard();
     await loadRestaurants();
     if (currentTicketId) await fetchTicketStatus();
-  } catch (err) { showToast('Error performing queue action', 'error'); }
+  } catch (err) {
+    if (err.message && err.message.includes("must click I've Arrived")) {
+      showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+      return;
+    }
+    showToast('Error performing queue action', 'error');
+  }
 }
 
 async function founderEditPartySize(ticketId) {
@@ -5328,6 +5331,179 @@ async function founderSeedReviews() {
 }
 
 window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
+
+// ==========================================
+// 17. ONBOARDING TOUR (3-Step Interactive Split-Card)
+// ==========================================
+let onboardingCurrentStep = 1;
+const onboardingTotalSteps = 3;
+
+function initOnboarding() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  // Check if user has already completed onboarding tour
+  if (localStorage.getItem('onboarding_done') === 'true') {
+    modal.classList.add('hidden');
+    return;
+  }
+
+  // Show the modal
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  onboardingCurrentStep = 1;
+  updateOnboardingUI();
+  lucide.createIcons();
+
+  // Add keyboard event listener
+  document.addEventListener('keydown', handleOnboardingKeydown);
+}
+
+function handleOnboardingKeydown(e) {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+
+  switch (e.key) {
+    case 'ArrowRight':
+      e.preventDefault();
+      if (onboardingCurrentStep < onboardingTotalSteps) {
+        nextOnboardingStep();
+      }
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (onboardingCurrentStep > 1) {
+        prevOnboardingStep();
+      }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      skipOnboarding();
+      break;
+    case 'Enter':
+    case ' ':
+      // Allow Enter/Space to activate focused buttons
+      break;
+  }
+}
+
+function updateOnboardingUI() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  // Hide all screens
+  document.querySelectorAll('.onboarding-screen').forEach(screen => {
+    screen.classList.add('hidden');
+    screen.classList.remove('flex');
+  });
+
+  // Show current screen
+  const currentScreen = document.querySelector(`.onboarding-screen[data-step="${onboardingCurrentStep}"]`);
+  if (currentScreen) {
+    currentScreen.classList.remove('hidden');
+    currentScreen.classList.add('flex');
+  }
+
+  // Update navigation buttons
+  updateOnboardingNav();
+
+  // Focus the primary action button for accessibility
+  setTimeout(() => {
+    const primaryBtn = currentScreen?.querySelector('.onboarding-next, .onboarding-cta');
+    if (primaryBtn) primaryBtn.focus();
+  }, 50);
+
+  lucide.createIcons();
+}
+
+function updateOnboardingNav() {
+  // Update Previous button
+  const prevBtn = document.querySelector('.onboarding-prev');
+  if (prevBtn) {
+    if (onboardingCurrentStep === 1) {
+      prevBtn.disabled = true;
+      prevBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      prevBtn.disabled = false;
+      prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
+
+  // Update Next/CTA button visibility
+  const nextBtn = document.querySelector('.onboarding-next');
+  const ctaBtn = document.querySelector('.onboarding-cta');
+  
+  if (onboardingCurrentStep === onboardingTotalSteps) {
+    if (nextBtn) nextBtn.classList.add('hidden');
+    if (ctaBtn) ctaBtn.classList.remove('hidden');
+  } else {
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    if (ctaBtn) ctaBtn.classList.add('hidden');
+  }
+
+  // Update step indicator dots
+  document.querySelectorAll('.onboarding-dot').forEach(dot => {
+    const step = parseInt(dot.dataset.step);
+    if (step === onboardingCurrentStep) {
+      dot.classList.remove('bg-slate-200', 'bg-slate-300');
+      dot.classList.add('bg-orange-500');
+      dot.setAttribute('aria-selected', 'true');
+    } else if (step < onboardingCurrentStep) {
+      dot.classList.remove('bg-slate-200', 'bg-orange-500');
+      dot.classList.add('bg-slate-300');
+      dot.setAttribute('aria-selected', 'false');
+    } else {
+      dot.classList.remove('bg-slate-300', 'bg-orange-500');
+      dot.classList.add('bg-slate-200');
+      dot.setAttribute('aria-selected', 'false');
+    }
+  });
+}
+
+function nextOnboardingStep() {
+  if (onboardingCurrentStep < onboardingTotalSteps) {
+    onboardingCurrentStep++;
+    updateOnboardingUI();
+  }
+}
+
+function prevOnboardingStep() {
+  if (onboardingCurrentStep > 1) {
+    onboardingCurrentStep--;
+    updateOnboardingUI();
+  }
+}
+
+function skipOnboarding() {
+  completeOnboarding(true);
+}
+
+function completeOnboarding(skipped = false) {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  // Mark onboarding as complete
+  localStorage.setItem('onboarding_done', 'true');
+
+  // Hide modal with animation
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+
+  // Remove keyboard listener
+  document.removeEventListener('keydown', handleOnboardingKeydown);
+
+  if (!skipped) {
+    showToast('Welcome to WaitMate! 🎉', 'success');
+  }
+
+  lucide.createIcons();
+}
+
+// Expose functions globally for inline onclick handlers
+window.nextOnboardingStep = nextOnboardingStep;
+window.prevOnboardingStep = prevOnboardingStep;
+window.skipOnboarding = skipOnboarding;
+window.completeOnboarding = completeOnboarding;
 
 (() => {
   console.log("👀 Watching for Rating UI when customer is marked 'seated'...");

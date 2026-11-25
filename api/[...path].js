@@ -947,11 +947,11 @@ async function route(request, response, pathParts) {
       joined_at: joinedAt,
       joined_time_ist: new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
       notified_at: null,
-      arrived_at: isWalkin ? joinedAt : null,
-      arrived_time_ist: isWalkin ? new Date(joinedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST' : null,
+      arrived_at: null,
+      arrived_time_ist: null,
       seated_at: null,
       seated_time_ist: null,
-      has_arrived: isWalkin,
+      has_arrived: false,
       delay_mins: 0,
       parties_ahead: partiesAhead,
       isRealHuman: true
@@ -1708,6 +1708,9 @@ async function route(request, response, pathParts) {
       updates.notified_at = Date.now();
       updates.notified_time_ist = formatIST(updates.notified_at);
     } else if (body.action === "seat") {
+      if (!ticket.has_arrived) {
+        return send(response, 400, { error: "Customer must click I've Arrived at the Venue before seating" });
+      }
       const now = Date.now();
       markSeated(updates);
       updates.actual_wait_mins = Math.max(1, Math.floor((now - Number(ticket.joined_at || now)) / 60000));
