@@ -978,7 +978,7 @@ const fallbackRestaurants = [
     distance_km: 1.5,
     price_range: "₹₹",
     meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
-    image_url: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+    image_url: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80",
     description: "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
     live_stats: {
       queue_count: 3,
@@ -1124,7 +1124,7 @@ const fallbackRestaurants = [
     distance_km: 3.5,
     price_range: "₹",
     meal_times: ["Breakfast", "Lunch", "Snacks", "Dinner", "Late Night"],
-    image_url: "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+    image_url: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80",
     description: "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
     live_stats: {
       queue_count: 3,
@@ -1849,6 +1849,31 @@ async function founderToggleQueue(restId) {
 
 // Client fallback guard: if the midnight IST cron is missed, the first active
 
+// Guarantee every venue shows a distinct cover image. Existing Firestore/SQLite
+// documents seeded before the image de-duplication still carry the old shared
+// URLs, so we correct them in the UI mapper whenever a known-stale duplicate is
+// detected. Founder-set custom images (anything not in the stale set) are left
+// untouched.
+const CANONICAL_COVER_IMAGES = {
+  'rest-4': 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80',
+  'rest-7': 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80',
+  'rest-11': 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80',
+};
+const STALE_SHARED_COVER_IMAGES = new Set([
+  'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80',
+]);
+function normalizeCoverImages(list) {
+  for (const r of list) {
+    const canonical = CANONICAL_COVER_IMAGES[r.id];
+    if (canonical && STALE_SHARED_COVER_IMAGES.has(r.image_url)) {
+      r.image_url = canonical;
+    }
+  }
+  return list;
+}
+
 async function loadRestaurants() {
   try {
     const res = await fetch('/api/restaurants', { cache: 'no-store' });
@@ -1881,6 +1906,7 @@ async function loadRestaurants() {
       allRestaurants = allRestaurants.filter(r => !deletedVenues.includes(r.id));
     }
     
+    normalizeCoverImages(allRestaurants);
     renderRestaurantsGrid();
     populateHostDropdown();
     // Cards are already on screen; advance the simulation out-of-band.
@@ -1904,6 +1930,7 @@ async function loadRestaurants() {
       allRestaurants = allRestaurants.filter(r => !deletedVenues.includes(r.id));
     }
     
+    normalizeCoverImages(allRestaurants);
     renderRestaurantsGrid();
     populateHostDropdown();
   }

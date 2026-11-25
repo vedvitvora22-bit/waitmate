@@ -751,18 +751,30 @@ def init_db():
         "rest-1": "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80",
         "rest-2": "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&auto=format&fit=crop&q=80",
         "rest-3": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
-        "rest-4": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+        "rest-4": "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80",
         "rest-5": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
         "rest-6": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
-        "rest-7": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+        "rest-7": "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80",
         "rest-8": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&auto=format&fit=crop&q=80",
         "rest-9": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80",
         "rest-10": "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
-        "rest-11": "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+        "rest-11": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80",
         "rest-12": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
     }
     for rest_id, cover in mumbai_covers.items():
         c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '' OR image_url = 'https://unsplash.com')", (cover, rest_id))
+
+    # De-duplicate cover images for venues that historically shared one URL so
+    # no two restaurants render the same cover. Each row is only rewritten when
+    # it still holds the known stale/shared URL, so a Founder's custom image is
+    # never clobbered. Mirrors normalizeCoverImages() in app.js.
+    cover_dedup = {
+        "rest-4": ("https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80", "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80"),
+        "rest-7": ("https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80", "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80"),
+        "rest-11": ("https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80", "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80"),
+    }
+    for rest_id, (new_cover, stale_cover) in cover_dedup.items():
+        c.execute("UPDATE restaurants SET image_url = ? WHERE id = ? AND image_url = ?", (new_cover, rest_id, stale_cover))
 
     # Startup migration: INSERT OR IGNORE new Mumbai venues so existing local SQLite databases pick them up automatically
     now = time.time()
@@ -776,7 +788,7 @@ def init_db():
             "Wakefield House, Ballard Estate, Fort, Mumbai",
             1.5,
             "₹₹",
-            "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80",
             "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
             "Boman Kohinoor",
             "+91 98200 11223",
@@ -860,7 +872,7 @@ def init_db():
             "Juhu Chowpatty, Juhu, Mumbai",
             3.5,
             "₹",
-            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80",
             "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
             "Mahesh Patil",
             "+91 98330 22446",
@@ -978,7 +990,7 @@ def seed_data(c):
             "Mathuradas Mill Compound, Lower Parel, Mumbai",
             1.2,
             "₹₹₹",
-            "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=80",
             "Bengaluru's trailblazing microbrewery known for Tint-in-Wit, Basmati Blonde, and woodfired sourdough pizzas. Buzzing weekend waiting list.",
             "Sibi Venkataraju",
             "+91 98860 99001",
@@ -1041,7 +1053,7 @@ def seed_data(c):
             "Wakefield House, Ballard Estate, Fort, Mumbai",
             1.5,
             "₹₹",
-            "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&auto=format&fit=crop&q=80",
             "Legendary 1923 Parsi cafe famous for Mutton Berry Pulao, Sali Boti, and Caramel Custard.",
             "Boman Kohinoor",
             "+91 98200 11223",
@@ -1125,7 +1137,7 @@ def seed_data(c):
             "Juhu Chowpatty, Juhu, Mumbai",
             3.5,
             "₹",
-            "https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=800&auto=format&fit=crop&q=80",
             "Legendary Juhu Chowpatty street food truck serving butter-loaded Pav Bhaji, Masala Tawa Pulao, and grilled sandwiches.",
             "Mahesh Patil",
             "+91 98330 22446",
