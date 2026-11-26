@@ -668,6 +668,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
+  // Safety: guarantee every secondary modal is strictly closed on initial load so
+  // nothing blocks the launch sequence: Logo Splash (0.75s) -> 6-Slide Guideline -> Customer View.
+  const SECONDARY_MODAL_IDS = [
+    'waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
+    'ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal',
+    'walkinModal','venueQrModal','friendPassModal'
+  ];
+  SECONDARY_MODAL_IDS.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+      try { el.classList.add('hidden'); el.classList.remove('flex'); } catch (e) {}
+    }
+  });
+
   allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
   renderRestaurantsGrid();
 
