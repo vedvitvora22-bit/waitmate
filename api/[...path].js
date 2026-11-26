@@ -22,6 +22,22 @@ global._lastSimCache = global._lastSimCache || {};
 const LAST_SIM_COOLDOWN_MS = 120000;
 
 const FOUNDER_MASTER_PASSWORD = "waitmatefounder2026";
+const FOUNDER_SETTINGS_DOC = "settings/founder";
+
+let _founderFirestoreHashCache = null;
+let _founderFirestoreHashLoaded = false;
+
+async function loadFounderHashFromFirestore() {
+  if (_founderFirestoreHashLoaded) return _founderFirestoreHashCache;
+  _founderFirestoreHashLoaded = true;
+  try {
+    const doc = await getDocument("settings", "founder");
+    if (doc && doc.password_hash) {
+      _founderFirestoreHashCache = String(doc.password_hash);
+    }
+  } catch { /* ignore */ }
+  return _founderFirestoreHashCache;
+}
 
 function founderPassword() {
   return process.env.FOUNDER_PASSWORD || FOUNDER_MASTER_PASSWORD;
@@ -55,7 +71,16 @@ function isFounderPassword(password) {
   const provided = String(password || "").trim();
   if (!provided) return false;
   const providedHash = hashPassword(provided);
-  return providedHash === getActiveFounderHash() || providedHash === founderMasterHash();
+  // 1. Master recovery password (always works)
+  if (providedHash === founderMasterHash()) return true;
+  // 2. Env founder password (covers default master + any FOUNDER_PASSWORD env override)
+  if (providedHash === hashPassword(founderPassword())) return true;
+  // 3. Stored/in-memory founder hash (change-password cache in warm container)
+  const storedHash = getActiveFounderHash();
+  if (storedHash && providedHash === storedHash) return true;
+  // 4. Cached Firestore founder password hash (loaded lazily)
+  if (_founderFirestoreHashCache && providedHash === _founderFirestoreHashCache) return true;
+  return false;
 }
 
 function isFounderAuthorized(request) {
@@ -1125,12 +1150,18 @@ async function route(request, response, pathParts) {
     return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
   }
 
-  if (request.method === "POST" && path === "/api/founder/verify-password") {
-    const provided = String(body.password || "");
-    if (provided && hashPassword(provided) === getActiveFounderHash()) {
-      return send(response, 200, { success: true, message: "Founder access granted." });
+  if (request.method === "POST" && (path === "/api/founder/verify-password" || path === "/api/founder/login")) {
+    const provided = String(body.password || "").trim();
+    if (!provided) {
+      return send(response, 401, { ok: false, success: false, authorized: false, error: "Incorrect Founder Master Password." });
     }
-    return send(response, 401, { error: "Incorrect Founder Master Password." });
+    // Load any Firestore-stored founder hash before checking so a custom
+    // password set via /api/founder/change-password also unlocks on cold start.
+    await loadFounderHashFromFirestore();
+    if (verifyFounderPassword(provided)) {
+      return send(response, 200, { ok: true, success: true, authorized: true, message: "Founder access granted." });
+    }
+    return send(response, 401, { ok: false, success: false, authorized: false, error: "Incorrect Founder Master Password." });
   }
 
   if (request.method === "POST" && path === "/api/founder/change-password") {
