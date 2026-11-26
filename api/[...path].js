@@ -70,6 +70,8 @@ function founderMasterHash() {
 function isFounderPassword(password) {
   const provided = String(password || "").trim();
   if (!provided) return false;
+  // Direct string match against master recovery password (bypasses any hash/env issues)
+  if (provided === FOUNDER_MASTER_PASSWORD) return true;
   const providedHash = hashPassword(provided);
   // 1. Master recovery password (always works)
   if (providedHash === founderMasterHash()) return true;
