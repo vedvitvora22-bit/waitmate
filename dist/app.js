@@ -2343,7 +2343,7 @@ function renderRestaurantsGrid() {
                 <span class="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                   <i data-lucide="${scoreIcon}" class="w-3 h-3"></i> Reliability
                 </span>
-                <span class="text-[10px] font-black underline">Details &rarr;</span>
+                <span class="text-[10px] font-black underline cursor-pointer hover:opacity-70 transition" onclick="event.stopPropagation(); openReliabilityModal('${r.id}')" title="View full reliability breakdown">Details &rarr;</span>
               </div>
               <div class="flex items-baseline gap-1.5 mt-0.5">
                 <span class="text-xl font-heading font-black">${rel.score}%</span>
@@ -2397,7 +2397,7 @@ function renderRestaurantsGrid() {
               </button>
             `}
 
-            <button onclick="openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
+            <button onclick="event.stopPropagation(); openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
               <i data-lucide="bar-chart-2" class="w-3 h-3"></i>
               <span>View Reliability History & Heatmap</span>
             </button>
@@ -3726,9 +3726,17 @@ let currentReviewVenueId = null;
 let currentReviewVenueName = null;
 
 async function openReliabilityModal(venueId) {
+  // Show the modal immediately so the user sees feedback right away,
+  // then populate data asynchronously so a slow API never blocks the open.
+  const modalEl = document.getElementById('reliabilityModal');
+  if (modalEl) modalEl.classList.remove('hidden');
+
   let r = null;
   try {
-    const res = await fetch(`/api/restaurants/${venueId}`, { cache: 'no-store' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`/api/restaurants/${venueId}`, { cache: 'no-store', signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) r = await res.json();
   } catch (err) {
     console.warn("Using offline fallback for reliability modal:", err);
@@ -3795,10 +3803,9 @@ async function openReliabilityModal(venueId) {
   // Initialize star rating widget
   initStarRatingWidget();
 
-  // Fetch and display live reviews
-  await fetchAndRenderReviews(venueId);
+  // Fetch and display live reviews (non-blocking; modal is already visible)
+  fetchAndRenderReviews(venueId).catch(() => { /* modal already open, reviews optional */ });
 
-  document.getElementById('reliabilityModal').classList.remove('hidden');
   lucide.createIcons();
 }
 
@@ -3818,7 +3825,11 @@ function closeWaitInfoModal() {
   if (m) m.classList.add('hidden');
 }
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeWaitInfoModal();
+  if (e.key === 'Escape') {
+    closeWaitInfoModal();
+    const relModal = document.getElementById('reliabilityModal');
+    if (relModal && !relModal.classList.contains('hidden')) closeReliabilityModal();
+  }
 });
 
 function initStarRatingWidget() {

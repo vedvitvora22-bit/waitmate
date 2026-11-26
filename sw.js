@@ -1,6 +1,6 @@
-// cache-bust-20261126-remove-ghost-guests-v70
+// cache-bust-20261126-reliability-modal-fix-v71
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-remove-ghost-guests-v70';
+const CACHE_NAME = 'waitmate-v20261126-reliability-modal-fix-v71';
 
 // Shell files that must ALWAYS be fetched fresh from the network so stale,
 // broken builds can never be served from cache after a deploy.
