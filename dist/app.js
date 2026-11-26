@@ -5491,6 +5491,21 @@ let onboardingCurrentStep = 1;
 const onboardingTotalSteps = 5;
 const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
 
+function showCustomerInterface() {
+  const main = document.getElementById('mainContainer');
+  if (main) main.classList.remove('hidden');
+  const custDiv = document.getElementById('customerInterface');
+  if (custDiv) custDiv.classList.remove('hidden');
+
+  // Render immediately from cached data; only refetch if nothing is loaded yet
+  // so the hero, filter pills, and all 12 restaurant cards appear right away.
+  if (!allRestaurants || allRestaurants.length === 0) {
+    loadRestaurants();
+  } else {
+    switchInterface('customer');
+  }
+}
+
 function initOnboarding() {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
@@ -5640,14 +5655,21 @@ function completeOnboarding(skipped = false) {
 
   localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
 
+  // Cleanly dismiss the onboarding overlay so nothing invisible blocks the screen.
   modal.classList.add('hidden');
   modal.classList.remove('flex');
+  modal.style.pointerEvents = 'none';
 
   const backdrop = document.getElementById('onboardingBackdrop');
-  if (backdrop) backdrop.classList.add('hidden');
+  if (backdrop) {
+    backdrop.classList.add('hidden');
+    backdrop.style.pointerEvents = 'none';
+  }
 
   document.removeEventListener('keydown', handleOnboardingKeydown);
 
+  // Reveal the main container + customer discovery view and render the 12
+  // restaurant cards immediately (hero, filter pills, grid).
   showCustomerInterface();
 
   if (!skipped) {

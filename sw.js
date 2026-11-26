@@ -1,6 +1,6 @@
-// cache-bust-20261126-onboarding-v39
+// cache-bust-20261126-onboarding-blankfix-v40
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-onboarding-v39';
+const CACHE_NAME = 'waitmate-v20261126-onboarding-blankfix-v40';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
