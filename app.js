@@ -2278,11 +2278,11 @@ function renderRestaurantsGrid() {
 
             <!-- Reliability Score Card -->
             <div class="rounded-xl p-3 border ${scoreBadgeClass} flex flex-col justify-center cursor-pointer hover:opacity-90 transition" onclick="openReliabilityModal('${r.id}')" title="Click to view full reliability breakdown">
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <div class="flex items-center justify-between gap-2 shrink-0">
+                <span class="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap shrink-0">
                   <i data-lucide="${scoreIcon}" class="w-3 h-3"></i> Reliability
                 </span>
-                <span class="text-[10px] font-black underline">Details &rarr;</span>
+                <span class="text-[10px] font-black underline whitespace-nowrap shrink-0">Details &rarr;</span>
               </div>
               <div class="flex items-baseline gap-1.5 mt-0.5">
                 <span class="text-xl font-heading font-black">${rel.score}%</span>

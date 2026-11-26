@@ -50,9 +50,11 @@
       margin: 0;
     }
     body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100dvh;
+      display: block;
+      min-height: 100vh;
+      overflow-x: hidden !important;
+      max-width: 100vw !important;
+      margin: 0;
     }
     #appSplash {
       position: fixed !important;
@@ -68,10 +70,14 @@
     #onboardingModal {
       position: fixed !important;
       inset: 0 !important;
-      z-index: 9998 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 99998 !important;
       display: none;
       align-items: center !important;
       justify-content: center !important;
+      padding: 1rem !important;
+      box-sizing: border-box !important;
       background: rgba(15, 23, 42, 0.85) !important;
       backdrop-filter: blur(6px) !important;
       -webkit-backdrop-filter: blur(6px) !important;
@@ -104,7 +110,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-[#F8FAFC] text-slate-900 min-h-[100dvh] flex flex-col antialiased selection:bg-orange-600 selection:text-white" style="font-family:Plus Jakarta Sans,sans-serif">
+<body class="bg-slate-50 text-slate-900 min-h-screen block antialiased selection:bg-orange-600 selection:text-white overflow-x-hidden" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- App Launch Splash Screen -->
   <div id="appSplash" class="splash-overlay" aria-live="polite" aria-busy="true">
