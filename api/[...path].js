@@ -155,31 +155,42 @@ function send(response, status, data) {
 }
 
 async function parseBody(request) {
-  if (!request.body) return {};
-  if (Buffer.isBuffer(request.body)) {
-    try { return JSON.parse(request.body.toString("utf8")); } catch { return {}; }
+  // If request.body is already populated (Buffer, string, object), use it directly
+  if (request.body) {
+    if (Buffer.isBuffer(request.body)) {
+      try { return JSON.parse(request.body.toString("utf8")); } catch { return {}; }
+    }
+    if (typeof request.body === "string") {
+      try { return JSON.parse(request.body); } catch { return {}; }
+    }
+    if (typeof request.body === "object" && request.body !== null) {
+      // Readable stream: consume chunks and parse JSON
+      if (typeof request.body.pipe === "function" || typeof request.body[Symbol.asyncIterator] === "function") {
+        const chunks = [];
+        for await (const chunk of request.body) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        }
+        const buf = Buffer.concat(chunks);
+        if (buf.length === 0) return {};
+        try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+      }
+      return request.body;
+    }
+    try { return JSON.parse(String(request.body)); } catch { return {}; }
   }
-  if (typeof request.body === "string") {
-    try { return JSON.parse(request.body); } catch { return {}; }
-  }
-  if (typeof request.body === "object" && request.body !== null) {
-    // Readable stream (Vercel serverless): consume chunks and parse JSON
-    if (typeof request.body.pipe === "function" || typeof request.body[Symbol.asyncIterator] === "function") {
+  // Vercel/Node.js: request.body is not auto-populated; read raw stream chunks from request itself
+  if (request !== null && typeof request === "object") {
+    if (typeof request.pipe === "function" || typeof request[Symbol.asyncIterator] === "function") {
       const chunks = [];
-      for await (const chunk of request.body) {
+      for await (const chunk of request) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       }
       const buf = Buffer.concat(chunks);
       if (buf.length === 0) return {};
       try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
     }
-    return request.body;
   }
-  try {
-    return JSON.parse(String(request.body));
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function reliabilityFallback() {
@@ -1166,7 +1177,7 @@ async function route(request, response, pathParts) {
   if (request.method === "POST" && (path === "/api/founder/verify-password" || path === "/api/founder/login")) {
     const provided = String(body.password || "").trim();
     if (!provided) {
-      return send(response, 401, { ok: false, success: false, authorized: false, error: "Incorrect Founder Master Password." });
+      return send(response, 401, { ok: false, success: false, authorized: false, error: "Missing password in request body." });
     }
     // Load any Firestore-stored founder hash before checking so a custom
     // password set via /api/founder/change-password also unlocks on cold start.
