@@ -44,21 +44,15 @@
        the page NEVER breaks into a horizontal strip and the splash/onboarding
        modal always render centered full-screen. ========================================================================= */
     html, body {
-      overflow-x: hidden !important;
-      max-width: 100vw !important;
-      width: 100% !important;
       display: block !important;
-      flex-direction: column !important;
-      margin: 0;
+      width: 100% !important;
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+      margin: 0 !important;
+      padding: 0;
     }
     body {
-      display: block !important;
-      flex-direction: column !important;
       min-height: 100vh;
-      width: 100% !important;
-      overflow-x: hidden !important;
-      max-width: 100vw !important;
-      margin: 0;
     }
     #splashScreen {
       position: fixed !important;
@@ -71,14 +65,14 @@
       align-items: center !important;
       justify-content: center !important;
       background: #0f172a !important;
-      color: #0f172a !important;
+      color: #ffffff !important;
+    }
+    #onboardingModal.hidden {
+      display: none !important;
     }
     #onboardingModal:not(.hidden) {
       position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
+      inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       z-index: 99998 !important;
@@ -87,20 +81,21 @@
       justify-content: center !important;
       padding: 1rem !important;
       background: rgba(15, 23, 42, 0.85) !important;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
     #mainContainer, #customerInterface {
-      display: flex;
-      flex-direction: column;
+      display: block;
     }
-    .hidden { display: none; }
-    .flex { display: flex !important; }
-    .flex-col { flex-direction: column !important; }
-    .fixed { position: fixed !important; }
-    .inset-0 { inset: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important; left: 0 !important; }
-    .items-center { align-items: center !important; }
-    .justify-center { justify-content: center !important; }
-    .justify-between { justify-content: space-between !important; }
-    .z-\[9999\], .z-\[10000\], .z-50 { z-index: 9999 !important; }
+    .hidden { display: none !important; }
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .fixed { position: fixed; }
+    .inset-0 { inset: 0; }
+    .items-center { align-items: center; }
+    .justify-center { justify-content: center; }
+    .justify-between { justify-content: space-between; }
+    .z-\[9999\], .z-\[10000\], .z-50 { z-index: 9999; }
   </style>
   <style>
     @media print {
@@ -119,14 +114,14 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen block antialiased selection:bg-orange-600 selection:text-white overflow-x-hidden" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- App Launch Splash Screen -->
-  <div id="splashScreen" class="splash-overlay" aria-live="polite" aria-busy="true" style="position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center;">
+  <div id="splashScreen" class="splash-overlay" aria-live="polite" aria-busy="true" style="position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center; background:#0f172a; color:#ffffff;">
     <div class="splash-inner">
       <img id="splashLogo" src="/logo.png?v=2" alt="WaitMate" class="splash-logo" width="96" height="96">
       <div class="splash-brand">
-        <span class="splash-title" style="color:#ffffff;">Wait<span class="splash-title-accent">Mate</span></span>
+        <span class="splash-title" style="color:#ffffff !important;">Wait<span class="splash-title-accent" style="color:#10b981 !important;">Mate</span></span>
         <span class="splash-badge">INDIA</span>
       </div>
-      <p class="splash-tagline">Less waiting, smarter dining.</p>
+      <p class="splash-tagline" style="color:#cbd5e1 !important;">Less waiting, smarter dining.</p>
       <div class="splash-loader" aria-hidden="true">
         <span class="splash-loader-dot"></span>
         <span class="splash-loader-dot"></span>
@@ -135,38 +130,18 @@
     </div>
   </div>
 
-  <script>
-    setTimeout(function () {
-      var splash = document.getElementById('splashScreen');
-      if (splash) {
-        splash.style.setProperty('display', 'none', 'important');
-      }
-      var modal = document.getElementById('onboardingModal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('position', 'fixed', 'important');
-        modal.style.setProperty('inset', '0', 'important');
-        modal.style.setProperty('z-index', '99998', 'important');
-        modal.style.setProperty('align-items', 'center', 'important');
-        modal.style.setProperty('justify-content', 'center', 'important');
-        modal.style.setProperty('background', 'rgba(15, 23, 42, 0.85)', 'important');
-      }
-    }, 750);
-  </script>
-
   <!-- ========================================================================= -->
-  <!-- ONBOARDING GUIDELINES — Photo-led 5-Slide Problem → WaitMate Solution     -->
+  <!-- ONBOARDING GUIDELINES — Photo-led 6-Slide Problem → WaitMate Solution     -->
   <!-- Mobile-first frame (max-w-md mx-auto), full viewport, under the splash    -->
   <!-- ========================================================================= -->
-  <div id="onboardingModal" class="hidden fixed inset-0 z-[9998] items-center justify-center bg-slate-950/80 backdrop-blur-sm" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-hidden="true">
-    <div id="onboardingBackdrop" class="fixed inset-0 bg-[#0F172A]/45 backdrop-blur-sm" onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}"></div>
+  <div id="onboardingModal" class="hidden fixed inset-0 z-[99998] items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-hidden="true">
+    <div id="onboardingBackdrop" class="fixed inset-0 bg-[#0F172A]/45 backdrop-blur-sm" onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()"></div>
 
-    <div id="onboardingFrame" class="onboarding-container relative w-full max-w-md h-[100dvh] max-h-[100dvh] flex flex-col bg-[#F8FAFC] text-[#0F172A]" aria-hidden="false">
+    <div id="onboardingFrame" class="onboarding-container relative z-10 w-full max-w-md h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col bg-[#F8FAFC] text-[#0F172A]" aria-hidden="false">
 
       <!-- Slide 1 — The Sidewalk Trap -->
       <div class="onboarding-screen flex flex-col h-full w-full" data-step="1">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Crowded footpath outside a popular Mumbai dosa joint at lunch rush" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -200,7 +175,7 @@
 
       <!-- Slide 2 — Your Spot, Reserved Remotely -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="2">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Warm dining table ready for guests at a Mumbai restaurant" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -234,7 +209,7 @@
 
       <!-- Slide 3 — Live Pass & Friend Sync -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="3">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Mumbai street food pav bhaji counter with live orders" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -270,7 +245,7 @@
 
       <!-- Slide 4 (NEW) — ETA vs Reliability Score Explained Simply -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="4">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Restaurant counter with digital wait display" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -314,7 +289,7 @@
 
       <!-- Slide 5 — Instant Chime, Zero Missed Calls -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="5">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Restaurant entrance courtyard where the host calls your table" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -350,7 +325,7 @@
 
       <!-- Slide 6 — Crowd-Verified Trust -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="6">
-        <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+        <button onclick="typeof skipOnboarding==='function' ? skipOnboarding() : window.WaitMateBoot.enterCustomerView()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
           <img src="https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Happy diners enjoying a meal at a reliable Mumbai restaurant" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
@@ -378,9 +353,10 @@
               <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 100%"></div>
             </div>
           </div>
-          <button onclick="var m=document.getElementById('onboardingModal'); if(m){m.style.setProperty('display','none','important');} var main=document.getElementById('mainContainer')||document.querySelector('main'); if(main){main.style.setProperty('display','block','important');main.style.setProperty('opacity','1','important');main.classList.remove('hidden');} var cust=document.getElementById('customerInterface')||document.getElementById('customerView'); if(cust){cust.style.setProperty('display','block','important');cust.style.setProperty('opacity','1','important');cust.classList.remove('hidden');}" class="onboarding-cta inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Start Exploring <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
+          <button onclick="typeof completeOnboarding==='function' ? completeOnboarding(false) : window.WaitMateBoot.enterCustomerView()" class="onboarding-cta inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Start Exploring <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
+    </div>
   </div>
 
   <!-- Top App Live Status Bar -->
@@ -892,7 +868,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 1: JOIN REMOTE QUEUE MODAL                                          -->
   <!-- ========================================================================= -->
-  <div id="joinQueueModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
+  <div id="joinQueueModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeJoinModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       
@@ -993,7 +969,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 2: LIVE DIGITAL QUEUE TICKET PASS & TRACKER                         -->
   <!-- ========================================================================= -->
-  <div id="ticketModal" class="fixed inset-0 z-50 hidden pointer-events-none items-start sm:items-center justify-center overflow-y-auto overflow-x-hidden py-6 px-3 sm:py-10 sm:px-4" style="display: none;">
+  <div id="ticketModal" class="fixed inset-0 z-50 hidden flex pointer-events-none items-start sm:items-center justify-center overflow-y-auto overflow-x-hidden py-6 px-3 sm:py-10 sm:px-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeTicketModal()"></div>
     <div class="modal-content relative w-full max-w-[420px] mx-auto z-10">
       
@@ -1206,23 +1182,21 @@
   <!-- ========================================================================= -->
   <!-- MODAL 2B: LIVE FRIEND PASS TRACKER (Read-only shared pass view)           -->
   <!-- ========================================================================= -->
-  <div id="friendPassModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
+  <div id="friendPassModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeFriendPassModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       
       <!-- Modal Header -->
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
         <div class="flex items-center gap-2">
-          <img id="qrModalLogo" src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
+          <img src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
           <div>
-            <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Venue QR Poster</span>
-            <h3 id="qrModalVenueName" class="font-heading font-extrabold text-lg text-slate-900 mt-1">Britannia & Co. Restaurant</h3>
-            <p id="qrModalVenueAddress" class="text-xs text-slate-600">Wakefield House, Ballard Estate, Fort, Mumbai</p>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Live Shared Pass</span>
+            <h3 id="friendPassVenueName" class="font-heading font-extrabold text-lg text-white mt-0.5">WaitMate Venue</h3>
+            <p id="friendPassVenueAddress" class="text-xs text-slate-300">Mumbai</p>
           </div>
         </div>
-        <button type="button" onclick="closeVenueQrModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
-      </div>
-        <button onclick="closeFriendPassModal()" class="text-slate-400 hover:text-white p-1">
+        <button onclick="closeFriendPassModal()" class="text-slate-400 hover:text-white p-1" aria-label="Close">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -1266,7 +1240,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 3: RELIABILITY AUDIT DEEP-DIVE                                      -->
   <!-- ========================================================================= -->
-  <div id="reliabilityModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
+  <div id="reliabilityModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeReliabilityModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90dvh] flex flex-col">
       
@@ -1407,7 +1381,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 4: POST-SEATING DINER ACCURACY VERIFICATION                         -->
   <!-- ========================================================================= -->
-  <div id="feedbackModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
+  <div id="feedbackModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 text-center">
@@ -1488,7 +1462,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 5: HOST STAND ADD WALK-IN GUEST                                     -->
   <!-- ========================================================================= -->
-  <div id="walkinModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
+  <div id="walkinModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeWalkinModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-slate-900 text-[var(--wm-text-primary)] p-5 flex items-center justify-between">
@@ -1532,7 +1506,7 @@
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
   <!-- Venue QR Code Poster Modal -->
-  <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1555,7 +1529,7 @@
   </div>
 
   <!-- Owner Change Password Modal -->
-  <div id="ownerChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="ownerChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1595,7 +1569,7 @@
   </div>
 
   <!-- Founder Reset Password Modal -->
-  <div id="founderResetPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="founderResetPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1627,7 +1601,7 @@
   </div>
 
   <!-- Owner Password Verification Modal -->
-  <div id="ownerPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="ownerPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1657,7 +1631,7 @@
     </div>
   </div>
   <!-- Founder Login Modal (Secret Master Password) -->
-  <div id="founderLoginModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="founderLoginModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1699,7 +1673,7 @@
   </footer>
 
   <!-- Founder Change Password Modal -->
-  <div id="founderChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="founderChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1739,7 +1713,7 @@
   </div>
 
   <!-- Founder Add New Restaurant Modal -->
-  <div id="founderAddRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="founderAddRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1859,7 +1833,7 @@
   </div>
 
   <!-- Founder Edit Restaurant Modal (Edit any venue's details) -->
-  <div id="founderEditRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
+  <div id="founderEditRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1988,7 +1962,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL: HOW WAIT TIMES WORK (ETA vs RELIABILITY)                            -->
   <!-- ========================================================================= -->
-  <div id="waitInfoModal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4" style="display: none;">
+  <div id="waitInfoModal" class="fixed inset-0 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeWaitInfoModal()"></div>
     <div class="modal-content relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between shrink-0">
@@ -2019,6 +1993,92 @@
 
   <script src="app.js"></script>
   <script src="qrcode.js"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var hash = (window.location.hash || '').toLowerCase();
+      var path = (window.location.pathname || '/').toLowerCase();
+      var isFounderLink = params.get('founder') === '1' || path === '/founder' || path.endsWith('/founder') || hash === '#founder';
+      var ticketId = params.get('ticket') || params.get('passId');
+      var venueId = params.get('venue');
+      var hasDeepLink = Boolean(isFounderLink || ticketId || venueId);
+
+      function hideSplash() {
+        var splash = document.getElementById('splashScreen');
+        if (splash) {
+          splash.style.setProperty('display', 'none', 'important');
+          splash.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      function showOnboardingSlideOne() {
+        var modal = document.getElementById('onboardingModal');
+        if (!modal) return;
+        if (typeof window.openOnboarding === 'function') {
+          window.openOnboarding();
+          return;
+        }
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        modal.setAttribute('aria-hidden', 'false');
+        modal.style.setProperty('display', 'flex', 'important');
+      }
+
+      function enterCustomerView() {
+        var modal = document.getElementById('onboardingModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          modal.setAttribute('aria-hidden', 'true');
+          modal.style.setProperty('display', 'none', 'important');
+        }
+        var main = document.getElementById('mainContainer') || document.querySelector('main');
+        if (main) {
+          main.classList.remove('hidden');
+          main.style.setProperty('display', 'block', 'important');
+          main.style.setProperty('opacity', '1', 'important');
+        }
+        var cust = document.getElementById('customerInterface') || document.getElementById('customerView');
+        if (cust) {
+          cust.classList.remove('hidden');
+          cust.style.setProperty('display', 'block', 'important');
+          cust.style.setProperty('opacity', '1', 'important');
+        }
+        if (typeof window.switchInterface === 'function') {
+          window.switchInterface('customer');
+        } else if (typeof window.renderRestaurantsGrid === 'function') {
+          window.renderRestaurantsGrid();
+        }
+      }
+
+      function handleDeepLink() {
+        enterCustomerView();
+        if (isFounderLink && typeof window.triggerFounderAccess === 'function') {
+          window.triggerFounderAccess();
+        } else if (ticketId && typeof window.openFriendPassTracker === 'function') {
+          window.openFriendPassTracker(ticketId);
+        } else if (venueId && typeof window.openJoinModal === 'function') {
+          window.openJoinModal(venueId, 'walk_in');
+        }
+      }
+
+      window.WaitMateBoot = {
+        hasDeepLink: hasDeepLink,
+        hideSplash: hideSplash,
+        showOnboarding: showOnboardingSlideOne,
+        enterCustomerView: enterCustomerView
+      };
+
+      setTimeout(function () {
+        hideSplash();
+        if (hasDeepLink) {
+          handleDeepLink();
+        } else {
+          showOnboardingSlideOne();
+        }
+      }, 750);
+    })();
+  </script>
 
 </body>
 </html>

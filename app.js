@@ -855,9 +855,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   SECONDARY_MODAL_IDS.forEach(function (id) {
     var el = document.getElementById(id);
     if (el) {
-      el.style.display = 'none';
+      el.style.removeProperty('display');
       el.setAttribute('aria-hidden', 'true');
-      try { el.classList.add('hidden'); el.classList.remove('flex'); } catch (e) {}
+      try { el.classList.add('hidden'); } catch (e) {}
     }
   });
 
@@ -921,12 +921,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // immediately instead of waiting for the first poll tick.
         renderActivePassPill();
       }
-      // Resume a pending seated rating immediately on the customer view.
-      if (seatedUnrated && currentInterface === 'customer') {
-        activeTicketData._hasPromptedFeedback = true;
-        closeTicketModal();
-        openFeedbackModal(activeTicketData);
-      }
+      // Do not auto-open secondary modals on initial boot; user can tap "My Pass"
+      // or complete onboarding first.
     } else if (saved && saved.id) {
       clearCurrentTicket();
     }
@@ -2432,12 +2428,13 @@ function renderRestaurantsGrid() {
             </div>
 
             <!-- Reliability Score Card -->
-            <div class="rounded-xl p-3 border ${scoreBadgeClass} flex flex-col justify-center cursor-pointer hover:opacity-90 transition" onclick="openReliabilityModal('${r.id}')" title="Click to view full reliability breakdown">
-              <div class="flex items-center justify-between gap-2 shrink-0">
-                <span class="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap shrink-0">
-                  <i data-lucide="${scoreIcon}" class="w-3 h-3"></i> Reliability
+            <div class="rounded-xl p-3 border ${scoreBadgeClass} flex flex-col justify-center cursor-pointer hover:opacity-90 transition min-w-0" onclick="openReliabilityModal('${r.id}')" title="Click to view full reliability breakdown">
+              <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 min-w-0 truncate">
+                  <i data-lucide="${scoreIcon}" class="w-3 h-3 shrink-0"></i>
+                  <span class="truncate">Reliability</span>
                 </span>
-                <span class="text-[10px] font-black underline whitespace-nowrap shrink-0">Details &rarr;</span>
+                <span class="text-[9px] sm:text-[10px] font-black underline whitespace-nowrap shrink-0">Details &rarr;</span>
               </div>
               <div class="flex items-baseline gap-1.5 mt-0.5">
                 <span class="text-xl font-heading font-black">${rel.score}%</span>
@@ -2810,6 +2807,7 @@ async function submitJoinQueue(e) {
     // join appears and fires the single new-party alert without waiting for the poll.
     if (currentHostVenueId === restId) await loadHostStand();
 
+    isSubmitting = false;
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
     lucide.createIcons();
@@ -2875,6 +2873,7 @@ async function submitJoinQueue(e) {
     // Owner viewing this venue in offline mode: refresh Host Stand + fire the alert now.
     if (currentHostVenueId === restId) loadHostStand();
 
+    isSubmitting = false;
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
     lucide.createIcons();
@@ -5664,26 +5663,28 @@ function openOnboarding() {
   if (!modal) return;
   localStorage.removeItem(ONBOARDING_SEEN_KEY);
   onboardingCurrentStep = 1;
-  // True centered full-screen overlay (inline styles win over any CSS class).
-  modal.style.display = 'flex';
-  modal.style.position = 'fixed';
-  modal.style.inset = '0';
-  modal.style.zIndex = '99998';
-  modal.style.alignItems = 'center';
-  modal.style.justifyContent = 'center';
-  modal.style.background = 'rgba(15, 23, 42, 0.85)';
-  modal.style.backdropFilter = 'blur(6px)';
-  modal.style.opacity = '1';
+  // True centered full-screen overlay (inline !important styles win over any CSS class).
+  modal.style.setProperty('display', 'flex', 'important');
+  modal.style.setProperty('position', 'fixed', 'important');
+  modal.style.setProperty('inset', '0', 'important');
+  modal.style.setProperty('width', '100vw', 'important');
+  modal.style.setProperty('height', '100vh', 'important');
+  modal.style.setProperty('z-index', '99998', 'important');
+  modal.style.setProperty('align-items', 'center', 'important');
+  modal.style.setProperty('justify-content', 'center', 'important');
+  modal.style.setProperty('padding', '1rem', 'important');
+  modal.style.setProperty('background', 'rgba(15, 23, 42, 0.85)', 'important');
+  modal.style.setProperty('backdrop-filter', 'blur(6px)');
+  modal.style.setProperty('opacity', '1');
+  modal.style.setProperty('pointer-events', 'auto');
   modal.classList.remove('hidden');
   modal.classList.add('flex');
   modal.removeAttribute('hidden');
   modal.setAttribute('aria-hidden', 'false');
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) {
-    backdrop.style.display = 'block';
-    backdrop.style.position = 'fixed';
-    backdrop.style.inset = '0';
-    backdrop.style.zIndex = '99997';
+    backdrop.style.removeProperty('display');
+    backdrop.style.removeProperty('pointer-events');
     backdrop.style.opacity = '1';
     backdrop.classList.remove('hidden');
     backdrop.removeAttribute('hidden');
@@ -5806,29 +5807,30 @@ function completeOnboarding(skipped = false) {
 
   // Step 3a: explicitly close the guideline overlay so nothing invisible
   // blocks the customer view.
-  modal.style.display = 'none';
+  modal.style.setProperty('display', 'none', 'important');
   modal.style.opacity = '0';
   modal.classList.add('hidden');
   modal.classList.remove('flex');
   modal.style.pointerEvents = 'none';
   modal.setAttribute('aria-hidden', 'true');
-  modal.removeAttribute('hidden');
 
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) {
-    backdrop.style.display = 'none';
+    backdrop.style.setProperty('display', 'none', 'important');
     backdrop.style.opacity = '0';
     backdrop.classList.add('hidden');
     backdrop.style.pointerEvents = 'none';
-    backdrop.setAttribute('hidden', 'true');
-    backdrop.removeAttribute('hidden');
   }
 
   document.removeEventListener('keydown', handleOnboardingKeydown);
 
   // Step 3b: hand off to the single boot state machine — forces <main> and
-  // #customerView visible, renders the restaurant cards, then completes launch.
-  window.WaitMateBoot.enterCustomerView();
+  // #customerInterface visible, renders the restaurant cards, then completes launch.
+  if (window.WaitMateBoot && typeof window.WaitMateBoot.enterCustomerView === 'function') {
+    window.WaitMateBoot.enterCustomerView();
+  } else {
+    showCustomerInterface();
+  }
 
   if (!skipped) {
     showToast('Welcome to WaitMate! 🎉', 'success');

@@ -1,13 +1,13 @@
-// cache-bust-20261126-launch-flow-fix-v62
+// cache-bust-20261126-layout-fix-v63
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-launch-flow-fix-v62';
+const CACHE_NAME = 'waitmate-v20261126-layout-fix-v63';
 
 // Shell files that must ALWAYS be fetched fresh from the network so stale,
 // broken builds can never be served from cache after a deploy.
-const SHELL_URLS = ['/', '/index.html', '/app.js'];
+const SHELL_URLS = ['/', '/index.html', '/app.js', '/style.css'];
 
 function isShell(urlPath) {
-  return urlPath === '/' || urlPath === '/index.html' || urlPath === '/app.js';
+  return urlPath === '/' || urlPath === '/index.html' || urlPath === '/app.js' || urlPath === '/style.css';
 }
 
 self.addEventListener('install', (event) => {

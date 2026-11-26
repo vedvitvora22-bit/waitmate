@@ -277,14 +277,14 @@ button[aria-label="Toggle password visibility"] i {
 .splash-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100dvh;
-  background: #FAFAFA;
-  color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
   transition: opacity 0.3s ease;
   -webkit-transition: opacity 0.3s ease;
   will-change: opacity;
@@ -348,11 +348,11 @@ button[aria-label="Toggle password visibility"] i {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: #0f172a;
+  color: #ffffff;
 }
 
 .splash-title-accent {
-  color: #15803d;
+  color: #10b981;
 }
 
 .splash-badge {
@@ -372,7 +372,7 @@ button[aria-label="Toggle password visibility"] i {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #334155;
+  color: #cbd5e1;
   letter-spacing: 0.01em;
 }
 
