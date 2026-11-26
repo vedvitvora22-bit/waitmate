@@ -5493,14 +5493,6 @@ function initOnboarding() {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
 
-  // Already completed: skip straight to the customer interface
-  if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-    showCustomerInterface();
-    return;
-  }
-
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) backdrop.classList.remove('hidden');
 
@@ -5635,8 +5627,6 @@ function skipOnboarding() {
 function completeOnboarding(skipped = false) {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
-
-  localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
 
   // Cleanly dismiss the onboarding overlay so nothing invisible blocks the screen.
   modal.classList.add('hidden');

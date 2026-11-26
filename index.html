@@ -56,7 +56,7 @@
       max-width: 100vw !important;
       margin: 0;
     }
-    #appSplash {
+    #splashScreen {
       position: fixed !important;
       inset: 0 !important;
       z-index: 10000 !important;
@@ -113,7 +113,7 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen block antialiased selection:bg-orange-600 selection:text-white overflow-x-hidden" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- App Launch Splash Screen -->
-  <div id="appSplash" class="splash-overlay" aria-live="polite" aria-busy="true">
+  <div id="splashScreen" class="splash-overlay" aria-live="polite" aria-busy="true">
     <div class="splash-inner">
       <img id="splashLogo" src="/logo.png?v=2" alt="WaitMate" class="splash-logo" width="96" height="96">
       <div class="splash-brand">
@@ -2052,22 +2052,25 @@
         });
       }
 
-      // Step 1 (0ms — Page Load): show the Logo Splash overlay.
+      // Step 1 (0ms — Page Load): show the Logo Splash overlay on top.
       function showSplash() {
-        var s = $('appSplash');
+        var s = $('splashScreen');
         if (!s) return;
         s.style.display = 'flex';
         s.style.position = 'fixed';
         s.style.inset = '0';
         s.style.zIndex = '99999';
+        s.style.alignItems = 'center';
+        s.style.justifyContent = 'center';
+        s.style.background = '#0f172a';
         s.style.opacity = '1';
         s.classList.remove('hidden');
         s.removeAttribute('hidden');
         s.setAttribute('aria-hidden', 'false');
       }
 
-      // Step 2 (750ms): hide splash, open the 6-Slide Guideline, keep
-      // <main> and #customerView ready underneath.
+      // Step 2 (750ms): hide splash, open the centered 6-Slide Guideline on
+      // Slide 1 of 6, keeping the Customer View ready underneath.
       function showGuideline() {
         var m = $('onboardingModal');
         if (m) {
@@ -2075,6 +2078,10 @@
           m.style.position = 'fixed';
           m.style.inset = '0';
           m.style.zIndex = '99998';
+          m.style.alignItems = 'center';
+          m.style.justifyContent = 'center';
+          m.style.background = 'rgba(15, 23, 42, 0.85)';
+          m.style.backdropFilter = 'blur(6px)';
           m.style.opacity = '1';
           m.classList.remove('hidden');
           m.removeAttribute('hidden');
@@ -2090,6 +2097,15 @@
           b.classList.remove('hidden');
           b.removeAttribute('hidden');
         }
+        // Always start on Slide 1 of 6 on every fresh load.
+        try {
+          if (typeof onboardingCurrentStep !== 'undefined') {
+            onboardingCurrentStep = 1;
+          }
+          if (typeof updateOnboardingUI === 'function') {
+            updateOnboardingUI();
+          }
+        } catch (e) {}
       }
 
       function prepareCustomerView() {
@@ -2151,7 +2167,7 @@
       }
 
       function hideSplash() {
-        var s = $('appSplash');
+        var s = $('splashScreen');
         if (!s) return;
         s.style.display = 'none';
         s.classList.add('hidden');
@@ -2195,7 +2211,6 @@
               onClick.indexOf('completeOnboarding') === -1 &&
               !isCta) return;
           enterCustomerView();
-          try { localStorage.setItem('wm_onboarding_seen', 'true'); } catch (e) {}
         } catch (e) {}
       });
     })();

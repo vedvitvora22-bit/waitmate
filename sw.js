@@ -1,6 +1,6 @@
-// cache-bust-20261126-launch-flow-fix-v57
+// cache-bust-20261126-launch-flow-fix-v58
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-launch-flow-fix-v57';
+const CACHE_NAME = 'waitmate-v20261126-launch-flow-fix-v58';
 
 // Shell files that must ALWAYS be fetched fresh from the network so stale,
 // broken builds can never be served from cache after a deploy.
