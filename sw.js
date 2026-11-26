@@ -1,16 +1,29 @@
-// cache-bust-20261126-splash-boot-fix-v43
+// cache-bust-20261126-splash-boot-fix-v44
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-splash-boot-fix-v43';
+const CACHE_NAME = 'waitmate-v20261126-splash-boot-fix-v44';
+
+// Shell files that must ALWAYS be fetched fresh from the network so stale,
+// broken builds can never be served from cache after a deploy.
+const SHELL_URLS = ['/', '/index.html', '/app.js'];
+
+function isShell(urlPath) {
+  return urlPath === '/' || urlPath === '/index.html' || urlPath === '/app.js';
+}
 
 self.addEventListener('install', (event) => {
+  // Activate the new worker immediately so old broken versions never linger.
   event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    (async () => {
+      // Force-purge EVERY old cache on activate so no stale asset survives.
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      // Take control of all open clients immediately.
+      await self.clients.claim();
+    })()
   );
 });
 
@@ -20,16 +33,27 @@ self.addEventListener('fetch', (event) => {
   try { pathname = new URL(req.url).pathname; } catch (e) {}
 
   // Live data (API) and non-GET requests must NEVER be served from cache.
-  // The Host Stand polls /api/host/queue every few seconds and diners poll
-  // /api/queue/ticket; a cache-first strategy would keep showing the previous
-  // queue snapshot so newly-joined guests (written to Firestore by another
-  // device) would not appear. Always hit the network, and only fall back to a
-  // cached copy when the device is offline.
   if (req.method !== 'GET' || pathname.startsWith('/api/')) {
     event.respondWith(fetch(req).catch(() => caches.match(req)));
     return;
   }
 
+  // Network-first for the HTML shell and app.js: browsers never load stale
+  // broken versions of index.html or app.js. Fall back to cache only when
+  // the network is unavailable.
+  if (isShell(pathname)) {
+    event.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+        }
+        return res;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (logos, CSS, images) with network refresh.
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(req).then((cached) => {
