@@ -552,6 +552,17 @@ async function initPushNotifications() {
   }
 
   try {
+    // Unregister any stale service workers and delete old caches so desktop
+    // browsers immediately load the latest code (cache-bust on every deploy).
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const reg of registrations) {
+      await reg.unregister();
+    }
+    if (caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+
     // Register the service worker
     swRegistration = await navigator.serviceWorker.register('/sw.js');
     console.log('WaitMate SW registered:', swRegistration.scope);
