@@ -695,7 +695,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function hideSplash() {
     if (splashEl) {
-      splashEl.style.display = 'none';
+      splashEl.style.setProperty('display', 'none', 'important');
       splashEl.setAttribute('aria-hidden', 'true');
     }
   }
@@ -744,7 +744,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setTimeout(() => {
     try {
       const splash = document.getElementById('appSplash');
-      if (splash) { splash.style.display = 'none'; splash.setAttribute('aria-hidden', 'true'); }
+      if (splash) { splash.style.setProperty('display', 'none', 'important'); splash.setAttribute('aria-hidden', 'true'); }
       const onboarding = document.getElementById('onboardingModal');
       const onboardingVisible = onboarding && !onboarding.classList.contains('hidden') && onboarding.style.display !== 'none';
       if (!onboardingVisible) {
@@ -758,7 +758,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Last resort: force everything visible via inline styles.
       try {
         const splash = document.getElementById('appSplash');
-        if (splash) splash.style.display = 'none';
+        if (splash) splash.style.setProperty('display', 'none', 'important');
         const main = document.getElementById('mainContainer');
         if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
         const customer = document.getElementById('customerInterface');

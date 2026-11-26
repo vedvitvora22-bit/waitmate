@@ -2143,5 +2143,108 @@
     })();
   </script>
 
+  <script>
+    (function () {
+      'use strict';
+
+      var SEEN_KEY = 'wm_onboarding_seen';
+      var SPLASH_MS = 750;
+
+      function $(id) {
+        try { return document.getElementById(id); } catch (e) { return null; }
+      }
+
+      function hideSplash() {
+        var s = $('appSplash');
+        if (!s) return;
+        try { s.style.setProperty('display', 'none', 'important'); } catch (e) { s.style.display = 'none'; }
+        s.setAttribute('aria-hidden', 'true');
+        try { s.remove(); } catch (e) {}
+      }
+
+      function showGuideline() {
+        var m = $('onboardingModal');
+        if (m) {
+          m.style.display = 'flex';
+          m.style.opacity = '1';
+          m.style.zIndex = '9999';
+          m.removeAttribute('aria-hidden');
+          try { m.classList.remove('hidden'); m.classList.add('flex'); } catch (e) {}
+        }
+        var b = $('onboardingBackdrop');
+        if (b) {
+          b.style.display = '';
+          b.removeAttribute('hidden');
+          try { b.classList.remove('hidden'); } catch (e) {}
+        }
+      }
+
+      function showCustomerView() {
+        var main = $('mainContainer') || $('customerView') || document.querySelector('main');
+        if (main) {
+          main.style.display = 'block';
+          main.removeAttribute('hidden');
+          try { main.classList.remove('hidden'); } catch (e) {}
+        }
+        var cust = $('customerInterface') || $('customerView');
+        if (cust) {
+          cust.style.display = 'block';
+          cust.removeAttribute('hidden');
+          try { cust.classList.remove('hidden'); } catch (e) {}
+        }
+        if (typeof switchInterface === 'function') {
+          try { switchInterface('customer'); } catch (e) {}
+        }
+      }
+
+      function boot() {
+        try {
+          var splash = $('appSplash');
+          var splashGone = !splash || splash.style.display === 'none' || !document.body.contains(splash);
+          if (splashGone) { showCustomerView(); return; }
+          if (localStorage.getItem(SEEN_KEY) !== 'true') {
+            showGuideline();
+          } else {
+            hideSplash();
+            showCustomerView();
+          }
+          setTimeout(function () {
+            hideSplash();
+            if (localStorage.getItem(SEEN_KEY) !== 'true') showGuideline();
+            else showCustomerView();
+          }, SPLASH_MS);
+        } catch (e) {
+          try { hideSplash(); showCustomerView(); } catch (e2) {}
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+
+      // "Start Exploring" (slide 6 CTA) and "Skip" (every slide): dismiss the
+      // 6-slide guideline and force the Customer View visible, independent of app.js.
+      document.addEventListener('click', function (e) {
+        try {
+          var btn = e.target && e.target.closest ? e.target.closest('button') : null;
+          if (!btn) return;
+          if (!btn.closest('#onboardingModal')) return;
+          var onClick = btn.getAttribute('onclick') || '';
+          var isCta = btn.classList.contains('onboarding-cta');
+          if (onClick.indexOf('skipOnboarding') === -1 &&
+              onClick.indexOf('completeOnboarding') === -1 &&
+              !isCta) return;
+          var m = $('onboardingModal');
+          if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {} }
+          var b = $('onboardingBackdrop');
+          if (b) { b.style.display = 'none'; b.setAttribute('hidden', 'true'); try { b.classList.add('hidden'); } catch (e) {} }
+          try { localStorage.setItem(SEEN_KEY, 'true'); } catch (e) {}
+          showCustomerView();
+        } catch (e) {}
+      });
+    })();
+  </script>
 </body>
 </html>
