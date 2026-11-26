@@ -69,13 +69,13 @@
     #onboardingModal {
       position: fixed !important;
       inset: 0 !important;
-      z-index: 9999 !important;
-      display: flex !important;
+      z-index: 9998 !important;
+      display: none !important;
       align-items: center !important;
       justify-content: center !important;
-      background: rgba(2, 6, 23, 0.8) !important;
-      backdrop-filter: blur(8px) !important;
-      -webkit-backdrop-filter: blur(8px) !important;
+      background: rgba(15, 23, 42, 0.85) !important;
+      backdrop-filter: blur(6px) !important;
+      -webkit-backdrop-filter: blur(6px) !important;
     }
     #mainContainer, #customerInterface {
       display: flex;
@@ -128,7 +128,7 @@
   <!-- ONBOARDING GUIDELINES — Photo-led 5-Slide Problem → WaitMate Solution     -->
   <!-- Mobile-first frame (max-w-md mx-auto), full viewport, under the splash    -->
   <!-- ========================================================================= -->
-  <div id="onboardingModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-hidden="false">
+  <div id="onboardingModal" class="hidden fixed inset-0 z-[9998] items-center justify-center bg-slate-950/80 backdrop-blur-sm" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-hidden="true">
     <div id="onboardingBackdrop" class="fixed inset-0 bg-[#0F172A]/45 backdrop-blur-sm" onclick="skipOnboarding()"></div>
 
     <div id="onboardingFrame" class="onboarding-container relative w-full max-w-md h-[100dvh] max-h-[100dvh] flex flex-col bg-[#F8FAFC] text-[#0F172A]" aria-hidden="false">
@@ -861,7 +861,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 1: JOIN REMOTE QUEUE MODAL                                          -->
   <!-- ========================================================================= -->
-  <div id="joinQueueModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="joinQueueModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeJoinModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       
@@ -962,7 +962,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 2: LIVE DIGITAL QUEUE TICKET PASS & TRACKER                         -->
   <!-- ========================================================================= -->
-  <div id="ticketModal" class="fixed inset-0 z-50 hidden pointer-events-none flex items-start sm:items-center justify-center overflow-y-auto overflow-x-hidden py-6 px-3 sm:py-10 sm:px-4">
+  <div id="ticketModal" class="fixed inset-0 z-50 hidden pointer-events-none items-start sm:items-center justify-center overflow-y-auto overflow-x-hidden py-6 px-3 sm:py-10 sm:px-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeTicketModal()"></div>
     <div class="modal-content relative w-full max-w-[420px] mx-auto z-10">
       
@@ -1175,7 +1175,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 2B: LIVE FRIEND PASS TRACKER (Read-only shared pass view)           -->
   <!-- ========================================================================= -->
-  <div id="friendPassModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="friendPassModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeFriendPassModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       
@@ -1235,7 +1235,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 3: RELIABILITY AUDIT DEEP-DIVE                                      -->
   <!-- ========================================================================= -->
-  <div id="reliabilityModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="reliabilityModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeReliabilityModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90dvh] flex flex-col">
       
@@ -1376,7 +1376,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 4: POST-SEATING DINER ACCURACY VERIFICATION                         -->
   <!-- ========================================================================= -->
-  <div id="feedbackModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="feedbackModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 text-center">
@@ -1457,7 +1457,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL 5: HOST STAND ADD WALK-IN GUEST                                     -->
   <!-- ========================================================================= -->
-  <div id="walkinModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+  <div id="walkinModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeWalkinModal()"></div>
     <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-slate-900 text-[var(--wm-text-primary)] p-5 flex items-center justify-between">
@@ -1529,7 +1529,7 @@
   </script>
 
   <!-- Venue QR Code Poster Modal -->
-  <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1552,7 +1552,7 @@
   </div>
 
   <!-- Owner Change Password Modal -->
-  <div id="ownerChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="ownerChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1592,7 +1592,7 @@
   </div>
 
   <!-- Founder Reset Password Modal -->
-  <div id="founderResetPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="founderResetPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1624,7 +1624,7 @@
   </div>
 
   <!-- Owner Password Verification Modal -->
-  <div id="ownerPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="ownerPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1654,7 +1654,7 @@
     </div>
   </div>
   <!-- Founder Login Modal (Secret Master Password) -->
-  <div id="founderLoginModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="founderLoginModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1696,7 +1696,7 @@
   </footer>
 
   <!-- Founder Change Password Modal -->
-  <div id="founderChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="founderChangePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1736,7 +1736,7 @@
   </div>
 
   <!-- Founder Add New Restaurant Modal -->
-  <div id="founderAddRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="founderAddRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1856,7 +1856,7 @@
   </div>
 
   <!-- Founder Edit Restaurant Modal (Edit any venue's details) -->
-  <div id="founderEditRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="founderEditRestaurantModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4" style="display: none;">
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
       <div class="flex items-center justify-between">
         <div>
@@ -1985,7 +1985,7 @@
   <!-- ========================================================================= -->
   <!-- MODAL: HOW WAIT TIMES WORK (ETA vs RELIABILITY)                            -->
   <!-- ========================================================================= -->
-  <div id="waitInfoModal" class="fixed inset-0 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4" style="display: none;">
+  <div id="waitInfoModal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4" style="display: none;">
     <div class="modal-backdrop fixed inset-0" onclick="closeWaitInfoModal()"></div>
     <div class="modal-content relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
       <div class="bg-slate-900 text-white p-5 flex items-start justify-between shrink-0">
@@ -2163,7 +2163,7 @@
       }
 
       function hideAllSecondaryModals() {
-        ['waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal','ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal','walkinModal','venueQrModal','friendPassModal'].forEach(function (id) {
+        ['waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal','ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal','walkinModal','venueQrModal','friendPassModal','onboardingModal'].forEach(function (id) {
           var m = $(id);
           if (m) {
             m.style.display = 'none';
@@ -2176,9 +2176,9 @@
       function showGuideline() {
         var m = $('onboardingModal');
         if (m) {
-          m.style.display = 'flex';
+          m.style.setProperty('display', 'flex', 'important');
           m.style.opacity = '1';
-          m.style.zIndex = '9999';
+          m.style.zIndex = '9998';
           m.removeAttribute('aria-hidden');
           try { m.classList.remove('hidden'); m.classList.add('flex'); } catch (e) {}
         }
@@ -2193,13 +2193,13 @@
       function showCustomerView() {
         var main = $('mainContainer') || $('customerView') || document.querySelector('main');
         if (main) {
-          main.style.display = 'block';
+          main.style.setProperty('display', 'block', 'important');
           main.removeAttribute('hidden');
           try { main.classList.remove('hidden'); } catch (e) {}
         }
         var cust = $('customerInterface') || $('customerView');
         if (cust) {
-          cust.style.display = 'block';
+          cust.style.setProperty('display', 'block', 'important');
           cust.removeAttribute('hidden');
           try { cust.classList.remove('hidden'); } catch (e) {}
         }
@@ -2217,12 +2217,9 @@
           var splash = $('appSplash');
           var splashGone = !splash || splash.style.display === 'none' || !document.body.contains(splash);
           if (splashGone) { showCustomerView(); return; }
-          if (localStorage.getItem(SEEN_KEY) !== 'true') {
-            showGuideline();
-          } else {
-            hideSplash();
-            showCustomerView();
-          }
+
+          // Splash is visible: 0ms-750ms show ONLY the splash. No guideline,
+          // no customer view yet. Everything else stays hidden.
           setTimeout(function () {
             hideSplash();
             if (localStorage.getItem(SEEN_KEY) !== 'true') showGuideline();
@@ -2252,7 +2249,7 @@
               onClick.indexOf('completeOnboarding') === -1 &&
               !isCta) return;
           var m = $('onboardingModal');
-          if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {} }
+          if (m) { m.style.setProperty('display', 'none', 'important'); m.setAttribute('aria-hidden', 'true'); try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {} }
           var b = $('onboardingBackdrop');
           if (b) { b.style.display = 'none'; b.setAttribute('hidden', 'true'); try { b.classList.add('hidden'); } catch (e) {} }
           try { localStorage.setItem(SEEN_KEY, 'true'); } catch (e) {}

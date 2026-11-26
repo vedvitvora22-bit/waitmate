@@ -671,7 +671,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Safety: guarantee every secondary modal is strictly closed on initial load so
   // nothing blocks the launch sequence: Logo Splash (0.75s) -> 6-Slide Guideline -> Customer View.
   const SECONDARY_MODAL_IDS = [
-    'waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
+    'onboardingModal','waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
     'ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal',
     'walkinModal','venueQrModal','friendPassModal'
   ];
