@@ -847,7 +847,7 @@ async function getLiveStats(restaurant, queueEntries) {
 async function route(request, response, pathParts) {
   const normalized = pathParts[0] === "api" ? pathParts : ["api", ...pathParts];
   const path = `/${normalized.join("/")}`;
-  const body = parseBody(request);
+  const body = await parseBody(request);
 
   if (request.method === "OPTIONS") return send(response, 204, {});
 
