@@ -1902,7 +1902,7 @@ function renderFounderData(data) {
   setFounderText('fndWaitingParties', `${sum.active_parties_in_queue || 0} parties in queues`);
   setFounderText('fndSeatedDiners', `${sum.total_seated_diners || 0}`);
   setFounderText('fndAvgReliability', `${sum.platform_avg_reliability || 92}%`);
-  const walkawaySaved = Math.min(98, 82 + (sum.total_seated_diners || 0));
+  const walkawaySaved = Math.min(98, sum.total_seated_diners || 0);
   setFounderText('fndWalkawaySaved', `${walkawaySaved}% Walkaway Saved`);
 
   try {

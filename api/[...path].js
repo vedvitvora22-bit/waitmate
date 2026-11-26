@@ -683,72 +683,6 @@ function processLiveQueue(queue, availableTables) {
   return { seated, remaining };
 }
 
-// Current 5-minute IST time bucket. Every request within the same bucket
-// shares the same bucket key, so all browsers see identical simulated waits.
-function istBucket() {
-  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  return Math.floor(istNow.getTime() / 300000);
-}
-
-// Deterministic seeded pseudo-random value keyed by restaurant.id + bucket.
-// No Math.random(): same restaurant + same bucket always yields the same draw.
-function seededDraw(key, min, max) {
-  let h = 0;
-  for (let i = 0; i < String(key).length; i++) h = (h * 31 + String(key).charCodeAt(i)) >>> 0;
-  return min + (h % (max - min + 1));
-}
-
-// Baseline active parties per IST meal slot (pure math, zero Firestore writes).
-const MEAL_SLOT_BASELINE_PARTIES = {
-  breakfast: [2, 5],
-  lunch: [6, 12],
-  snacks: [2, 6],
-  dinner: [8, 15],
-  late_night: [1, 4],
-  off_hours: [0, 1],
-};
-const MEAL_SLOT_BASELINE_WAIT = {
-  breakfast: [3, 8],
-  lunch: [10, 22],
-  snacks: [5, 12],
-  dinner: [15, 30],
-  late_night: [2, 10],
-  off_hours: [0, 3],
-};
-const AVG_PARTY_SIZE = 2.4;
-
-function istMealSlot() {
-  // Asia/Kolkata meal slots: Breakfast 7:00-11:00, Lunch 12:00-15:30,
-  // Snacks 16:00-19:00, Dinner 19:30-23:00, Late Night 23:00-3:00, Off 3:00-7:00
-  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const t = d.getHours() * 60 + d.getMinutes();
-  const slots = [
-    { name: 'breakfast', start: 7 * 60, end: 11 * 60 },
-    { name: 'lunch', start: 12 * 60, end: 15 * 60 + 30 },
-    { name: 'snacks', start: 16 * 60, end: 19 * 60 },
-    { name: 'dinner', start: 19 * 60 + 30, end: 23 * 60 },
-    { name: 'late_night', start: 23 * 60, end: 26 * 60 }, // wraps past midnight
-    { name: 'off_hours', start: 3 * 60, end: 7 * 60 },
-  ];
-  // late_night wraps past midnight (23:00-03:00)
-  for (const s of slots) {
-    if (s.name === 'late_night') {
-      if (t >= s.start || t < s.end - 24 * 60) return s.name;
-    } else if (t >= s.start && t < s.end) {
-      return s.name;
-    }
-  }
-  return 'off_hours';
-}
-
-function seededDrawRange(id, bucket, mn, mx) {
-  if (mx <= mn) return mn;
-  let h = 0;
-  const key = String(id) + '|' + bucket;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return mn + (h % (mx - mn + 1));
-}
-
 function restaurantMealTimes(restaurant) {
   const mt = restaurant.meal_times;
   return Array.isArray(mt) && mt.length ? mt : null;
@@ -761,26 +695,14 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
   const realP = Number(realWaitingParties || 0);
   const realG = Number(realWaitingGuests || 0);
 
-  const slot = istMealSlot();
-  const bucket = istBucket();
   const mealTimes = restaurantMealTimes(restaurant);
-  const servesCurrent = !mealTimes || mealTimes.includes(capitalizeSlot(slot));
-
-  // Baseline simulation for "active diners" display counter only (not for wait calculation)
-  let baselineParties = 0;
-  let baselineDiners = 0;
-  if (servesCurrent) {
-    const pr = MEAL_SLOT_BASELINE_PARTIES[slot] || [0, 1];
-    baselineParties = seededDrawRange(id, bucket, pr[0], pr[1]);
-    baselineDiners = Math.round(baselineParties * AVG_PARTY_SIZE);
-  }
 
   // Wait calculation uses ONLY real parties (to match /api/join and displayed queue_count)
   const availableTables = Math.max(1, Number(restaurant.available_tables || 0));
   const partiesAhead = Math.max(0, realP - availableTables);
   const estimated = getEstimatedWaitMinutes(restaurant, partiesAhead, availableTables);
 
-  const activeDiners = baselineDiners + realG;
+  const activeDiners = realG;
   return {
     queue_count: realP,
     total_waiting_people: realG,
@@ -790,15 +712,10 @@ function computePrototypeRestaurantMetrics(restaurant, realWaitingParties, realW
     is_queue_open: isOpen,
     active_parties: realP,
     active_guests: activeDiners,
-    baseline_parties: baselineParties,
-    baseline_diners: baselineDiners,
-    meal_slot: slot,
-    serves_current_slot: servesCurrent,
+    active_diners: activeDiners,
+    meal_slot: null,
+    serves_current_slot: true,
   };
-}
-
-function capitalizeSlot(s) {
-  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_([a-z])/g, (_, c) => ' ' + c.toUpperCase());
 }
 
 // ---------------------------------------------------------------------------
@@ -934,7 +851,7 @@ async function route(request, response, pathParts) {
       liveStats.estimated_wait_mins = metrics.estimated_wait_mins;
       liveStats.queue_count = realParties;
       liveStats.total_waiting_people = realGuests;
-      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: metrics.baseline_diners + realActiveDiners, baseline_diners: metrics.baseline_diners, meal_slot: metrics.meal_slot, serves_current_slot: metrics.serves_current_slot, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
+      result.push({ ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: metrics.active_diners || realActiveDiners, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
     }
     const body = { 
       restaurants: result,
