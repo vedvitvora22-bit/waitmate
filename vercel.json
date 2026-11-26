@@ -1,14 +1,8 @@
 {
-  "buildCommand": "mkdir -p public && cp index.html style.css app.js sw.js manifest.json logo.png logo.svg favicon.svg public/ 2>/dev/null; cp -r api public/ 2>/dev/null; echo 'Static files copied to public'",
+  "buildCommand": "mkdir -p public && cp index.html style.css app.js sw.js qrcode.js manifest.json logo.png logo.svg logo.jpg favicon.svg public/ 2>/dev/null; cp -r api public/ 2>/dev/null; echo 'Static files copied to public'",
   "outputDirectory": "public",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/[...path]"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api/[...path].js" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

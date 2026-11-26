@@ -1,8 +1,0 @@
-# WaitMate Python backend (server.py).
-# Hard imports: hashlib, json, os, random, sqlite3, sys, time, uuid,
-# datetime, http.server, urllib.parse  (all Python standard library).
-# firebase-admin is optional: Firestore sync degrades gracefully when it is
-# not installed (get_firestore() returns None and server.py keeps running on
-# SQLite). The production API route is api/[...path].js (Node.js), so no
-# PyPI packages are required for the Vercel build. Keeping this file empty of
-# pinned packages avoids the earlier production build failure on Vercel.
