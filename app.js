@@ -414,6 +414,181 @@ function getOrCreateDeviceId() {
   return deviceId;
 }
 
+// ============================================================================
+// WaitMateBoot — single deterministic startup state machine.
+// Controls the exact 3-step launch flow: Logo Splash (0-750ms) ->
+// 6-Slide Onboarding Guideline -> Customer Home View.
+// Shared between index.html (inline boot starter) and app.js.
+// Zero race conditions: splash and guideline handoff happen in one synchronous
+// tick at 750ms, so there is never a blank screen between steps.
+// ============================================================================
+window.WaitMateBoot = (function () {
+  const SPLASH_MS = 750;
+  let started = false;
+  let splashTimer = null;
+
+  function $(id) {
+    try { return document.getElementById(id); } catch (e) { return null; }
+  }
+
+  function hideSecondaryModals() {
+    [
+      'onboardingModal','waitInfoModal','joinQueueModal','ticketModal',
+      'reliabilityModal','feedbackModal','ownerPasswordModal','founderLoginModal',
+      'ownerChangePasswordModal','founderResetPasswordModal','walkinModal',
+      'venueQrModal','friendPassModal','deviceBlockedModal','sharePassModal'
+    ].forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+        try { el.classList.add('hidden'); el.classList.remove('flex'); } catch (e) {}
+      }
+    });
+  }
+
+  function showSplash() {
+    var s = $('splashScreen');
+    if (!s) return;
+    s.style.display = 'flex';
+    s.style.position = 'fixed';
+    s.style.inset = '0';
+    s.style.width = '100vw';
+    s.style.height = '100vh';
+    s.style.zIndex = '99999';
+    s.style.flexDirection = 'column';
+    s.style.alignItems = 'center';
+    s.style.justifyContent = 'center';
+    s.style.background = '#0f172a';
+    s.style.opacity = '1';
+    s.classList.remove('hidden');
+    s.removeAttribute('hidden');
+    s.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideSplash() {
+    var s = $('splashScreen');
+    if (!s) return;
+    s.style.display = 'none';
+    s.classList.add('hidden');
+    s.setAttribute('aria-hidden', 'true');
+  }
+
+  function prepareCustomerView() {
+    var main = $('mainContainer') || $('customerView') || document.querySelector('main');
+    if (main) {
+      main.style.display = 'block';
+      main.style.opacity = '1';
+      main.classList.remove('hidden');
+      main.removeAttribute('hidden');
+    }
+    var cust = $('customerInterface') || $('customerView');
+    if (cust) {
+      cust.style.display = 'block';
+      cust.style.opacity = '1';
+      cust.classList.remove('hidden');
+      cust.removeAttribute('hidden');
+    }
+  }
+
+  function hideGuideline() {
+    var m = $('onboardingModal');
+    if (m) {
+      m.style.display = 'none';
+      m.style.opacity = '0';
+      m.setAttribute('aria-hidden', 'true');
+      try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {}
+    }
+    var b = $('onboardingBackdrop');
+    if (b) {
+      b.style.display = 'none';
+      b.style.opacity = '0';
+      b.setAttribute('hidden', 'true');
+      try { b.classList.add('hidden'); } catch (e) {}
+    }
+  }
+
+  function hasDeepLink() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('founder') === '1') return true;
+    if (params.get('ticket')) return true;
+    if (params.get('venue')) return true;
+    var hash = (window.location.hash || '').toLowerCase();
+    var path = (window.location.pathname || '/').toLowerCase();
+    if (path === '/founder' || path.endsWith('/founder') || hash === '#founder') return true;
+    return false;
+  }
+
+  function runDeepLink() {
+    var params = new URLSearchParams(window.location.search);
+    var founder = params.get('founder') === '1';
+    var ticket = params.get('ticket');
+    var venue = params.get('venue');
+    var hash = (window.location.hash || '').toLowerCase();
+    var path = (window.location.pathname || '/').toLowerCase();
+    var isFounderPath = path === '/founder' || path.endsWith('/founder') || hash === '#founder';
+    if (founder || isFounderPath) {
+      if (typeof openFounderLoginModal === 'function') openFounderLoginModal();
+    }
+    if (venue) {
+      try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
+      if (typeof openJoinModal === 'function') openJoinModal(venue, 'walk_in');
+    }
+    if (ticket) {
+      try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
+      if (typeof openFriendPassTracker === 'function') openFriendPassTracker(ticket);
+    }
+  }
+
+  function ensureRestaurantsRendered() {
+    var grid = $('restaurantsGrid') || $('restaurantGrid');
+    if (grid && grid.children.length <= 1) {
+      if (typeof renderRestaurantsGrid === 'function') { try { renderRestaurantsGrid(); } catch (e) {} }
+    }
+    if (typeof loadRestaurants === 'function') { try { loadRestaurants(); } catch (e) {} }
+  }
+
+  // Step 3: Customer Home View. Called by Skip / Start Exploring and by the
+  // deep-link path after the 750ms splash.
+  function enterCustomerView() {
+    if (splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
+    hideGuideline();
+    prepareCustomerView();
+    if (typeof switchInterface === 'function') {
+      try { switchInterface('customer'); } catch (e) {}
+    }
+    ensureRestaurantsRendered();
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function start() {
+    if (started) return;
+    started = true;
+    hideSecondaryModals();
+    showSplash();
+    prepareCustomerView();
+    var deepLink = hasDeepLink();
+    // STEP 1: splash shows immediately (0ms). In the background app.js has
+    // already fetched /api/restaurants and filled #restaurantsGrid.
+    splashTimer = setTimeout(function () {
+      splashTimer = null;
+      hideSplash();
+      // STEP 2 at exactly 750ms: open the 6-Slide Guideline on Slide 1 of 6
+      // in the same tick as hiding the splash -> 0ms blank screen.
+      // Deep-linked users bypass the guideline entirely.
+      if (deepLink) {
+        enterCustomerView();
+        runDeepLink();
+      } else {
+        if (typeof openOnboarding === 'function') openOnboarding();
+        else if (window.openOnboarding) window.openOnboarding();
+      }
+    }, SPLASH_MS);
+  }
+
+  return { start: start, enterCustomerView: enterCustomerView, showSplash: showSplash };
+})();
+
 // Returns true when a stored ticket is still active (waiting / arrived, not
 // expired or any terminal state), so a device can't hold two active queues.
 function isLocalTicketActive(ticket) {
@@ -762,21 +937,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedRated = JSON.parse(localStorage.getItem(RATED_STORAGE_KEY) || '[]');
     if (Array.isArray(savedRated)) ratedTickets = new Set(savedRated);
   } catch (e) { /* ignore corrupt storage */ }
-
-  // Deep link: ?venue=<id> auto-opens the join queue modal for that venue
-  const venueParam = new URLSearchParams(window.location.search).get('venue');
-  if (venueParam) {
-    // QR-link walk-in: arrive at the restaurant door → auto-select Walk-In channel
-    openJoinModal(venueParam, 'walk_in');
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
-
-  // Deep link: ?ticket=<id> opens a read-only Live Friend Pass Tracker for the shared ticket
-  const ticketParam = new URLSearchParams(window.location.search).get('ticket');
-  if (ticketParam) {
-    window.history.replaceState({}, document.title, window.location.pathname);
-    openFriendPassTracker(ticketParam);
-  }
 
   if (currentTicketId) {
     startTicketPolling();
@@ -1331,16 +1491,9 @@ function initFounderSecretTriggers() {
     }
   });
 
-  // URL triggers: /founder path, ?founder=1, or #founder
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const hash = (window.location.hash || '').toLowerCase();
-    const path = (window.location.pathname || '/').toLowerCase();
-    const isFounderPath = path === '/founder' || path.endsWith('/founder');
-    if (isFounderPath || params.get('founder') === '1' || hash === '#founder') {
-      openFounderLoginModal();
-    }
-  } catch (e) { /* ignore */ }
+  // URL-based founder entry (?founder=1, /founder, #founder) is handled by
+  // window.WaitMateBoot after the logo splash so it never races the overlays.
+  // Keyboard shortcut (Alt+Shift+F) and the footer brand click remain below.
 
   // Footer brand text clicked 5 times
   const brandEl = document.getElementById('footerBrandText');
@@ -5651,26 +5804,31 @@ function completeOnboarding(skipped = false) {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
 
-  // Cleanly dismiss the onboarding overlay so nothing invisible blocks the screen.
+  // Step 3a: explicitly close the guideline overlay so nothing invisible
+  // blocks the customer view.
+  modal.style.display = 'none';
+  modal.style.opacity = '0';
   modal.classList.add('hidden');
   modal.classList.remove('flex');
   modal.style.pointerEvents = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.removeAttribute('hidden');
 
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) {
+    backdrop.style.display = 'none';
+    backdrop.style.opacity = '0';
     backdrop.classList.add('hidden');
     backdrop.style.pointerEvents = 'none';
+    backdrop.setAttribute('hidden', 'true');
+    backdrop.removeAttribute('hidden');
   }
 
   document.removeEventListener('keydown', handleOnboardingKeydown);
 
-  // Force the main container + customer discovery view visible and render the
-  // restaurant cards immediately (hero, filter pills, grid).
-  const main = document.getElementById('mainContainer');
-  if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
-  const customer = document.getElementById('customerInterface');
-  if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
-  showCustomerInterface();
+  // Step 3b: hand off to the single boot state machine — forces <main> and
+  // #customerView visible, renders the restaurant cards, then completes launch.
+  window.WaitMateBoot.enterCustomerView();
 
   if (!skipped) {
     showToast('Welcome to WaitMate! 🎉', 'success');
