@@ -712,7 +712,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const om = document.getElementById('onboardingModal');
     if (om) om.classList.add('hidden');
-    // No artificial 750ms wait; proceed to the relevant interface immediately.
+    // Go straight to the customer view immediately.
+    showCustomerInterface();
   } else {
     // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
     // splash (z-index 9998 vs splash 9999). The splash covers it until it fades.
@@ -724,6 +725,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     finishSplash();
     await new Promise(resolve => setTimeout(resolve, 300));
   }
+
+  // ---- end splash ----
+  // Fail-safe: guarantee the splash is gone and either the 6-slide guideline or
+  // the customer view is visible. Never leave a blank white page after the logo.
+  setTimeout(() => {
+    try {
+      const splash = document.getElementById('appSplash');
+      if (splash && !splash.classList.contains('is-hidden')) {
+        splash.classList.add('is-hidden');
+        splash.setAttribute('aria-hidden', 'true');
+      }
+      const onboarding = document.getElementById('onboardingModal');
+      const onboardingVisible = onboarding && !onboarding.classList.contains('hidden');
+      if (!onboardingVisible) {
+        const main = document.getElementById('mainContainer');
+        if (main) main.classList.remove('hidden');
+        const customer = document.getElementById('customerInterface');
+        if (customer) customer.classList.remove('hidden');
+        switchInterface('customer');
+      }
+    } catch (e) {
+      // Last resort: force everything visible via inline styles.
+      try {
+        const splash = document.getElementById('appSplash');
+        if (splash) splash.style.display = 'none';
+        const main = document.getElementById('mainContainer');
+        if (main) main.style.display = '';
+        const customer = document.getElementById('customerInterface');
+        if (customer) customer.style.display = '';
+      } catch { /* ignore */ }
+    }
+  }, 1500);
 
   // ---- end splash ----
   try {
@@ -5508,13 +5541,13 @@ function showCustomerInterface() {
   const custDiv = document.getElementById('customerInterface');
   if (custDiv) custDiv.classList.remove('hidden');
 
-  // Render immediately from cached data; only refetch if nothing is loaded yet
-  // so the hero, filter pills, and all 12 restaurant cards appear right away.
-  if (!allRestaurants || allRestaurants.length === 0) {
-    loadRestaurants();
-  } else {
-    switchInterface('customer');
-  }
+  // Always switch to customer view and render so the grid is never blank.
+  switchInterface('customer');
+
+  // Load/refresh restaurants in the background; falls back to the default
+  // 12 Mumbai venues if the API is slow or errors out, so the grid is
+  // never left empty.
+  loadRestaurants();
 }
 
 function initOnboarding() {

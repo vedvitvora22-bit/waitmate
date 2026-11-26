@@ -1,6 +1,6 @@
-// cache-bust-20261126-onboarding-unregister-v42
+// cache-bust-20261126-splash-boot-fix-v43
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-onboarding-unregister-v42';
+const CACHE_NAME = 'waitmate-v20261126-splash-boot-fix-v43';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
