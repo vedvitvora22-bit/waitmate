@@ -1527,52 +1527,6 @@
       } catch (e) {}
     })();
   </script>
-  <script src="app.js"></script>
-  <script src="qrcode.js"></script>
-
-  <!-- Bulletproof boot guard: guarantees the splash is removed and either the
-       6-Slide Guideline or the Customer View is visible after the logo splash.
-       Runs as a final safety net if app.js boot sequence stalls. -->
-  <script>
-    (function () {
-      var guardFired = false;
-      function forceVisible() {
-        if (guardFired) return;
-        guardFired = true;
-        var splash = document.getElementById('appSplash');
-        var onboarding = document.getElementById('onboardingModal');
-        var customer = document.getElementById('customerInterface');
-        var main = document.getElementById('mainContainer');
-
-        // Always hide the splash
-        if (splash) {
-          splash.style.display = 'none';
-          splash.setAttribute('aria-hidden', 'true');
-          splash.classList.add('is-hidden');
-        }
-
-        // If neither onboarding nor customer view is visible, force customer view
-        var onboardingVisible = onboarding && !onboarding.classList.contains('hidden');
-        var customerVisible = customer && !customer.classList.contains('hidden');
-        if (!onboardingVisible && !customerVisible) {
-          if (main) { main.style.display = ''; main.classList.remove('hidden'); }
-          if (customer) { customer.style.display = ''; customer.classList.remove('hidden'); }
-          try { switchInterface && switchInterface('customer'); } catch (e) {}
-          try { renderRestaurants && renderRestaurantsGrid(); } catch (e) {}
-        }
-      }
-
-      // Fire after 2 seconds — well past the 750ms splash + 300ms fade
-      setTimeout(forceVisible, 2000);
-
-      // Also fire on DOMContentLoaded in case app.js hasn't run yet
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { setTimeout(forceVisible, 2000); });
-      } else {
-        setTimeout(forceVisible, 2000);
-      }
-    })();
-  </script>
 
   <!-- Venue QR Code Poster Modal -->
   <div id="venueQrModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

@@ -701,6 +701,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function showGuidelineModal() {
+    // Respect onboarding preference: returning users who already dismissed the
+    // 6-slide guideline go straight to the customer view instead of re-showing it.
+    if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
+      showCustomerInterface();
+      return;
+    }
     const modal = document.getElementById('onboardingModal');
     if (!modal) return;
     modal.classList.remove('hidden');
