@@ -721,7 +721,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showCustomerInterface();
   } else {
     // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
-    // splash. The splash (z-index 9999) covers the guideline (z-index 9998) until
+    // splash. The splash (z-index 10000) covers the guideline (z-index 9999) until
     // it is removed at exactly 750ms.
     initOnboarding();
 
