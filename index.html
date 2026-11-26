@@ -2017,132 +2017,10 @@
   <script src="app.js"></script>
   <script src="qrcode.js"></script>
 
-  <!-- UNBREAKABLE INLINE FAILSAFE — guarantees the screen is never blank after
-       the logo splash finishes, even if app.js fails to load or run.
-       Runs independently of app.js and only touches classList / inline styles,
-       so it can never throw a hard error that leaves a white screen. -->
-  <script>
-    (function () {
-      'use strict';
-
-      var SEEN_KEY = 'wm_onboarding_seen';
-      var SPLASH_MS = 750;
-
-      function byId(id) {
-        try { return document.getElementById(id); } catch (e) { return null; }
-      }
-
-      function hideSplash() {
-        var s = byId('appSplash');
-        if (!s) return;
-        s.style.display = 'none';
-        s.setAttribute('aria-hidden', 'true');
-        try { s.classList.add('is-hidden'); } catch (e) {}
-      }
-
-      function showOnboarding() {
-        var m = byId('onboardingModal');
-        if (m) {
-          m.style.display = 'flex';
-          m.style.opacity = '1';
-          m.style.zIndex = '9999';
-          m.setAttribute('aria-hidden', 'false');
-          try { m.classList.remove('hidden'); } catch (e) {}
-        }
-        var b = byId('onboardingBackdrop');
-        if (b) {
-          b.style.display = '';
-          b.removeAttribute('hidden');
-          try { b.classList.remove('hidden'); } catch (e) {}
-        }
-      }
-
-      function hideOnboarding() {
-        var m = byId('onboardingModal');
-        if (m) {
-          m.style.display = 'none';
-          m.setAttribute('aria-hidden', 'true');
-          try { m.classList.add('hidden'); } catch (e) {}
-        }
-        var b = byId('onboardingBackdrop');
-        if (b) {
-          b.style.display = 'none';
-          b.setAttribute('hidden', 'true');
-          try { b.classList.add('hidden'); } catch (e) {}
-        }
-      }
-
-      function showCustomerView() {
-        var main = byId('mainContainer') || byId('customerView') || document.querySelector('main');
-        if (main) {
-          main.style.display = '';
-          main.removeAttribute('hidden');
-          try { main.classList.remove('hidden'); } catch (e) {}
-        }
-        var cust = byId('customerInterface') || byId('customerView');
-        if (cust) {
-          cust.style.display = '';
-          cust.removeAttribute('hidden');
-          try { cust.classList.remove('hidden'); } catch (e) {}
-        }
-        if (typeof switchInterface === 'function') {
-          try { switchInterface('customer'); } catch (e) {}
-        }
-      }
-
-      function boot() {
-        try {
-          var seen = localStorage.getItem(SEEN_KEY) === 'true';
-          var splash = byId('appSplash');
-          var splashAlreadyGone = !splash || splash.classList.contains('is-hidden') || splash.style.display === 'none';
-
-          // App founder / ticket deep-links already hid the splash and went
-          // straight to the customer view: don't resurrect the onboarding there.
-          if (splashAlreadyGone) {
-            showCustomerView();
-            return;
-          }
-
-          if (!seen) {
-            // 6-Slide Guideline must be visible once the logo splash ends.
-            showOnboarding();
-          } else {
-            hideOnboarding();
-            showCustomerView();
-          }
-        } catch (e) {
-          // Last resort: never stay blank — show the customer shell.
-          try { showCustomerView(); } catch (e2) {}
-        }
-        setTimeout(hideSplash, SPLASH_MS);
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-      } else {
-        boot();
-      }
-
-      // "Start Exploring" (slide 6 CTA) and "Skip" (every slide): dismiss the
-      // 6-Slide Guideline immediately and force the customer view visible,
-      // regardless of whether app.js handlers ran.
-      document.addEventListener('click', function (e) {
-        try {
-          var btn = e.target.closest('button');
-          if (!btn) return;
-          if (!btn.closest('#onboardingModal')) return;
-          var onClick = btn.getAttribute('onclick') || '';
-          if (onClick.indexOf('skipOnboarding') === -1 &&
-              onClick.indexOf('completeOnboarding') === -1 &&
-              !btn.classList.contains('onboarding-cta')) return;
-          hideOnboarding();
-          showCustomerView();
-          try { localStorage.setItem(SEEN_KEY, 'true'); } catch (e) {}
-        } catch (e) {}
-      });
-    })();
-  </script>
-
+  <!-- UNBREAKABLE INLINE BOOT — sole controller of the 3-step launch:
+       Logo Splash (0-750ms) -> 6-Slide Guideline -> Customer View.
+       Runs independently of app.js and uses only inline style.display,
+       so no CSS class can ever block it or leave a blank screen. -->
   <script>
     (function () {
       'use strict';
@@ -2157,18 +2035,18 @@
       function hideSplash() {
         var s = $('appSplash');
         if (!s) return;
-        try { s.style.setProperty('display', 'none', 'important'); } catch (e) { s.style.display = 'none'; }
+        s.style.display = 'none';
         s.setAttribute('aria-hidden', 'true');
-        try { s.remove(); } catch (e) {}
+        try { s.classList.add('hidden'); } catch (e) {}
       }
 
       function hideAllSecondaryModals() {
         ['waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal','ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal','walkinModal','venueQrModal','friendPassModal','onboardingModal'].forEach(function (id) {
           var m = $(id);
           if (m) {
-            m.classList.add('hidden');
-            m.classList.remove('flex');
+            m.style.display = 'none';
             m.setAttribute('aria-hidden', 'true');
+            try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {}
           }
         });
       }
@@ -2182,27 +2060,33 @@
           m.style.inset = '0';
           m.style.zIndex = '9998';
           m.style.opacity = '1';
+          m.style.alignItems = 'center';
+          m.style.justifyContent = 'center';
           m.removeAttribute('aria-hidden');
         }
         var b = $('onboardingBackdrop');
         if (b) {
           b.classList.remove('hidden');
+          b.style.display = '';
           b.removeAttribute('hidden');
+          try { b.style.opacity = '1'; } catch (e) {}
         }
       }
 
       function showCustomerView() {
         var main = $('mainContainer') || $('customerView') || document.querySelector('main');
         if (main) {
-          main.style.display = 'block';
-          main.removeAttribute('hidden');
           main.classList.remove('hidden');
+          main.style.display = 'block';
+          main.style.opacity = '1';
+          main.removeAttribute('hidden');
         }
         var cust = $('customerInterface') || $('customerView');
         if (cust) {
-          cust.style.display = 'block';
-          cust.removeAttribute('hidden');
           cust.classList.remove('hidden');
+          cust.style.display = 'block';
+          cust.style.opacity = '1';
+          cust.removeAttribute('hidden');
         }
         if (typeof switchInterface === 'function') {
           try { switchInterface('customer'); } catch (e) {}
@@ -2212,11 +2096,12 @@
       function boot() {
         try {
           // 0ms to 750ms: show ONLY the splash. All secondary modals hidden,
-          // customer view ready underneath (splash z-index 10000 covers it).
+          // customer view ready underneath (splash z-index 9999 covers it).
           hideAllSecondaryModals();
           var splash = $('appSplash');
           if (splash) {
-            splash.style.setProperty('display', 'flex', 'important');
+            splash.classList.remove('hidden');
+            splash.style.display = 'flex';
             splash.style.position = 'fixed';
             splash.style.inset = '0';
             splash.style.zIndex = '9999';
@@ -2226,14 +2111,10 @@
           var splashGone = !splash || splash.style.display === 'none' || !document.body.contains(splash);
           if (splashGone) { showCustomerView(); return; }
 
-          // At 750ms: hide splash, open the centered 6-Slide Guideline modal.
+          // At 750ms: hide splash, ALWAYS open the centered 6-Slide Guideline modal.
           setTimeout(function () {
             hideSplash();
-            if (localStorage.getItem(SEEN_KEY) !== 'true') {
-              showGuideline();
-            } else {
-              showCustomerView();
-            }
+            showGuideline();
           }, SPLASH_MS);
         } catch (e) {
           try { hideSplash(); showCustomerView(); } catch (e2) {}
@@ -2259,11 +2140,14 @@
               onClick.indexOf('completeOnboarding') === -1 &&
               !isCta) return;
           var m = $('onboardingModal');
-          if (m) { m.classList.add('hidden'); m.classList.remove('flex'); m.setAttribute('aria-hidden', 'true'); }
+          if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {} }
           var b = $('onboardingBackdrop');
-          if (b) { b.classList.add('hidden'); b.setAttribute('hidden', 'true'); }
+          if (b) { b.style.display = 'none'; b.setAttribute('hidden', 'true'); try { b.classList.add('hidden'); } catch (e) {} }
           try { localStorage.setItem(SEEN_KEY, 'true'); } catch (e) {}
           showCustomerView();
+          if (typeof renderRestaurants === 'function') {
+            try { renderRestaurants(); } catch (e) {}
+          }
         } catch (e) {}
       });
     })();

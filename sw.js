@@ -1,6 +1,6 @@
-// cache-bust-20261126-splash-boot-guard-v54
+// cache-bust-20261126-splash-boot-guard-v55
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-splash-boot-guard-v54';
+const CACHE_NAME = 'waitmate-v20261126-splash-boot-guard-v55';
 
 // Shell files that must ALWAYS be fetched fresh from the network so stale,
 // broken builds can never be served from cache after a deploy.
