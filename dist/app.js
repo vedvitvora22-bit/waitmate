@@ -35,6 +35,23 @@ function togglePasswordVisibility(inputId) {
   if (window.lucide) lucide.createIcons();
 }
 
+// Normalize any API payload into a guaranteed Array. Accepts a bare array, or
+// an object wrapping the array under .entries / .queue, and falls back to []
+// for null / undefined / error objects / scalars so callers never crash on
+// .find(), .filter(), .map(), or .length.
+function getSafeEntries(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+  if (Array.isArray(data.entries)) return data.entries;
+  if (Array.isArray(data.queue)) return data.queue;
+  if (Array.isArray(data.queues)) return data.queues;
+  if (Array.isArray(data.restaurants)) return data.restaurants;
+  if (Array.isArray(data.venues)) return data.venues;
+  if (Array.isArray(data.reviews)) return data.reviews;
+  }
+  return [];
+}
+
 // Refresh /api/restaurants every 15s so all open browsers stay in sync with the
 // same server-computed waits and queue counts. Polling is skipped entirely while
 // the tab is hidden (document.hidden) to avoid wasting radio/battery in the
@@ -189,8 +206,26 @@ async function renderUnlockedHostStand(venueId, pwd) {
       openOwnerPasswordModal(venueId);
       return;
     }
-    if (!res.ok) throw new Error('Host API unavailable');
-    hostData = await res.json();
+    if (!res.ok) {
+      let errMsg = 'Host API unavailable';
+      try { const e = await res.json(); if (e && e.error) errMsg = e.error; } catch { /* ignore parse */ }
+      showToast(errMsg, 'error');
+      throw new Error(errMsg);
+    }
+    let raw = {};
+    try { raw = await res.json(); } catch (parseErr) { raw = {}; }
+    // If the backend returned an error-shaped body (e.g. { error: "..." }),
+    // surface it and fall back to local mock data instead of crashing.
+    if (raw && typeof raw === 'object' && raw.error && !raw.restaurant && !raw.queue) {
+      showToast(raw.error || 'Host API returned an error.', 'error');
+      throw new Error(raw.error || 'Host API error');
+    }
+    hostData = {
+      restaurant: raw.restaurant || null,
+      live_stats: raw.live_stats || { queue_count: 0, estimated_wait_mins: 10, is_queue_open: true },
+      reliability: raw.reliability || { score: 95, grade: 'A+' },
+      queue: getSafeEntries(raw.queue)
+    };
   } catch (err) {
     const r = (allRestaurants || []).find(x => x.id === venueId) || (typeof fallbackRestaurants !== 'undefined' ? fallbackRestaurants : {});
     const q = (typeof localMockQueues !== 'undefined' && localMockQueues[venueId]) ? localMockQueues[venueId] : [];
@@ -198,7 +233,7 @@ async function renderUnlockedHostStand(venueId, pwd) {
       restaurant: r,
       live_stats: r.live_stats || { queue_count: 0, estimated_wait_mins: 10, is_queue_open: true },
       reliability: r.reliability || { score: 95, grade: 'A+' },
-      queue: q
+      queue: getSafeEntries(q)
     };
   }
   detectNewHostJoins(venueId);
@@ -357,6 +392,36 @@ const RATED_STORAGE_KEY = 'waitmate_rated_tickets';
 // Favorites / Bookmarked Spots — persisted in localStorage (wm_favorites)
 let favorites = new Set();
 const FAVORITES_STORAGE_KEY = 'wm_favorites';
+
+// Unique device id used to enforce one active queue ticket per device.
+// Generated once and persisted in localStorage; sent with every join request.
+const DEVICE_ID_KEY = 'waitmate_device_id';
+let deviceId = null;
+function getOrCreateDeviceId() {
+  if (deviceId) return deviceId;
+  try {
+    deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+      const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
+      deviceId = uuid;
+      localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    }
+  } catch (e) {
+    deviceId = 'dm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 14);
+  }
+  return deviceId;
+}
+
+// Returns true when a stored ticket is still active (waiting / arrived, not
+// expired or any terminal state), so a device can't hold two active queues.
+function isLocalTicketActive(ticket) {
+  if (!ticket) return false;
+  const st = String(ticket.status || '').toLowerCase();
+  if (st === 'expired' || st === 'cancelled' || st === 'seated' || st === 'no_show' || st === 'completed' || st === 'left') return false;
+  return st === 'waiting' || st === 'arrived' || ticket.has_arrived === true;
+}
 
 function loadFavorites() {
   try {
@@ -588,47 +653,36 @@ async function sendTableReadyNotification(ticketData) {
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
+  document.title = "WaitMate India 🇮🇳 • Restaurant Queues & Reliability — Demo";
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
-  // ---- App Launch Splash Screen: pre-load data while logo is centered ----
+  allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
+  renderRestaurantsGrid();
+
+  // ---- App Launch Splash Screen: exactly 750ms centered logo with pulse ----
   const splashEl = document.getElementById('appSplash');
-  const splashParams = new URLSearchParams(window.location.search);
-  const splashPath = (window.location.pathname || '/').toLowerCase();
-  const splashHash = (window.location.hash || '').toLowerCase();
-  const isDeepLink = splashPath === '/founder' || splashPath.endsWith('/founder')
-    || splashParams.get('founder') === '1' || splashHash === '#founder'
-    || splashParams.get('passId') || splashParams.get('ticket') || splashParams.get('venue');
+
+  // Determine whether to skip the splash + onboarding entirely: founder access
+  // or a shared ticket/pass deep-link should go straight to the app.
+  const _skipParams = new URLSearchParams(window.location.search);
+  const _isFounder = window.location.pathname === '/founder' ||
+    window.location.pathname.endsWith('/founder') ||
+    _skipParams.get('founder') === '1' ||
+    window.location.hash === '#founder';
+  const _hasTicketLink = !!(_skipParams.get('ticket') || _skipParams.get('passId'));
+  const _skipSplash = _isFounder || _hasTicketLink;
 
   // Fire initial data fetches immediately while the splash is visible.
   const dataPromise = (async () => {
     try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
     try { await loadActivePassData(); } catch (err) { console.warn('Splash pre-load: active pass failed', err); }
-    // Reviews are fetched per-venue on demand, but seed the cache with the first
-    // venue so the Customer grid is populated without an extra round-trip.
     try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
   })();
 
-  // Minimum splash visibility (1500ms) AND wait for data to resolve, capped at 3500ms.
-  // Deep links (founder / passId / ticket / venue) shorten this to 400ms for snappy checks.
-  const MIN_SPLASH_MS = isDeepLink ? 400 : 1500;
-  const MAX_SPLASH_MS = isDeepLink ? 1200 : 3500;
-  const splashReadyAt = Date.now() + MIN_SPLASH_MS;
-  const splashDeadline = Date.now() + MAX_SPLASH_MS;
-
-  let splashResolved = false;
-
-  // Safety timeout: never trap the user on the splash screen past the deadline,
-  // even if a fetch hangs on a slow/flaky mobile network.
-  const deadlineTimer = setTimeout(() => {
-    if (splashResolved) return;
-    splashResolved = true;
-    finishSplash();
-  }, Math.max(0, splashDeadline - Date.now()) + 1);
+  const SPLASH_DURATION_MS = 750;
 
   function finishSplash() {
-    clearTimeout(deadlineTimer);
     if (splashEl) {
       splashEl.classList.add('is-fading');
       setTimeout(() => {
@@ -639,28 +693,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Wait for the minimum visibility window AND the data promise to settle, but
-  // never past the safety deadline. The data promise keeps running in the
-  // background so a slow fetch still populates the grid after the splash fades.
-  const waitForMin = new Promise(resolve => {
-    const tick = () => {
-      if (Date.now() >= splashReadyAt) return resolve();
-      setTimeout(tick, 40);
-    };
-    tick();
-  });
+  if (_skipSplash) {
+    // Skip splash and onboarding entirely for founder / shared-ticket deep-links.
+    if (splashEl) {
+      splashEl.classList.add('is-hidden');
+      splashEl.setAttribute('aria-hidden', 'true');
+    }
+    const om = document.getElementById('onboardingModal');
+    if (om) om.classList.add('hidden');
+    // No artificial 750ms wait; proceed to the relevant interface immediately.
+  } else {
+    // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
+    // splash (z-index 9998 vs splash 9999). The splash covers it until it fades.
+    initOnboarding();
 
-  await Promise.race([
-    Promise.all([dataPromise, waitForMin.then(() => dataPromise)]),
-    new Promise(resolve => setTimeout(resolve, Math.max(0, splashDeadline - Date.now()) + 1)),
-  ]).then(() => { if (!splashResolved) { splashResolved = true; finishSplash(); } });
-
-  // Allow the fade-out animation to play before continuing initialization.
-  if (splashEl) {
-    await new Promise(resolve => setTimeout(resolve, 320));
+    // Exactly 750ms splash visibility, then fade out ONLY the splash so the user
+    // lands directly on Slide 1 without ever flashing the customer discovery screen.
+    await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
+    finishSplash();
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
-  // ---- end splash ----
 
+  // ---- end splash ----
   try {
     const _params = new URLSearchParams(window.location.search);
     const _hash = (window.location.hash || '').toLowerCase();
@@ -677,6 +731,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
   await initPushNotifications();
   loadFavorites();
+  getOrCreateDeviceId(); // generate/persist the device id used for one-active-ticket-per-device
   startRestaurantsRefresh();
 
   // Restore persisted active ticket so a page refresh keeps "My Pass" and live tracking.
@@ -685,8 +740,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // title when there is no active waitlist session.
   try {
     const saved = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
-    // Hard-terminal states never resume (no rating is owed for these).
-    const hardTerminal = ['cancelled', 'completed', 'no_show'];
+    // Hard-terminal states never resume (no rating is owed for these). Expired
+    // tickets are cleared so the diner can join fresh with a "Ticket Expired" state.
+    const hardTerminal = ['cancelled', 'completed', 'no_show', 'expired'];
     // A seated-but-unrated visit must resume on the rating screen after a reload
     // rather than dropping the diner back to the browsing view.
     const seatedUnrated = !!(saved && saved.data && saved.data.status === 'seated' && !saved.data.rated);
@@ -700,12 +756,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       activeTicketData = saved.data || null;
       localStorage.setItem('waitmate_ticket_id', currentTicketId);
       if (activeTicketData) {
-        const pill = document.getElementById('activeTicketPill');
-        if (pill) {
-          pill.classList.remove('hidden');
-          pill.classList.add('flex');
-        }
         startTicketPolling();
+        // Paint the floating bottom bar with the restored ticket's venue + rank
+        // immediately instead of waiting for the first poll tick.
+        renderActivePassPill();
       }
       // Resume a pending seated rating immediately on the customer view.
       if (seatedUnrated && currentInterface === 'customer') {
@@ -772,7 +826,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 96,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.9,
       total_verified_checkins: 31,
@@ -919,7 +973,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 97,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.2,
       total_verified_checkins: 30,
@@ -991,7 +1045,7 @@ const fallbackRestaurants = [
     reliability: {
       score: 95,
       grade: "A+",
-      verdict: "Exceptionally Accurate",
+      verdict: "Highly Reliable",
       badge_color: "emerald",
       avg_variance_mins: 1.1,
       total_verified_checkins: 42,
@@ -1477,7 +1531,7 @@ async function submitNewRestaurant(e) {
     try { data = await res.json(); } catch (parseErr) { data = {}; }
     if (!res.ok) throw new Error(data.error || 'Failed to register restaurant');
 
-    showToast(`🎉 "${name}" is now live on WaitMate!`, "success");
+    showToast(`🎉 "${name}" was added to WaitMate (demo)!`, "success");
     document.getElementById('ownerAddRestaurantForm').reset();
     
     // Refresh restaurants list across all views
@@ -1493,7 +1547,7 @@ async function submitNewRestaurant(e) {
     showToast(`Error adding restaurant: ${err.message}`, "error");
   } finally {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = `<i data-lucide="store" class="w-4 h-4 text-orange-400"></i> <span>Launch Restaurant on WaitMate Live Network</span>`;
+    submitBtn.innerHTML = `<i data-lucide="store" class="w-4 h-4 text-orange-400"></i> <span>Launch Restaurant on WaitMate (Demo)</span>`;
     lucide.createIcons();
   }
 }
@@ -1536,15 +1590,15 @@ async function loadFounderDashboard() {
 
     if (restaurantsRes.status === 'fulfilled' && restaurantsRes.value.ok) {
       const r = await restaurantsRes.value.json();
-      founderRestaurantsCache = r.restaurants || [];
+      founderRestaurantsCache = getSafeEntries(r);
     }
     if (queuesRes.status === 'fulfilled' && queuesRes.value.ok) {
       const q = await queuesRes.value.json();
-      founderQueuesCache = q.queues || [];
+      founderQueuesCache = getSafeEntries(q);
     }
     if (reviewsRes.status === 'fulfilled' && reviewsRes.value.ok) {
       const rv = await reviewsRes.value.json();
-      founderReviewsCache = rv.reviews || [];
+      founderReviewsCache = getSafeEntries(rv);
     }
     if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
       const s = await settingsRes.value.json();
@@ -1552,8 +1606,25 @@ async function loadFounderDashboard() {
       const statusEl = document.getElementById('fndGlobalBannerStatus');
       if (statusEl) statusEl.textContent = globalAnnouncementText ? `Active: "${globalAnnouncementText}"` : 'None active';
     }
+
+    // Surface any failed founder endpoint (401/403/500 or network error) to the
+    // console instead of silently rendering an empty dashboard.
+    const endpointChecks = [
+      ['analytics', analyticsRes],
+      ['restaurants', restaurantsRes],
+      ['queues', queuesRes],
+      ['reviews', reviewsRes],
+      ['settings', settingsRes]
+    ];
+    for (const [name, res] of endpointChecks) {
+      if (res.status === 'rejected') {
+        console.error(`[Founder] /api/founder/${name} request failed:`, res.reason);
+      } else if (!res.value.ok) {
+        console.error(`[Founder] /api/founder/${name} returned HTTP ${res.value.status}`);
+      }
+    }
   } catch (err) {
-    console.warn("Founder dashboard load failed:", err);
+    console.error("Founder dashboard load failed:", err);
   }
   // Build the live summary from whichever source actually populated data, so the
   // dashboard never stays blank when the analytics endpoint is slow or returns
@@ -1567,7 +1638,7 @@ async function loadFounderDashboard() {
   const reviews = (founderReviewsCache && founderReviewsCache.length)
     ? founderReviewsCache
     : (data && Array.isArray(data.recent_reviews) ? data.recent_reviews : []);
-  const activeQueues = queues.filter(q => ["waiting","notified","delayed"].includes(q.status));
+  const activeQueues = queues.filter(q => q && q.status === 'waiting');
   const waitingDiners = activeQueues.reduce((s, q) => s + Number(q.party_size || 0), 0);
   const activeParties = activeQueues.length;
   const totalRestaurants = venues.length;
@@ -1576,6 +1647,17 @@ async function loadFounderDashboard() {
   const platformAvgReliability = reliabilityScores.length
     ? Math.round(reliabilityScores.reduce((a, b) => a + b, 0) / reliabilityScores.length)
     : 92;
+  // Seated totals come from the analytics summary when available (it scans all
+  // historical queue_entries), otherwise fall back to counting seated entries in
+  // the live queue cache so the metric is never hardcoded to zero.
+  const analyticsSummary = (data && data.summary) || {};
+  const seatedFromCache = queues.filter(q => q.status === 'seated');
+  const totalSeatedParties = analyticsSummary.total_seated_parties != null
+    ? analyticsSummary.total_seated_parties
+    : seatedFromCache.length;
+  const totalSeatedDiners = analyticsSummary.total_seated_diners != null
+    ? analyticsSummary.total_seated_diners
+    : seatedFromCache.reduce((s, q) => s + Number(q.party_size || 0), 0);
 
   renderFounderData({
     summary: {
@@ -1584,8 +1666,8 @@ async function loadFounderDashboard() {
       cities_list: [...new Set(venues.map(r => r.city || 'Mumbai'))],
       active_parties_in_queue: activeParties,
       active_diners_in_queue: waitingDiners,
-      total_seated_parties: 0,
-      total_seated_diners: 0,
+      total_seated_parties: totalSeatedParties,
+      total_seated_diners: totalSeatedDiners,
       platform_avg_reliability: platformAvgReliability
     },
     restaurants: venues,
@@ -1620,22 +1702,30 @@ function jsEscape(unsafe) {
   return String(unsafe).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
 
+function setFounderText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 function renderFounderData(data) {
   const sum = data.summary || {};
-  document.getElementById('fndTotalVenues').textContent = sum.total_restaurants || 0;
-  document.getElementById('fndCitiesSummary').textContent = 'Across Mumbai dining hubs';
-  document.getElementById('fndWaitingDiners').textContent = sum.active_diners_in_queue || 0;
-  document.getElementById('fndWaitingParties').textContent = `${sum.active_parties_in_queue || 0} parties in queues`;
-  document.getElementById('fndSeatedDiners').textContent = `${sum.total_seated_diners || 0}`;
-  document.getElementById('fndAvgReliability').textContent = `${sum.platform_avg_reliability || 92}%`;
+  setFounderText('fndTotalVenues', sum.total_restaurants || 0);
+  const venuesForOpen = data.restaurants || founderRestaurantsCache || [];
+  const openNowCount = venuesForOpen.filter(r => Boolean((r.live_stats || { is_queue_open: true }).is_queue_open)).length;
+  setFounderText('fndCitiesSummary', openNowCount);
+  setFounderText('fndWaitingDiners', sum.active_diners_in_queue || 0);
+  setFounderText('fndWaitingParties', `${sum.active_parties_in_queue || 0} parties in queues`);
+  setFounderText('fndSeatedDiners', `${sum.total_seated_diners || 0}`);
+  setFounderText('fndAvgReliability', `${sum.platform_avg_reliability || 92}%`);
   const walkawaySaved = Math.min(98, 82 + (sum.total_seated_diners || 0));
-  document.getElementById('fndWalkawaySaved').textContent = `${walkawaySaved}% Walkaway Saved`;
+  setFounderText('fndWalkawaySaved', `${walkawaySaved}% Walkaway Saved`);
 
+  try {
   // Render Restaurants Network Table (Founder control row per venue)
   const restTbody = document.getElementById('fndRestaurantsTable');
-  const venues = data.restaurants || founderRestaurantsCache || [];
+  const venues = (data.restaurants || founderRestaurantsCache || []);
   if (restTbody) {
-    document.getElementById('fndVenueCountBadge').textContent = `${venues.length} venues`;
+    setFounderText('fndVenueCountBadge', `${venues.length} venues`);
     if (venues.length > 0) {
       restTbody.innerHTML = venues.map(r => {
         const stats = r.live_stats || { queue_count: 0, estimated_wait_mins: 0, is_queue_open: true, total_waiting_people: 0 };
@@ -1713,6 +1803,9 @@ function renderFounderData(data) {
     }
   }
 
+  } catch (err) { console.error(err); }
+
+  try {
   // Render Live Cross-Platform Queue Stream (every active party, all venues)
   const queueTbody = document.getElementById('fndLiveQueuesTable');
   const queues = data.recent_queues || founderQueuesCache || [];
@@ -1780,6 +1873,9 @@ function renderFounderData(data) {
     }
   }
 
+  } catch (err) { console.error(err); }
+
+  try {
   // Render Reliability Audit Watchdog — all reviews across the network
   const reviewList = document.getElementById('fndRecentReviewsList');
   const reviews = data.recent_reviews || founderReviewsCache || [];
@@ -1824,9 +1920,11 @@ ${reviews.map(rev => {
         <p class="text-[10px] text-slate-600 mt-3 text-center">Delete a fake/spam review → that restaurant's Reliability Score™ is recalculated from the remaining reviews automatically.</p>
       `;
     } else {
-      reviewList.innerHTML = `<p class="text-xs text-slate-600 text-center py-6">No reviews logged across the network yet.</p>`;
+      reviewList.innerHTML = `<p class="text-xs text-slate-600 text-center py-6">No diner reviews yet</p>`;
     }
   }
+
+  } catch (err) { console.error(err); }
 
   lucide.createIcons();
 }
@@ -1895,7 +1993,14 @@ async function loadRestaurants() {
     const res = await fetch('/api/restaurants', { cache: 'no-store' });
     if (!res.ok) throw new Error('API response not ok');
     const data = await res.json();
-    allRestaurants = data.restaurants || [];
+    // If the backend returned an error-shaped body (e.g. { error: "..." })
+    // with HTTP 200, surface it and fall back to offline data instead of
+    // rendering an empty grid or crashing on .find()/filter().
+    if (data && typeof data === 'object' && data.error && !Array.isArray(data.restaurants)) {
+      showToast(data.error || 'Unable to load restaurants.', 'error');
+      throw new Error(data.error || 'Unable to load restaurants');
+    }
+    allRestaurants = getSafeEntries(data);
 
     // Global Network Banner pushed by the Founder (visible across all venues)
     if (data.global_announcement !== undefined) {
@@ -2167,6 +2272,11 @@ function renderRestaurantsGrid() {
             ${r.description}
           </p>
 
+          <div class="flex items-center justify-end pt-1">
+            <button onclick="openWaitInfoModal()" class="text-[10px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition" aria-label="How wait times work">
+              <i data-lucide="info" class="w-3.5 h-3.5"></i> How wait times work
+            </button>
+          </div>
           <!-- Wait & Reliability Metric Strip -->
           <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
             
@@ -2245,7 +2355,7 @@ function renderRestaurantsGrid() {
 
             <button onclick="openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
               <i data-lucide="bar-chart-2" class="w-3 h-3"></i>
-              <span>View Verified Accuracy History & Heatmap</span>
+              <span>View Reliability History & Heatmap</span>
             </button>
           </div>
 
@@ -2313,7 +2423,7 @@ function openJoinModal(venueId, channelOverride = null) {
   }
   document.getElementById('joinPreviewWait').textContent = `~${r.live_stats ? r.live_stats.estimated_wait_mins : 15} mins wait`;
   document.getElementById('joinPreviewAhead').textContent = `${r.live_stats ? r.live_stats.queue_count : 2} parties ahead of you`;
-  document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Accurate`;
+  document.getElementById('joinPreviewScore').innerHTML = `<i data-lucide="award" class="w-3 h-3"></i> ${r.reliability ? r.reliability.score : 95}% Reliability`;
 
   // Reset defaults (empty fields for clean customer entry)
   setPartySize(2);
@@ -2391,6 +2501,37 @@ function setSeatingPref(pref) {
   });
 }
 
+// One active ticket per device: show a clear blocking message and offer a
+// button to view the diner's existing active pass instead of joining again.
+function showDeviceBlockedDialog(ticket) {
+  if (!ticket) return;
+  const ticketNum = ticket.ticket_number || ticket.ticket_id || 'your ticket';
+  const venue = (ticket.restaurant && ticket.restaurant.name) || ticket.restaurant_name || 'your venue';
+  const existing = document.getElementById('deviceBlockedModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'deviceBlockedModal';
+  modal.className = 'fixed inset-0 z-60 flex items-center justify-center bg-black/60';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 w-[92%] max-w-md shadow-2xl border border-slate-200">
+      <h3 class="font-bold text-slate-900 mb-1">Already in a queue</h3>
+      <p class="text-slate-600 text-sm mb-4">You already have an active ticket (#${escapeHtml(String(ticketNum))} at ${escapeHtml(String(venue))}). Finish or leave your current queue before joining another.</p>
+      <div class="flex gap-2">
+        <button onclick="closeDeviceBlockedModal(); openTicketModal()" class="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm">View My Active Pass</button>
+        <button onclick="closeDeviceBlockedModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm">Later</button>
+      </div>
+    </div>
+  `;
+  modal.onclick = (e) => { if (e.target === modal) closeDeviceBlockedModal(); };
+  document.body.appendChild(modal);
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeDeviceBlockedModal() {
+  const m = document.getElementById('deviceBlockedModal');
+  if (m) m.remove();
+}
+
 async function submitJoinQueue(e) {
   e.preventDefault();
   const restId = document.getElementById('joinVenueId').value;
@@ -2409,6 +2550,19 @@ async function submitJoinQueue(e) {
   }
   localStorage.setItem('waitmate_guest_name', name);
 
+  // One active ticket per device: block a second join if this device already
+  // holds an active (waiting / arrived, not expired) ticket saved locally.
+  const savedActive = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
+  if (savedActive && savedActive.data && isLocalTicketActive(savedActive.data)) {
+    currentTicketId = savedActive.id;
+    activeTicketData = savedActive.data;
+    localStorage.setItem('waitmate_ticket_id', currentTicketId);
+    localStorage.setItem('waitmate_active_ticket', JSON.stringify(savedActive));
+    renderActivePassPill();
+    showDeviceBlockedDialog(savedActive.data);
+    return;
+  }
+
   const submitBtn = document.getElementById('joinSubmitBtn');
   isSubmitting = true;
   submitBtn.disabled = true;
@@ -2422,7 +2576,8 @@ async function submitJoinQueue(e) {
     party_size: partySize,
     seating_pref: seatingPref,
     special_requests: specialReq,
-    entry_type: joinChannel
+    entry_type: joinChannel,
+    device_id: getOrCreateDeviceId()
   };
 
   let res;
@@ -2448,7 +2603,22 @@ async function submitJoinQueue(e) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
       lucide.createIcons();
-      showToast(data.error || 'Unable to join the queue right now. Please try again.', "error");
+      // One active ticket per device: the backend blocked a duplicate join.
+      // Surface the clear message and offer a button to view the existing pass.
+      if (data.blocked && data.existing_ticket) {
+        const existing = data.existing_ticket;
+        activeTicketData = {
+          ...existing,
+          restaurant: existing.restaurant || { name: existing.restaurant_name || 'Unknown Venue' }
+        };
+        currentTicketId = existing.id;
+        localStorage.setItem('waitmate_ticket_id', currentTicketId);
+        localStorage.setItem('waitmate_active_ticket', JSON.stringify({ id: currentTicketId, data: activeTicketData }));
+        renderActivePassPill();
+        showDeviceBlockedDialog(activeTicketData);
+      } else {
+        showToast(data.error || 'Unable to join the queue right now. Please try again.', "error");
+      }
       return;
     }
 
@@ -2474,20 +2644,8 @@ async function submitJoinQueue(e) {
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
+      has_arrived: false,
       delay_mins: 0,
-      ...(joinChannel === 'walk_in' && {
-        arrived_at: Date.now() / 1000,
-        arrived_time_ist: new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }) + ' IST'
-      }),
       position_in_line: data.position_in_line ?? 1,
       parties_ahead: data.parties_ahead ?? 0,
       estimated_remaining_mins: promisedWait,
@@ -2545,20 +2703,8 @@ async function submitJoinQueue(e) {
       joined_at: Date.now() / 1000,
       notified_at: null,
       seated_at: null,
-      has_arrived: joinChannel === 'walk_in' ? 1 : 0,
+      has_arrived: false,
       delay_mins: 0,
-      ...(joinChannel === 'walk_in' && {
-        arrived_at: Date.now() / 1000,
-        arrived_time_ist: new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }) + ' IST'
-      }),
       position_in_line: (targetRest.live_stats ? targetRest.live_stats.queue_count : 0) + 1,
       parties_ahead: targetRest.live_stats ? targetRest.live_stats.queue_count : 0,
       estimated_remaining_mins: estWait,
@@ -2595,6 +2741,36 @@ async function submitJoinQueue(e) {
     submitBtn.innerHTML = `<i data-lucide="ticket" class="w-4 h-4"></i> <span>Join Online Queue & Get Pass</span>`;
     lucide.createIcons();
   }
+}
+
+// Render the clear "Ticket Expired" state inside the pass modal, clear the
+// active pass bar, and expose a "Join a Fresh Queue" path.
+function renderExpiredTicketState(d) {
+  const pill = document.getElementById('activeTicketPill');
+  if (pill) { pill.classList.add('hidden'); pill.classList.remove('flex'); }
+  const modal = document.getElementById('ticketModal');
+  if (modal) modal.classList.remove('hidden', 'pointer-events-none');
+  const expiredEl = document.getElementById('ticketExpiredState');
+  const ticketNumEl = document.getElementById('ticketNumber');
+  const expiredTicketNum = document.getElementById('expiredTicketNumber');
+  if (ticketNumEl) ticketNumEl.textContent = d.ticket_number || '#–';
+  if (expiredTicketNum) expiredTicketNum.textContent = d.ticket_number || '#–';
+  if (expiredEl) expiredEl.classList.remove('hidden');
+  const countdown = document.getElementById('ticketEtaCountdown');
+  if (countdown) countdown.textContent = 'Expired';
+  const statusMsg = document.getElementById('ticketStatusMsg');
+  if (statusMsg) {
+    statusMsg.textContent = 'This pass has passed its arrival window and is no longer active.';
+    statusMsg.className = 'text-xs text-rose-600 font-medium mt-1';
+  }
+}
+
+// Clear the expired ticket and open the join queue modal for the same venue so
+// the diner can join fresh.
+function joinFreshQueue() {
+  const restId = (activeTicketData && activeTicketData.restaurant_id) || selectedRestaurantId;
+  clearCurrentTicket();
+  if (restId) openJoinModal(restId, 'remote');
 }
 
 // ==========================================
@@ -2645,6 +2821,15 @@ async function fetchTicketStatus() {
     }
     let data = {};
     try { data = await res.json(); } catch (parseErr) { return; }
+    // A ticket expired server-side (stale unarrived) surfaces a clear
+    // "Ticket Expired" state and clears the active pass bar so the diner can
+    // join fresh.
+    if (data && data.status === 'expired') {
+      showToast('Ticket Expired', 'error');
+      activeTicketData = data;
+      updateTicketUI();
+      return;
+    }
     // Preserve local arrived/grace state if it exists, only merge server updates
     if (activeTicketData) {
       const localArrived = activeTicketData.has_arrived;
@@ -2707,6 +2892,41 @@ async function attemptTicketReSync() {
   }
 }
 
+// Re-render the floating bottom "Active Pass" bar so it always matches the
+// user's current ticket (venue name + live rank). Clears the bar and drops any
+// stale localStorage session when there is no active, non-terminal ticket.
+// Hidden whenever the Live Queue Pass modal is open (see openTicketModal).
+function renderActivePassPill() {
+  const pill = document.getElementById('activeTicketPill');
+  if (!pill) return;
+
+  if (!activeTicketData && !currentTicketId) {
+    pill.classList.add('hidden');
+    pill.classList.remove('flex');
+    localStorage.removeItem('waitmate_active_ticket');
+    localStorage.removeItem('waitmate_ticket_id');
+    return;
+  }
+
+  const d = activeTicketData;
+  if (!d) {
+    pill.classList.add('hidden');
+    pill.classList.remove('flex');
+    return;
+  }
+
+  const venueObj = (allRestaurants || []).find(r => r.id === (d.restaurant_id || selectedRestaurantId)) || d.restaurant;
+  const venueName = venueObj ? venueObj.name : (d.restaurant?.name || 'Unknown Venue');
+
+  const venueEl = document.getElementById('activePillVenue');
+  const posEl = document.getElementById('activePillPos');
+  if (venueEl) venueEl.textContent = venueName;
+  if (posEl) posEl.textContent = `#${d.position_in_line ?? '-'}`;
+
+  pill.classList.remove('hidden');
+  pill.classList.add('flex');
+}
+
 function updateTicketUI() {
   if (!activeTicketData) {
     document.getElementById('activeTicketPill').classList.add('hidden');
@@ -2714,6 +2934,20 @@ function updateTicketUI() {
   }
 
   const d = activeTicketData;
+
+  // Expired passes show a clear "Ticket Expired" state and clear the active
+  // pass bar so the diner can join fresh.
+  if (d.status === 'expired') {
+    renderExpiredTicketState(d);
+    return;
+  }
+
+  // Terminal / gone tickets clear the floating bar and the stored session
+  // automatically: completed, left (no_show), cancelled, not-found.
+  if (['cancelled', 'no_show', 'completed', 'left'].includes(d.status)) {
+    clearCurrentTicket();
+    return;
+  }
 
   // Normalize estimated remaining mins: handle Firestore Timestamps / raw ms timestamps
   const toMs = (v) => {
@@ -2750,6 +2984,9 @@ function updateTicketUI() {
   if (graceUntil && Date.now() > graceUntil) graceUntil = null;
   lastTicketStatus = d.status;
 
+  // Re-render the floating bottom bar with this ticket's venue + live rank.
+  renderActivePassPill();
+
   if (d.status === 'notified') {
     pill.classList.add('emerald-pulse');
     pill.classList.remove('bg-orange-500');
@@ -2759,16 +2996,6 @@ function updateTicketUI() {
     pill.classList.remove('emerald-pulse');
     pill.classList.remove('bg-emerald-500');
     pill.classList.add('bg-orange-500');
-  }
-  pill.classList.remove('hidden');
-  pill.classList.add('flex');
-
-  // Keep the active-ticket session persisted while the diner is seated so the
-  // Live Queue Pass can transition straight into the 1–5★ rating screen. Only a
-  // cancelled ticket clears the stored session here; a seated session is fully
-  // cleared after rating submission or an explicit Skip (see clearCurrentTicket).
-  if (d.status === 'cancelled') {
-    localStorage.removeItem('waitmate_active_ticket');
   }
 
   const arrivalStatusEl = document.getElementById('ticketArrivalStatus');
@@ -2907,7 +3134,7 @@ function updateTicketUI() {
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
     document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
     document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
-    document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Host estimates are crowd-verified.";
+    document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Wait times are estimates that improve as diners leave feedback.";
     tableNearAlert.classList.add('hidden');
     livePassAlertCard.classList.add('hidden');
   }
@@ -2971,12 +3198,10 @@ const openTicketModalImpl = function openTicketModal() {
 
 function closeTicketModal() {
   document.getElementById('ticketModal').classList.add('hidden', 'pointer-events-none');
-  // Restore the floating bottom bar when the pass closes and a ticket is still active.
-  const pill = document.getElementById('activeTicketPill');
-  if (pill && (currentTicketId || activeTicketData)) {
-    pill.classList.remove('hidden');
-    pill.classList.add('flex');
-  }
+  // Restore the floating bottom bar (with the current venue + live rank) when
+  // the pass closes and a non-terminal ticket is still active. Hidden again
+  // automatically if there is no active ticket.
+  renderActivePassPill();
   lucide.createIcons();
 }
 
@@ -2988,7 +3213,7 @@ function clearCurrentTicket() {
   localStorage.removeItem('waitmate_ticket_id');
   localStorage.removeItem('waitmate_active_ticket');
   if (pollTimer) clearInterval(pollTimer);
-  document.title = "WaitMate India 🇮🇳 • Live Restaurant Queues & Reliability Network";
+  document.title = "WaitMate India 🇮🇳 • Restaurant Queues & Reliability — Demo";
   document.getElementById('activeTicketPill').classList.add('hidden');
   closeTicketModal();
 }
@@ -3491,9 +3716,9 @@ async function openReliabilityModal(venueId) {
   document.getElementById('relModalVenueName').textContent = r.name;
   document.getElementById('relModalScoreNum').textContent = `${rel.score}%`;
   document.getElementById('relModalGrade').textContent = `Grade ${rel.grade}`;
-  document.getElementById('relModalVerdict').textContent = `${rel.verdict || 'Highly Accurate'} — ${rel.score >= 85 ? 'Consistently delivers on queue estimates.' : 'Noticeable variance during peak rush.'}`;
+  document.getElementById('relModalVerdict').textContent = `${rel.verdict || 'Highly Reliable'} — ${rel.score >= 85 ? 'Consistently delivers on queue estimates.' : 'Noticeable variance during peak rush.'}`;
   document.getElementById('relModalVariance').textContent = `± ${rel.avg_variance_mins} mins`;
-  document.getElementById('relModalTotalReviews').textContent = `${verifiedCheckins} verified check-ins`;
+  document.getElementById('relModalTotalReviews').textContent = `${verifiedCheckins} diner check-ins`;
 
   // Distribution Bars
   document.getElementById('distSpotOn').textContent = `${rel.on_time_pct}%`;
@@ -3538,6 +3763,19 @@ function closeReliabilityModal() {
   // Reset review widget
   resetReviewWidget();
 }
+
+function openWaitInfoModal() {
+  const m = document.getElementById('waitInfoModal');
+  if (m) m.classList.remove('hidden');
+  try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch (e) {}
+}
+function closeWaitInfoModal() {
+  const m = document.getElementById('waitInfoModal');
+  if (m) m.classList.add('hidden');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeWaitInfoModal();
+});
 
 function initStarRatingWidget() {
   const starBtns = document.querySelectorAll('#starRatingWidget .star-btn');
@@ -3748,7 +3986,7 @@ async function submitReview() {
 
     if (!res.ok) throw new Error(data.error || 'Failed to submit review');
 
-    showToast("Thanks! Your verified check-in is live.", "success");
+    showToast("Thanks! Your check-in was recorded.", "success");
 
     // Mark this visit as rated so the prompt doesn't reappear
     if (activeTicketData) markTicketRated(activeTicketData.id);
@@ -3785,7 +4023,7 @@ function renderHourlyPatternChart(patterns) {
           <div class="flex flex-col items-center">
             <span class="font-bold text-slate-700">${p.avg_wait}m</span>
             <div class="w-full h-16 bg-slate-200 rounded-md overflow-hidden flex flex-col justify-end my-1 p-0.5">
-              <div class="w-full ${barColor} rounded-sm" style="height: ${heightPct}%" title="${p.hour}: ${p.avg_wait}m wait (${p.reliability}% accurate)"></div>
+              <div class="w-full ${barColor} rounded-sm" style="height: ${heightPct}%" title="${p.hour}: ${p.avg_wait}m wait (${p.reliability}% reliability)"></div>
             </div>
             <span class="text-slate-600 font-medium truncate w-full">${p.hour.replace(':00', '')}</span>
             <span class="text-[9px] text-slate-600">${p.rush_level}</span>
@@ -3909,7 +4147,7 @@ async function submitDinerFeedback(e) {
     clearCurrentTicket();
     await loadRestaurants();
   } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Verified Check-in & Update Score'; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Check-in & Update Score'; }
   }
 }
 
@@ -4034,14 +4272,14 @@ function hostJoinInfo(q) {
 
 function renderHostDashboard() {
   if (!hostData) return;
-  const r = hostData.restaurant;
-  const stats = hostData.live_stats;
-  const rel = hostData.reliability;
-  const queue = hostData.queue || [];
+  const r = hostData.restaurant || { name: 'Venue', address: '', category: '', image_url: '' };
+  const stats = hostData.live_stats || { queue_count: 0, total_waiting_people: 0, estimated_wait_mins: 0, is_queue_open: true };
+  const rel = hostData.reliability || { score: 95, grade: 'A' };
+  const queue = getSafeEntries(hostData.queue);
   // Host waiting table shows only live parties. Seated (and no_show/cancelled)
   // guests drop off cleanly here while their Firestore doc stays alive for the
   // diner's 1–5★ rating screen.
-  const visibleQueue = queue.filter(q => q && ['waiting', 'notified', 'delayed'].includes(q.status));
+  const visibleQueue = queue.filter(q => q && q.status === 'waiting');
 
   document.getElementById('hostVenueName').textContent = r.name;
   document.getElementById('hostVenueLocationSub').textContent = `${r.address} • Host Stand Dashboard`;
@@ -4067,12 +4305,17 @@ function renderHostDashboard() {
   document.getElementById('hostKpiGrade').textContent = `Grade ${rel.grade}`;
   document.getElementById('hostKpiVariance').textContent = `± ${rel.avg_variance_mins}m`;
 
+  // Re-evaluate the anti-overpromising warning against the live queue on
+  // every render (initial load + 15s poll) so it hides when the queue
+  // empties or the manual wait is not genuinely lower than algorithmic.
+  checkWaitOverrideWarning(stats.has_manual_override ? stats.estimated_wait_mins : null);
+
   // Host table rows
   const tbody = document.getElementById('hostQueueTableBody');
   if (visibleQueue.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="py-8 text-center text-slate-600">
+        <td colspan="7" class="py-8 text-center text-slate-600">
           <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
           Queue is empty right now. Walk-ins and remote diners will appear here automatically.
         </td>
@@ -4100,6 +4343,26 @@ function renderHostDashboard() {
     const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
     const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
     const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+
+    // Customer Status column badge
+    let customerStatusBadge = '';
+    if (q.status === 'cancelled') {
+      customerStatusBadge = `<span class="badge-tag bg-rose-50 text-rose-700 border border-rose-200 font-bold">Cancelled Queue</span>`;
+    } else if (q.status === 'delayed') {
+      customerStatusBadge = `<span class="badge-tag bg-amber-50 text-amber-700 border border-amber-200 font-bold">+5 Mins Requested</span>`;
+    } else if (q.has_arrived) {
+      customerStatusBadge = `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">Arrived at Venue</span>`;
+    } else {
+      customerStatusBadge = `<span class="badge-tag bg-slate-50 text-slate-700 border border-slate-200">Awaiting Arrival</span>`;
+    }
+
+    // Disable Seat button if customer hasn't arrived
+    const seatDisabled = !q.has_arrived;
+    const seatButtonClass = seatDisabled 
+      ? 'px-2.5 py-1 bg-slate-300 text-slate-500 rounded font-bold text-[11px] cursor-not-allowed flex items-center gap-1' 
+      : 'px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1';
+    const seatButtonOnClick = seatDisabled ? '' : `onclick="hostAction('${q.id}', 'seat')" `;
+    const seatTooltip = seatDisabled ? ' title="Waiting for arrival"' : '';
 
     return `
       <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
@@ -4132,8 +4395,12 @@ function renderHostDashboard() {
           <div class="flex items-center gap-1.5 flex-wrap">
             ${statusPill}
             ${idx < 2 && ['waiting', 'delayed'].includes(q.status) ? `<span class="badge-tag bg-orange-100 text-orange-900 border border-orange-300 font-bold animate-pulse">🚨 Near (#${idx+1})</span>` : ''}
-            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `            <span class="text-[10px] text-slate-600">En route</span>`}
+            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `<span class="text-[10px] text-slate-600">En route</span>`}
           </div>
+        </td>
+
+        <td class="py-3 px-4">
+          ${customerStatusBadge}
         </td>
 
         <td class="py-3 px-4 text-right">
@@ -4145,7 +4412,7 @@ function renderHostDashboard() {
                 </button>
               ` : ''}
               
-              <button onclick="hostAction('${q.id}', 'seat')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1">
+              <button ${seatButtonOnClick}class="${seatButtonClass}"${seatTooltip}>
                 <i data-lucide="check" class="w-3 h-3"></i> Seat
               </button>
 
@@ -4176,7 +4443,10 @@ async function hostAction(ticketId, action) {
         action: action
       })
     });
-    if (!res.ok) throw new Error('Host API action failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Host API action failed');
+    }
     let data = {};
     try { data = await res.json(); } catch (parseErr) { data = {}; }
     showToast(data.message || "Host action saved", "success");
@@ -4185,6 +4455,11 @@ async function hostAction(ticketId, action) {
     await loadRestaurants();
     if (currentTicketId) await fetchTicketStatus();
   } catch (err) {
+    // Handle arrival requirement error specifically
+    if (err.message && err.message.includes("must click I've Arrived")) {
+      showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+      return;
+    }
     // Local simulation fallback
     const qList = localMockQueues[currentHostVenueId] || [];
     const entry = qList.find(x => x.id === ticketId);
@@ -4194,6 +4469,11 @@ async function hostAction(ticketId, action) {
         playNotificationChime();
         showToast("Table Ready alert sent to guest's Digital Boarding Pass!", "success");
       } else if (action === 'seat') {
+        // Enforce arrival requirement locally as well
+        if (!entry.has_arrived) {
+          showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+          return;
+        }
         entry.status = 'seated';
         entry.actual_wait_mins = Math.max(1, Math.floor((Date.now()/1000 - entry.joined_at)/60));
         showToast("Party successfully seated!", "success");
@@ -4360,7 +4640,7 @@ function showToast(message, type = "info") {
   toast.className = `p-3 px-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 transform transition-all duration-300 pointer-events-auto ${
     type === 'success' ? 'bg-emerald-900 text-white border-emerald-700' :
     type === 'error' ? 'bg-rose-900 text-white border-rose-700' :
-    'bg-slate-900 text-white border-slate-700'
+    'bg-slate-900 text-[var(--wm-text-primary)] border-slate-700'
   }`;
 
   let icon = 'check-circle';
@@ -4368,7 +4648,7 @@ function showToast(message, type = "info") {
   if (type === 'info') icon = 'info';
 
   toast.innerHTML = `
-    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : type === 'error' ? 'text-rose-400' : 'text-slate-300'}"></i>
+    <i data-lucide="${icon}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : type === 'error' ? 'text-rose-400' : 'text-[var(--wm-text-secondary)]'}"></i>
     <span class="flex-1">${message}</span>
   `;
 
@@ -4429,9 +4709,9 @@ async function submitOwnerChangePassword(event) {
   const newPwd = (newInput ? newInput.value : '').trim();
 
   if (!currentPwd || !newPwd) return;
-  if (newPwd.length < 4) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'New password must be at least 4 characters';
+      errEl.textContent = 'New password must be at least 8 characters';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4528,9 +4808,9 @@ async function submitFounderResetPassword(event) {
   const newPwd = (input ? input.value : '').trim();
 
   if (!restaurantId || !newPwd) return;
-  if (newPwd.length < 4) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'Password must be at least 4 characters';
+      errEl.textContent = 'Password must be at least 8 characters';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4626,9 +4906,9 @@ async function submitFounderChangePassword(event) {
   const newPwd = (newInput ? newInput.value : '').trim();
 
   if (!currentPwd || !newPwd) return;
-  if (newPwd.length < 6) {
+  if (newPwd.length < 8) {
     if (errEl) {
-      errEl.textContent = 'New password must be at least 6 characters.';
+      errEl.textContent = 'New password must be at least 8 characters.';
       errEl.classList.remove('hidden');
     }
     return;
@@ -4726,8 +5006,8 @@ async function submitFounderAddRestaurant(event) {
     showToast('Please fill in all required fields.', 'error');
     return;
   }
-  if (password.length < 4) {
-    showToast('Owner dashboard password must be at least 4 characters.', 'error');
+  if (password.length < 8) {
+    showToast('Owner dashboard password must be at least 8 characters.', 'error');
     return;
   }
 
@@ -4784,7 +5064,7 @@ async function submitFounderAddRestaurant(event) {
     localStorage.setItem('waitmate_custom_venues', JSON.stringify(customVenues));
 
     closeFounderAddRestaurantModal();
-    showToast(`🎉 "${name}" is now live on WaitMate Mumbai!`, 'success');
+    showToast(`🎉 "${name}" was added to WaitMate Mumbai (demo)!`, 'success');
     await loadFounderDashboard();
     await loadRestaurants();
   } catch (err) {
@@ -5046,14 +5326,23 @@ async function founderQueueAction(ticketId, action) {
       body: JSON.stringify({ ticket_id: ticketId, action })
     });
     if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
-    if (!res.ok) throw new Error('Queue action failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Queue action failed');
+    }
     const data = await res.json().catch(() => ({}));
     showToast(data.message || 'Queue action updated.', 'success');
     if (action === 'notify') playNotificationChime();
     await loadFounderDashboard();
     await loadRestaurants();
     if (currentTicketId) await fetchTicketStatus();
-  } catch (err) { showToast('Error performing queue action', 'error'); }
+  } catch (err) {
+    if (err.message && err.message.includes("must click I've Arrived")) {
+      showToast("Customer must click 'I've Arrived at the Venue' before seating", "error");
+      return;
+    }
+    showToast('Error performing queue action', 'error');
+  }
 }
 
 async function founderEditPartySize(ticketId) {
@@ -5138,7 +5427,7 @@ async function submitFounderEditRestaurant(event) {
   if (err) err.classList.add('hidden');
 
   if (!name || !category || !address) { showToast('Name, category and address are required.', 'error'); return; }
-  if (password && password.length < 4) { showToast('Owner password must be at least 4 characters.', 'error'); return; }
+  if (password && password.length < 8) { showToast('Owner password must be at least 8 characters.', 'error'); return; }
 
   const btn = document.getElementById('fndEditRestaurantSubmitBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
@@ -5194,6 +5483,185 @@ async function founderSeedReviews() {
 }
 
 window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
+
+// ==========================================
+// 17. ONBOARDING TOUR — Photo-led 5-Slide Problem → WaitMate Solution
+// ==========================================
+let onboardingCurrentStep = 1;
+const onboardingTotalSteps = 5;
+const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
+
+function initOnboarding() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  // Already completed: skip straight to the customer interface
+  if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    showCustomerInterface();
+    return;
+  }
+
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.remove('hidden');
+
+  onboardingCurrentStep = 1;
+  updateOnboardingUI();
+  lucide.createIcons();
+
+  document.addEventListener('keydown', handleOnboardingKeydown);
+  initOnboardingTouch();
+}
+
+function openOnboarding() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+  localStorage.removeItem(ONBOARDING_SEEN_KEY);
+  onboardingCurrentStep = 1;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.remove('hidden');
+  updateOnboardingUI();
+  lucide.createIcons();
+  document.addEventListener('keydown', handleOnboardingKeydown);
+}
+
+function handleOnboardingKeydown(e) {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+
+  switch (e.key) {
+    case 'ArrowRight':
+      e.preventDefault();
+      if (onboardingCurrentStep < onboardingTotalSteps) nextOnboardingStep();
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (onboardingCurrentStep > 1) prevOnboardingStep();
+      break;
+    case 'Escape':
+      e.preventDefault();
+      skipOnboarding();
+      break;
+  }
+}
+
+function initOnboardingTouch() {
+  const modal = document.getElementById('onboardingModal');
+  let startX = 0;
+  modal.addEventListener('touchstart', (e) => {
+    startX = e.changedTouches[0].screenX;
+  }, { passive: true });
+  modal.addEventListener('touchend', (e) => {
+    if (modal.classList.contains('hidden')) return;
+    const diffX = e.changedTouches[0].screenX - startX;
+    if (Math.abs(diffX) > 50) {
+      diffX > 0 ? prevOnboardingStep() : nextOnboardingStep();
+    }
+  }, { passive: true });
+}
+
+function updateOnboardingUI() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  document.querySelectorAll('.onboarding-screen').forEach((screen) => {
+    screen.classList.add('hidden');
+    screen.classList.remove('flex');
+  });
+
+  const currentScreen = document.querySelector(`.onboarding-screen[data-step="${onboardingCurrentStep}"]`);
+  if (currentScreen) {
+    currentScreen.classList.remove('hidden');
+    currentScreen.classList.add('flex');
+  }
+
+  updateOnboardingNav();
+
+  setTimeout(() => {
+    const primaryBtn = currentScreen?.querySelector('.onboarding-next, .onboarding-cta');
+    if (primaryBtn) primaryBtn.focus();
+  }, 50);
+
+  lucide.createIcons();
+}
+
+function updateOnboardingNav() {
+  const prevBtn = document.querySelector('.onboarding-prev');
+  if (prevBtn) {
+    if (onboardingCurrentStep === 1) {
+      prevBtn.disabled = true;
+      prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
+    } else {
+      prevBtn.disabled = false;
+      prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+    }
+  }
+
+  const nextBtn = document.querySelector('.onboarding-next');
+  const ctaBtn = document.querySelector('.onboarding-cta');
+  if (onboardingCurrentStep === onboardingTotalSteps) {
+    if (nextBtn) nextBtn.classList.add('hidden');
+    if (ctaBtn) ctaBtn.classList.remove('hidden');
+  } else {
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    if (ctaBtn) ctaBtn.classList.add('hidden');
+  }
+
+  const progressText = document.getElementById('onboardingProgressText');
+  const progressFill = document.querySelector('.onboarding-progress-fill');
+  if (progressText) progressText.textContent = `${onboardingCurrentStep} / ${onboardingTotalSteps}`;
+  if (progressFill) progressFill.style.width = `${(onboardingCurrentStep / onboardingTotalSteps) * 100}%`;
+}
+
+function nextOnboardingStep() {
+  if (onboardingCurrentStep < onboardingTotalSteps) {
+    onboardingCurrentStep++;
+    updateOnboardingUI();
+  }
+}
+
+function prevOnboardingStep() {
+  if (onboardingCurrentStep > 1) {
+    onboardingCurrentStep--;
+    updateOnboardingUI();
+  }
+}
+
+function skipOnboarding() {
+  completeOnboarding(true);
+}
+
+function completeOnboarding(skipped = false) {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+
+  localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.add('hidden');
+
+  document.removeEventListener('keydown', handleOnboardingKeydown);
+
+  showCustomerInterface();
+
+  if (!skipped) {
+    showToast('Welcome to WaitMate! 🎉', 'success');
+  }
+
+  lucide.createIcons();
+}
+
+window.nextOnboardingStep = nextOnboardingStep;
+window.prevOnboardingStep = prevOnboardingStep;
+window.skipOnboarding = skipOnboarding;
+window.completeOnboarding = completeOnboarding;
+window.openOnboarding = openOnboarding;
 
 (() => {
   console.log("👀 Watching for Rating UI when customer is marked 'seated'...");

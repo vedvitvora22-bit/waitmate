@@ -457,8 +457,16 @@ button[aria-label="Toggle password visibility"] i {
 }
 
 /* ==========================================
-   Onboarding Guidelines — Photo-led 3-Slide
+   Onboarding Guidelines — 5-Slide Problem → WaitMate Solution
+   Mobile-first frame, calm off-white / midnight-navy palette
    ========================================== */
+.font-pjs {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.font-jb {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
 .onboarding-container {
   width: 100%;
   max-width: 430px;
@@ -466,8 +474,8 @@ button[aria-label="Toggle password visibility"] i {
   max-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: #FAF8F5;
-  color: #1E293B;
+  background: #F8FAFC;
+  color: #0F172A;
   outline: none;
 }
 
@@ -477,7 +485,6 @@ button[aria-label="Toggle password visibility"] i {
   height: 100%;
   width: 100%;
 }
-
 .onboarding-screen.flex {
   display: flex;
 }
@@ -486,8 +493,10 @@ button[aria-label="Toggle password visibility"] i {
   position: relative;
   width: 100%;
   flex-shrink: 0;
+  height: 44vh;
+  min-height: 250px;
+  background: #E2E8F0;
 }
-
 .onboarding-media img {
   width: 100%;
   height: 100%;
@@ -505,37 +514,29 @@ button[aria-label="Toggle password visibility"] i {
   padding: 0 1.5rem;
 }
 
+.onboarding-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .onboarding-heading {
-  font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
-  font-size: 1.35rem;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 1.3rem;
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: -0.02em;
-  color: #1E293B;
-  margin: 0 0 1rem 0;
+  color: #0F172A;
+  margin: 0.5rem 0 1rem 0;
 }
 
 .onboarding-body-text {
   font-size: 0.95rem;
   line-height: 1.6;
   color: #475569;
-  margin: 0 0 0 0;
-  max-width: 28ch;
-}
-
-.stat-value {
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.stat-label {
-  font-size: 0.72rem;
-  font-weight: 500;
-  line-height: 1.4;
-  text-align: center;
+  margin: 0;
+  max-width: 30ch;
 }
 
 .onboarding-nav {
@@ -543,20 +544,19 @@ button[aria-label="Toggle password visibility"] i {
   width: 100%;
 }
 
-.onboarding-dots {
-  display: none; /* kept for markup parity; dots rendered via JS classes */
+.onboarding-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
-
-.onboarding-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  transition: background 0.2s ease, transform 0.2s ease;
-  cursor: pointer;
-  border: none;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
+.onboarding-progress-text {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+.onboarding-progress-fill {
+  border-radius: 9999px;
 }
 
 .onboarding-prev,
@@ -567,25 +567,19 @@ button[aria-label="Toggle password visibility"] i {
   letter-spacing: -0.01em;
 }
 
-.onboarding-prev:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.onboarding-cta {
-  white-space: nowrap;
-}
-
 .onboarding-container button:focus-visible {
-  outline: 2px solid #EA580C;
+  outline: 2px solid #10B981;
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-dot,
+  .onboarding-progress-fill {
+    transition: none !important;
+  }
   .onboarding-prev,
   .onboarding-next,
   .onboarding-cta {
     transition: none !important;
   }
 }
+

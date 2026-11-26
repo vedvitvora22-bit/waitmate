@@ -5485,51 +5485,48 @@ async function founderSeedReviews() {
 window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
 
 // ==========================================
-// 17. ONBOARDING TOUR (3-Step Interactive Split-Card)
- // ==========================================
- let onboardingCurrentStep = 1;
- const onboardingTotalSteps = 3;
- 
+// 17. ONBOARDING TOUR — Photo-led 5-Slide Problem → WaitMate Solution
+// ==========================================
+let onboardingCurrentStep = 1;
+const onboardingTotalSteps = 5;
+const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
+
 function initOnboarding() {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
 
-  // Check if user has already completed onboarding tour
-  if (localStorage.getItem('onboarding_done') === 'true') {
+  // Already completed: skip straight to the customer interface
+  if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
     showCustomerInterface();
     return;
   }
 
-  // Show the modal backdrop (was hidden during splash)
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) backdrop.classList.remove('hidden');
 
-  // Modal is already visible in DOM (rendered under splash), just initialize state
   onboardingCurrentStep = 1;
   updateOnboardingUI();
   lucide.createIcons();
 
-  // Add keyboard event listener
+  document.addEventListener('keydown', handleOnboardingKeydown);
+  initOnboardingTouch();
+}
+
+function openOnboarding() {
+  const modal = document.getElementById('onboardingModal');
+  if (!modal) return;
+  localStorage.removeItem(ONBOARDING_SEEN_KEY);
+  onboardingCurrentStep = 1;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (backdrop) backdrop.classList.remove('hidden');
+  updateOnboardingUI();
+  lucide.createIcons();
   document.addEventListener('keydown', handleOnboardingKeydown);
 }
- 
- function showCustomerInterface() {
-   const customerDiv = document.getElementById('customerInterface');
-   if (customerDiv) {
-     customerDiv.classList.remove('hidden');
-   }
-   // Ensure we're on customer tab
-   currentInterface = 'customer';
-   const tabCust = document.getElementById('tabCustomer');
-   const tabOwner = document.getElementById('tabOwner');
-   const activeTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm";
-   const inactiveTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900";
-   if (tabCust) tabCust.className = activeTabClass;
-   if (tabOwner) tabOwner.className = inactiveTabClass;
-   renderRestaurantsGrid();
- }
 
 function handleOnboardingKeydown(e) {
   const modal = document.getElementById('onboardingModal');
@@ -5538,48 +5535,51 @@ function handleOnboardingKeydown(e) {
   switch (e.key) {
     case 'ArrowRight':
       e.preventDefault();
-      if (onboardingCurrentStep < onboardingTotalSteps) {
-        nextOnboardingStep();
-      }
+      if (onboardingCurrentStep < onboardingTotalSteps) nextOnboardingStep();
       break;
     case 'ArrowLeft':
       e.preventDefault();
-      if (onboardingCurrentStep > 1) {
-        prevOnboardingStep();
-      }
+      if (onboardingCurrentStep > 1) prevOnboardingStep();
       break;
     case 'Escape':
       e.preventDefault();
       skipOnboarding();
       break;
-    case 'Enter':
-    case ' ':
-      // Allow Enter/Space to activate focused buttons
-      break;
   }
+}
+
+function initOnboardingTouch() {
+  const modal = document.getElementById('onboardingModal');
+  let startX = 0;
+  modal.addEventListener('touchstart', (e) => {
+    startX = e.changedTouches[0].screenX;
+  }, { passive: true });
+  modal.addEventListener('touchend', (e) => {
+    if (modal.classList.contains('hidden')) return;
+    const diffX = e.changedTouches[0].screenX - startX;
+    if (Math.abs(diffX) > 50) {
+      diffX > 0 ? prevOnboardingStep() : nextOnboardingStep();
+    }
+  }, { passive: true });
 }
 
 function updateOnboardingUI() {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
 
-  // Hide all screens
-  document.querySelectorAll('.onboarding-screen').forEach(screen => {
+  document.querySelectorAll('.onboarding-screen').forEach((screen) => {
     screen.classList.add('hidden');
     screen.classList.remove('flex');
   });
 
-  // Show current screen
   const currentScreen = document.querySelector(`.onboarding-screen[data-step="${onboardingCurrentStep}"]`);
   if (currentScreen) {
     currentScreen.classList.remove('hidden');
     currentScreen.classList.add('flex');
   }
 
-  // Update navigation buttons
   updateOnboardingNav();
 
-  // Focus the primary action button for accessibility
   setTimeout(() => {
     const primaryBtn = currentScreen?.querySelector('.onboarding-next, .onboarding-cta');
     if (primaryBtn) primaryBtn.focus();
@@ -5589,22 +5589,19 @@ function updateOnboardingUI() {
 }
 
 function updateOnboardingNav() {
-  // Update Previous button
   const prevBtn = document.querySelector('.onboarding-prev');
   if (prevBtn) {
     if (onboardingCurrentStep === 1) {
       prevBtn.disabled = true;
-      prevBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
     } else {
       prevBtn.disabled = false;
-      prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
     }
   }
 
-  // Update Next/CTA button visibility
   const nextBtn = document.querySelector('.onboarding-next');
   const ctaBtn = document.querySelector('.onboarding-cta');
-  
   if (onboardingCurrentStep === onboardingTotalSteps) {
     if (nextBtn) nextBtn.classList.add('hidden');
     if (ctaBtn) ctaBtn.classList.remove('hidden');
@@ -5613,23 +5610,10 @@ function updateOnboardingNav() {
     if (ctaBtn) ctaBtn.classList.add('hidden');
   }
 
-  // Update step indicator dots
-  document.querySelectorAll('.onboarding-dot').forEach(dot => {
-    const step = parseInt(dot.dataset.step);
-    if (step === onboardingCurrentStep) {
-      dot.classList.remove('bg-slate-200', 'bg-slate-300');
-      dot.classList.add('bg-orange-500');
-      dot.setAttribute('aria-selected', 'true');
-    } else if (step < onboardingCurrentStep) {
-      dot.classList.remove('bg-slate-200', 'bg-orange-500');
-      dot.classList.add('bg-slate-300');
-      dot.setAttribute('aria-selected', 'false');
-    } else {
-      dot.classList.remove('bg-slate-300', 'bg-orange-500');
-      dot.classList.add('bg-slate-200');
-      dot.setAttribute('aria-selected', 'false');
-    }
-  });
+  const progressText = document.getElementById('onboardingProgressText');
+  const progressFill = document.querySelector('.onboarding-progress-fill');
+  if (progressText) progressText.textContent = `${onboardingCurrentStep} / ${onboardingTotalSteps}`;
+  if (progressFill) progressFill.style.width = `${(onboardingCurrentStep / onboardingTotalSteps) * 100}%`;
 }
 
 function nextOnboardingStep() {
@@ -5654,21 +5638,16 @@ function completeOnboarding(skipped = false) {
   const modal = document.getElementById('onboardingModal');
   if (!modal) return;
 
-  // Mark onboarding as complete
-  localStorage.setItem('onboarding_done', 'true');
+  localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
 
-  // Hide modal with animation
   modal.classList.add('hidden');
   modal.classList.remove('flex');
 
-  // Hide backdrop
   const backdrop = document.getElementById('onboardingBackdrop');
   if (backdrop) backdrop.classList.add('hidden');
 
-  // Remove keyboard listener
   document.removeEventListener('keydown', handleOnboardingKeydown);
 
-  // Show customer interface
   showCustomerInterface();
 
   if (!skipped) {
@@ -5678,11 +5657,11 @@ function completeOnboarding(skipped = false) {
   lucide.createIcons();
 }
 
-// Expose functions globally for inline onclick handlers
 window.nextOnboardingStep = nextOnboardingStep;
 window.prevOnboardingStep = prevOnboardingStep;
 window.skipOnboarding = skipOnboarding;
 window.completeOnboarding = completeOnboarding;
+window.openOnboarding = openOnboarding;
 
 (() => {
   console.log("👀 Watching for Rating UI when customer is marked 'seated'...");
