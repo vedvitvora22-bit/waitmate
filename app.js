@@ -687,104 +687,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
   renderRestaurantsGrid();
 
-  // ---- App Launch Splash Screen: exactly 750ms centered logo with pulse ----
-  const splashEl = document.getElementById('appSplash');
+  // Splash / onboarding are controlled exclusively by the inline boot script
+  // at the bottom of index.html (3-step: Logo Splash 0-750ms -> 6-Slide
+  // Guideline -> Customer View). app.js only loads data and initializes the
+  // customer shell; never touches splash/modal visibility here to avoid races.
 
-  // Determine whether to skip the splash + onboarding entirely: founder access
-  // or a shared ticket/pass deep-link should go straight to the app.
-  const _skipParams = new URLSearchParams(window.location.search);
-  const _isFounder = window.location.pathname === '/founder' ||
-    window.location.pathname.endsWith('/founder') ||
-    _skipParams.get('founder') === '1' ||
-    window.location.hash === '#founder';
-  const _hasTicketLink = !!(_skipParams.get('ticket') || _skipParams.get('passId'));
-  const _skipSplash = _isFounder || _hasTicketLink;
-
-  // Fire initial data fetches immediately while the splash is visible.
   const dataPromise = (async () => {
-    try { await loadRestaurants(); } catch (err) { console.warn('Splash pre-load: restaurants failed', err); }
-    try { await loadActivePassData(); } catch (err) { console.warn('Splash pre-load: active pass failed', err); }
+    try { await loadRestaurants(); } catch (err) { console.warn('Pre-load: restaurants failed', err); }
+    try { await loadActivePassData(); } catch (err) { console.warn('Pre-load: active pass failed', err); }
     try { await preloadVenueReviews(); } catch (err) { /* non-critical */ }
   })();
 
-  const SPLASH_DURATION_MS = 750;
-
-  function hideSplash() {
-    if (splashEl) {
-      splashEl.style.setProperty('display', 'none', 'important');
-      splashEl.setAttribute('aria-hidden', 'true');
-    }
-  }
-
-  function showGuidelineModal() {
-    // Respect onboarding preference: returning users who already dismissed the
-    // 6-slide guideline go straight to the customer view instead of re-showing it.
-    if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
-      showCustomerInterface();
-      return;
-    }
-    const modal = document.getElementById('onboardingModal');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-    modal.style.opacity = '1';
-    modal.style.zIndex = '9999';
-    modal.removeAttribute('aria-hidden');
-    const backdrop = document.getElementById('onboardingBackdrop');
-    if (backdrop) backdrop.classList.remove('hidden');
-  }
-
-  if (_skipSplash) {
-    // Skip splash and onboarding entirely for founder / shared-ticket deep-links.
-    hideSplash();
-    const om = document.getElementById('onboardingModal');
-    if (om) om.style.display = 'none';
-    // Go straight to the customer view immediately.
-    showCustomerInterface();
-  } else {
-    // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
-    // splash. The splash (z-index 10000) covers the guideline (z-index 9999) until
-    // it is removed at exactly 750ms.
-    initOnboarding();
-
-    // Exactly 750ms of logo splash, then hide the splash and immediately reveal
-    // the 6-slide guideline modal with zero blank gap.
-    await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
-    hideSplash();
-    showGuidelineModal();
-  }
-
-  // ---- end splash ----
-  // Fail-safe: guarantee the splash is gone and either the 6-slide guideline or
-  // the customer view is visible. Never leave a blank white page after the logo.
-  setTimeout(() => {
-    try {
-      const splash = document.getElementById('appSplash');
-      if (splash) { splash.style.setProperty('display', 'none', 'important'); splash.setAttribute('aria-hidden', 'true'); }
-      const onboarding = document.getElementById('onboardingModal');
-      const onboardingVisible = onboarding && !onboarding.classList.contains('hidden') && onboarding.style.display !== 'none';
-      if (!onboardingVisible) {
-        const main = document.getElementById('mainContainer');
-        if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
-        const customer = document.getElementById('customerInterface');
-        if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
-        switchInterface('customer');
-      }
-    } catch (e) {
-      // Last resort: force everything visible via inline styles.
-      try {
-        const splash = document.getElementById('appSplash');
-        if (splash) splash.style.setProperty('display', 'none', 'important');
-        const main = document.getElementById('mainContainer');
-        if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
-        const customer = document.getElementById('customerInterface');
-        if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
-        switchInterface('customer');
-      } catch { /* ignore */ }
-    }
-  }, 1500);
-
-  // ---- end splash ----
   try {
     const _params = new URLSearchParams(window.location.search);
     const _hash = (window.location.hash || '').toLowerCase();
