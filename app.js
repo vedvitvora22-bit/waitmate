@@ -369,6 +369,7 @@ let openOnly = true;
 
 let currentInterface = 'customer'; // 'customer', 'owner', 'founder'
 let founderInterfaceTemplate = null;
+let founderDeepLinkActive = false; // set when ?founder=1 is in the URL; blocks background callbacks from switching away
 
 let currentTicketId = localStorage.getItem('waitmate_ticket_id') || null;
 let activeTicketData = null;
@@ -527,14 +528,14 @@ window.WaitMateBoot = (function () {
     var hash = (window.location.hash || '').toLowerCase();
     var path = (window.location.pathname || '/').toLowerCase();
     var isFounderPath = path === '/founder' || path.endsWith('/founder') || hash === '#founder';
-    if (founder || isFounderPath) {
-      if (typeof openFounderLoginModal === 'function') openFounderLoginModal();
-    }
-    if (venue) {
+    // Founder deep-links are handled in WaitMateBoot.start() (before the
+    // splash hides) so the customer view never flashes. Only venue/ticket
+    // deep-links are resolved here.
+    if (venue && !(founder || isFounderPath)) {
       try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
       if (typeof openJoinModal === 'function') openJoinModal(venue, 'walk_in');
     }
-    if (ticket) {
+    if (ticket && !(founder || isFounderPath)) {
       try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
       if (typeof openFriendPassTracker === 'function') openFriendPassTracker(ticket);
     }
@@ -577,8 +578,23 @@ window.WaitMateBoot = (function () {
       // in the same tick as hiding the splash -> 0ms blank screen.
       // Deep-linked users bypass the guideline entirely.
       if (deepLink) {
-        enterCustomerView();
-        runDeepLink();
+        var _dlParams = new URLSearchParams(window.location.search);
+        var _dlHash = (window.location.hash || '').toLowerCase();
+        var _dlPath = (window.location.pathname || '/').toLowerCase();
+        var _dlIsFounder = _dlPath === '/founder' || _dlPath.endsWith('/founder') || _dlHash === '#founder';
+        // For founder deep-links, go straight to founder access — never
+        // flash the customer view first. If already unlocked, open the
+        // Founder Command Center directly; otherwise prompt for the password.
+        if (_dlParams.get('founder') === '1' || _dlIsFounder) {
+          if (typeof isFounderUnlocked === 'function' && isFounderUnlocked()) {
+            switchInterface('founder');
+          } else if (typeof openFounderLoginModal === 'function') {
+            openFounderLoginModal();
+          }
+        } else {
+          enterCustomerView();
+          runDeepLink();
+        }
       } else {
         if (typeof openOnboarding === 'function') openOnboarding();
         else if (window.openOnboarding) window.openOnboarding();
@@ -880,7 +896,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _hash = (window.location.hash || '').toLowerCase();
     const _path = (window.location.pathname || '/').toLowerCase();
     const _explicitFounder = _path === '/founder' || _path.endsWith('/founder') || _params.get('founder') === '1' || _hash === '#founder';
-    if (!_explicitFounder) {
+    if (_explicitFounder) {
+      founderDeepLinkActive = true;
+      // Keep founderInterface in the DOM (hidden behind splash). WaitMateBoot
+      // will switch to founder at 750ms if already unlocked, or open the login
+      // modal if not. Do NOT clear the founder password or force customer view.
+    } else {
       sessionStorage.removeItem('waitmate_founder_pwd');
       currentInterface = 'customer';
       if (founderDiv && founderDiv.isConnected) {
@@ -1510,6 +1531,14 @@ function initFounderSecretTriggers() {
 }
 
 function switchInterface(role) {
+  // Route guard: when ?founder=1 is active, never let a background callback
+  // (DOMContentLoaded, loadRestaurants, onboarding complete, etc.) switch away
+  // from the Founder Command Center to customer or owner view. Only an explicit
+  // user action (the "Back to Customer View" button) may exit founder view.
+  if (founderDeepLinkActive && currentInterface === 'founder' && role !== 'founder') {
+    showToast('Founder Command Center is active (?founder=1). Use "Back to Customer View" to exit.', 'info');
+    return;
+  }
   // Founder view requires secret unlock; otherwise prompt for the Master Password.
   if (role === 'founder' && !isFounderUnlocked()) {
     openFounderLoginModal();
@@ -1581,10 +1610,16 @@ function switchInterface(role) {
     const founderEl = document.getElementById('founderInterface') || document.getElementById('founderView');
     if (founderEl) founderEl.classList.remove('hidden');
     if (founderEl) founderEl.style.display = 'block';
+    // Also explicitly handle the dedicated View ID elements for strict mutual exclusion.
+    const founderViewEl = document.getElementById('founderView');
+    if (founderViewEl && founderViewEl !== founderEl) { founderViewEl.classList.remove('hidden'); founderViewEl.style.display = 'block'; }
     if (tabFounder) {
-      tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
-      tabFounder.style.display = 'none';
+      tabFounder.className = activeTabClass;
+      tabFounder.style.removeProperty('display');
+      tabFounder.classList.remove('hidden');
     }
+    if (tabCust) tabCust.className = inactiveTabClass;
+    if (tabOwner) tabOwner.className = inactiveTabClass;
     loadFounderDashboard();
   }
   lucide.createIcons();
