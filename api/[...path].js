@@ -21,8 +21,10 @@ const now = Date.now();
 global._lastSimCache = global._lastSimCache || {};
 const LAST_SIM_COOLDOWN_MS = 120000;
 
+const FOUNDER_MASTER_PASSWORD = "waitmatefounder2026";
+
 function founderPassword() {
-  return process.env.FOUNDER_PASSWORD || "waitmatefounder2026";
+  return process.env.FOUNDER_PASSWORD || FOUNDER_MASTER_PASSWORD;
 }
 
 function universalHostPassword() {
@@ -45,16 +47,25 @@ function getActiveFounderHash() {
   return hashPassword(founderPassword());
 }
 
+function founderMasterHash() {
+  return hashPassword(FOUNDER_MASTER_PASSWORD);
+}
+
+function isFounderPassword(password) {
+  const provided = String(password || "").trim();
+  if (!provided) return false;
+  const providedHash = hashPassword(provided);
+  return providedHash === getActiveFounderHash() || providedHash === founderMasterHash();
+}
+
 function isFounderAuthorized(request) {
-  const supplied = request.headers["x-founder-password"];
+  const supplied = String(request.headers["x-founder-password"] || "").trim();
   if (!supplied) return false;
-  return hashPassword(supplied) === getActiveFounderHash();
+  return isFounderPassword(supplied);
 }
 
 function verifyFounderPassword(password) {
-  const provided = String(password || "").trim();
-  if (!provided) return false;
-  return hashPassword(provided) === getActiveFounderHash();
+  return isFounderPassword(password);
 }
 
 function hashPassword(password) {

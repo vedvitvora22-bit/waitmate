@@ -1,6 +1,6 @@
-// cache-bust-20261126-layout-fix-v63
+// cache-bust-20261126-founder-fix-v64
 // WaitMate India — Service Worker
-const CACHE_NAME = 'waitmate-v20261126-layout-fix-v63';
+const CACHE_NAME = 'waitmate-v20261126-founder-fix-v64';
 
 // Shell files that must ALWAYS be fetched fresh from the network so stale,
 // broken builds can never be served from cache after a deploy.
