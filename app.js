@@ -1522,9 +1522,16 @@ function switchInterface(role) {
     clearAllHostPasswords();
   }
   currentInterface = role;
-  const custDiv = document.getElementById('customerInterface');
-  const ownerDiv = document.getElementById('ownerInterface');
-  const founderDiv = document.getElementById('founderInterface');
+
+  // Resolve view elements by both naming conventions (customerView/customerInterface, etc.)
+  const custDiv = document.getElementById('customerInterface') || document.getElementById('customerView');
+  const ownerDiv = document.getElementById('ownerInterface') || document.getElementById('ownerView');
+  const founderDiv = document.getElementById('founderInterface') || document.getElementById('founderView');
+
+  // Also grab the dedicated "View" ID elements if they exist separately.
+  const custViewEl = document.getElementById('customerView');
+  const ownerViewEl = document.getElementById('ownerView');
+  const founderViewEl = document.getElementById('founderView');
 
   const tabCust = document.getElementById('tabCustomer');
   const tabOwner = document.getElementById('tabOwner');
@@ -1533,9 +1540,13 @@ function switchInterface(role) {
   const activeTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm";
   const inactiveTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900";
 
-  custDiv.classList.add('hidden');
-  ownerDiv.classList.add('hidden');
-  if (founderDiv && founderDiv.isConnected) founderDiv.classList.add('hidden');
+  // Strictly hide ALL views first using BOTH classList and style.display.
+  if (custDiv) { custDiv.classList.add('hidden'); custDiv.style.display = 'none'; }
+  if (custViewEl && custViewEl !== custDiv) { custViewEl.classList.add('hidden'); custViewEl.style.display = 'none'; }
+  if (ownerDiv) { ownerDiv.classList.add('hidden'); ownerDiv.style.display = 'none'; }
+  if (ownerViewEl && ownerViewEl !== ownerDiv) { ownerViewEl.classList.add('hidden'); ownerViewEl.style.display = 'none'; }
+  if (founderDiv && founderDiv.isConnected) { founderDiv.classList.add('hidden'); founderDiv.style.display = 'none'; }
+  if (founderViewEl && founderViewEl !== founderDiv) { founderViewEl.classList.add('hidden'); founderViewEl.style.display = 'none'; }
 
   tabCust.className = inactiveTabClass;
   tabOwner.className = inactiveTabClass;
@@ -1546,6 +1557,8 @@ function switchInterface(role) {
       founderDiv.remove();
     }
     custDiv.classList.remove('hidden');
+    custDiv.style.display = 'block';
+    if (custViewEl && custViewEl !== custDiv) { custViewEl.classList.remove('hidden'); custViewEl.style.display = 'block'; }
     tabCust.className = activeTabClass;
     renderRestaurantsGrid();
   } else if (role === 'owner') {
@@ -1554,6 +1567,8 @@ function switchInterface(role) {
       founderDiv.remove();
     }
     ownerDiv.classList.remove('hidden');
+    ownerDiv.style.display = 'block';
+    if (ownerViewEl && ownerViewEl !== ownerDiv) { ownerViewEl.classList.remove('hidden'); ownerViewEl.style.display = 'block'; }
     tabOwner.className = activeTabClass;
     showOwnerDirectory();
     startHostStandPolling();
@@ -1563,8 +1578,9 @@ function switchInterface(role) {
       document.getElementById('mainContainer').appendChild(founderInterfaceTemplate.cloneNode(true));
       founderInterfaceTemplate = founderInterfaceTemplate.cloneNode(true);
     }
-    const founderEl = document.getElementById('founderInterface');
+    const founderEl = document.getElementById('founderInterface') || document.getElementById('founderView');
     if (founderEl) founderEl.classList.remove('hidden');
+    if (founderEl) founderEl.style.display = 'block';
     if (tabFounder) {
       tabFounder.className = activeTabClass.replace(/\bflex\b/, '') + ' hidden';
       tabFounder.style.display = 'none';
