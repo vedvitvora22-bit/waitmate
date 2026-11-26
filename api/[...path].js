@@ -152,14 +152,29 @@ function send(response, status, data) {
   response.send(JSON.stringify(data));
 }
 
-function parseBody(request) {
+async function parseBody(request) {
   if (!request.body) return {};
   if (Buffer.isBuffer(request.body)) {
     try { return JSON.parse(request.body.toString("utf8")); } catch { return {}; }
   }
-  if (typeof request.body === "object") return request.body;
+  if (typeof request.body === "string") {
+    try { return JSON.parse(request.body); } catch { return {}; }
+  }
+  if (typeof request.body === "object" && request.body !== null) {
+    // Readable stream (Vercel serverless): consume chunks and parse JSON
+    if (typeof request.body.pipe === "function" || typeof request.body[Symbol.asyncIterator] === "function") {
+      const chunks = [];
+      for await (const chunk of request.body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+      }
+      const buf = Buffer.concat(chunks);
+      if (buf.length === 0) return {};
+      try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+    }
+    return request.body;
+  }
   try {
-    return JSON.parse(request.body);
+    return JSON.parse(String(request.body));
   } catch {
     return {};
   }
@@ -927,9 +942,9 @@ async function route(request, response, pathParts) {
     return sendPublic(response, 200, { ...sanitizeRestaurant(restaurant), live_stats: liveStats, active_diners: activeDiners, occupied_tables: occupiedTables, available_tables: availableTables, reliability: reliabilityFromRestaurant(restaurant), announcement: restaurant.announcement || '' });
   }
 
-  if (request.method === "POST" && path === "/api/host/verify-password") {
+  if (request.method === "POST" && (path === "/api/host/verify-password" || /^\/api\/restaurants\/[^/]+\/verify-password$/.test(path))) {
     const restId = body.restaurant_id;
-    const password = body.password || "";
+    const password = String(body.password || "").trim();
     let restaurant = null;
     let firestoreFailed = false;
     try {
@@ -939,17 +954,13 @@ async function route(request, response, pathParts) {
       console.warn(`[verify-password] Firestore read failed for ${restId}:`, error.message || error);
     }
     if (!restaurant) {
-      // Firestore unavailable or restaurant not in Firestore: fall back to the
-      // offline catalogue so every venue (incl. Chai Sutta Bar, Sardar Pav
-      // Bhaji, Juhu Tawa Junction, The Rameshwaram Cafe, etc.) always unlocks
-      // with its correct owner password.
       restaurant = fallbackRestaurants.find(r => r.id === restId || String(r.name || "").toLowerCase() === String(restId || "").toLowerCase());
     }
-    if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+    if (!restaurant) return send(response, 404, { ok: false, valid: false, authenticated: false, success: false, error: "Restaurant not found" });
     if (!verifyRestaurantPassword(restaurant, password)) {
-      return send(response, 401, { error: "Incorrect restaurant password." });
+      return send(response, 401, { ok: false, valid: false, authenticated: false, success: false, error: "Incorrect restaurant password." });
     }
-    return send(response, 200, { success: true, message: "Access granted.", firestore_unavailable: firestoreFailed });
+    return send(response, 200, { ok: true, valid: true, authenticated: true, success: true, message: "Access granted.", firestore_unavailable: firestoreFailed });
   }
 
   if (request.method === "POST" && path === "/api/queue/join") {
@@ -1159,9 +1170,9 @@ async function route(request, response, pathParts) {
     // password set via /api/founder/change-password also unlocks on cold start.
     await loadFounderHashFromFirestore();
     if (verifyFounderPassword(provided)) {
-      return send(response, 200, { ok: true, success: true, authorized: true, message: "Founder access granted." });
+      return send(response, 200, { ok: true, valid: true, authenticated: true, success: true, authorized: true, message: "Founder access granted." });
     }
-    return send(response, 401, { ok: false, success: false, authorized: false, error: "Incorrect Founder Master Password." });
+    return send(response, 401, { ok: false, valid: false, authenticated: false, success: false, authorized: false, error: "Incorrect Founder Master Password." });
   }
 
   if (request.method === "POST" && path === "/api/founder/change-password") {
@@ -1199,7 +1210,7 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/queue/action") {
-    const body = parseBody(request);
+  const body = await parseBody(request);
     const ticket = await fetchQueueEntry(body.ticket_id);
     if (!ticket) return send(response, 404, { error: "Ticket not found" });
     
