@@ -5488,7 +5488,7 @@ window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
 // 17. ONBOARDING TOUR — Photo-led 5-Slide Problem → WaitMate Solution
 // ==========================================
 let onboardingCurrentStep = 1;
-const onboardingTotalSteps = 5;
+const onboardingTotalSteps = 6;
 const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
 
 function showCustomerInterface() {

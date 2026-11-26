@@ -105,9 +105,9 @@
         <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
           <button onclick="prevOnboardingStep()" class="onboarding-prev hidden inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
           <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
-            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">1 / 5</span>
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">1 / 6</span>
             <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 20%"></div>
+              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 16.67%"></div>
             </div>
           </div>
           <button onclick="nextOnboardingStep()" class="onboarding-next inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
@@ -139,9 +139,9 @@
         <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
           <button onclick="prevOnboardingStep()" class="onboarding-prev inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
           <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
-            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">2 / 5</span>
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">2 / 6</span>
             <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 40%"></div>
+              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 33.33%"></div>
             </div>
           </div>
           <button onclick="nextOnboardingStep()" class="onboarding-next inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
@@ -175,17 +175,61 @@
         <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
           <button onclick="prevOnboardingStep()" class="onboarding-prev inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
           <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
-            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">3 / 5</span>
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">3 / 6</span>
             <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 60%"></div>
+              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 50%"></div>
             </div>
           </div>
           <button onclick="nextOnboardingStep()" class="onboarding-next inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
 
-      <!-- Slide 4 — Instant Chime, Zero Missed Calls -->
+      <!-- Slide 4 (NEW) — ETA vs Reliability Score Explained Simply -->
       <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="4">
+        <button onclick="skipOnboarding()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
+
+        <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
+          <img src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&amp;auto=format&amp;fit=crop&amp;q=80" alt="Restaurant counter with digital wait display" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&amp;auto=format&amp;fit=crop&amp;q=80'">
+          <div class="absolute inset-0 bg-gradient-to-t from-[#0F172A]/65 via-[#0F172A]/25 to-transparent"></div>
+          <div class="absolute bottom-6 left-6 right-6">
+            <div class="mx-auto inline-flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/85 bg-white/92 backdrop-blur-md shadow-xl text-[#0F172A] text-sm font-bold leading-tight whitespace-nowrap">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#10B981] flex-shrink-0"></span>
+              <span class="font-jb">ETA</span>
+              <span class="text-slate-500 text-[10px] font-medium tracking-wider uppercase">estimated wait minutes</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="onboarding-body flex-1 flex flex-col justify-center items-center px-6 sm:px-8 text-center">
+          <p class="onboarding-tag font-jb text-[10px] font-extrabold text-orange-600 tracking-wider uppercase mb-2">SMART NUMBERS, SIMPLE MEANING</p>
+          <h2 class="onboarding-heading">What Do ETA & Reliability Score Mean?</h2>
+          <p class="onboarding-body-text">ETA is your estimated wait in minutes right now. Reliability Score (like 96% A+) shows how often that restaurant actually seats diners on time—so you know which wait times you can trust.</p>
+          <div class="mt-8 flex gap-3 w-full max-w-xs">
+            <div class="flex-1 flex flex-col items-center justify-center px-4 py-4 border border-slate-200 rounded-2xl bg-white shadow-sm">
+              <span class="stat-value text-[#0F172A]">ETA: ~20 mins</span>
+              <span class="stat-label text-[#64748B]">estimated wait now</span>
+            </div>
+            <div class="flex-1 flex flex-col items-center justify-center px-4 py-4 border border-slate-200 rounded-2xl bg-white shadow-sm">
+              <span class="stat-value text-[#0F172A]">96% (A+)</span>
+              <span class="stat-label text-[#64748B]">always on time</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
+          <button onclick="prevOnboardingStep()" class="onboarding-prev inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
+          <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">4 / 6</span>
+            <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 66.67%"></div>
+            </div>
+          </div>
+          <button onclick="nextOnboardingStep()" class="onboarding-next inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </div>
+
+      <!-- Slide 5 — Instant Chime, Zero Missed Calls -->
+      <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="5">
         <button onclick="skipOnboarding()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
@@ -211,17 +255,17 @@
         <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
           <button onclick="prevOnboardingStep()" class="onboarding-prev inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
           <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
-            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">4 / 5</span>
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">5 / 6</span>
             <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 80%"></div>
+              <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 83.33%"></div>
             </div>
           </div>
           <button onclick="nextOnboardingStep()" class="onboarding-next inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
 
-      <!-- Slide 5 — No More Fake '10-Minute' Waits -->
-      <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="5">
+      <!-- Slide 6 — Crowd-Verified Trust -->
+      <div class="onboarding-screen hidden flex flex-col h-full w-full" data-step="6">
         <button onclick="skipOnboarding()" class="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5E0] bg-white/85 backdrop-blur-sm text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 transition-colors" aria-label="Skip tour">Skip</button>
 
         <div class="onboarding-media relative w-full flex-shrink-0 overflow-hidden bg-slate-200">
@@ -238,14 +282,14 @@
 
         <div class="onboarding-body flex-1 flex flex-col justify-center items-center px-6 sm:px-8 text-center">
           <p class="onboarding-tag font-jb text-[10px] font-extrabold text-orange-600 tracking-wider uppercase mb-2">CROWD-VERIFIED TRUST</p>
-          <h2 class="onboarding-heading">Honest Wait Times, Kept Honest by You</h2>
-          <p class="onboarding-body-text">Once seated, rate your wait accuracy in one tap—powering every restaurant's public Reliability Score™ so nobody gets misled again.</p>
+          <h2 class="onboarding-heading">Kept Honest by Real Diners</h2>
+          <p class="onboarding-body-text">Rate your wait once seated to update every restaurant's score.</p>
         </div>
 
         <div class="onboarding-nav border-t border-slate-200 bg-white/60 backdrop-blur-sm flex-shrink-0 px-6 py-5 flex items-center justify-between gap-4">
           <button onclick="prevOnboardingStep()" class="onboarding-prev inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50">Back <span aria-hidden="true">←</span></button>
           <div class="onboarding-progress flex-1 max-w-xs mx-auto flex flex-col items-center gap-1.5">
-            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">5 / 5</span>
+            <span class="onboarding-progress-text font-jb text-[10px] font-extrabold text-slate-400 tracking-wider" id="onboardingProgressText">6 / 6</span>
             <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
               <div class="onboarding-progress-fill h-full bg-[#10B981] transition-all duration-500 ease-out" style="width: 100%"></div>
             </div>
@@ -253,8 +297,6 @@
           <button onclick="completeOnboarding()" class="onboarding-cta inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition hover:-translate-y-0.5 active:scale-95 whitespace-nowrap">Start Exploring <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
-
-    </div>
   </div>
 
   <!-- Top App Live Status Bar -->
@@ -318,10 +360,10 @@
 
         </div>
 
-      <!-- Guide / How It Works button — re-open the 5-slide onboarding anytime -->
+      <!-- Guide / How It Works button — re-open the 6-slide onboarding anytime -->
       <button onclick="openOnboarding()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-[#0F172A] text-xs font-bold shadow-sm transition hover:bg-slate-50" title="Re-watch the WaitMate guide" aria-label="How It Works">
-        <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
-        <span>How It Works</span>
+        <i data-lucide="book-open" class="w-8 h-8 rounded-full sm:w-4 sm:h-4 sm:rounded-none text-[#0F172A] shrink-0"></i>
+        <span class="hidden sm:inline">Guide</span>
       </button>
 
       </div>
