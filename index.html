@@ -113,7 +113,7 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen block antialiased selection:bg-orange-600 selection:text-white overflow-x-hidden" style="font-family:Plus Jakarta Sans,sans-serif">
 
   <!-- App Launch Splash Screen -->
-  <div id="splashScreen" class="splash-overlay" aria-live="polite" aria-busy="true">
+  <div id="splashScreen" class="splash-overlay" aria-live="polite" aria-busy="true" style="position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center;">
     <div class="splash-inner">
       <img id="splashLogo" src="/logo.png?v=2" alt="WaitMate" class="splash-logo" width="96" height="96">
       <div class="splash-brand">
@@ -2072,40 +2072,16 @@
       // Step 2 (750ms): hide splash, open the centered 6-Slide Guideline on
       // Slide 1 of 6, keeping the Customer View ready underneath.
       function showGuideline() {
-        var m = $('onboardingModal');
-        if (m) {
-          m.style.display = 'flex';
-          m.style.position = 'fixed';
-          m.style.inset = '0';
-          m.style.zIndex = '99998';
-          m.style.alignItems = 'center';
-          m.style.justifyContent = 'center';
-          m.style.background = 'rgba(15, 23, 42, 0.85)';
-          m.style.backdropFilter = 'blur(6px)';
-          m.style.opacity = '1';
-          m.classList.remove('hidden');
-          m.removeAttribute('hidden');
-          m.setAttribute('aria-hidden', 'false');
+        // openOnboarding() (defined in app.js) sets #onboardingModal to the
+        // exact centered overlay styles: display:flex; position:fixed;
+        // inset:0; z-index:99998; align-items:center; justify-content:center;
+        // and starts on Slide 1 of 6.
+        if (typeof openOnboarding === 'function') {
+          openOnboarding();
+        } else if (window.openOnboarding) {
+          window.openOnboarding();
         }
-        var b = $('onboardingBackdrop');
-        if (b) {
-          b.style.display = 'block';
-          b.style.position = 'fixed';
-          b.style.inset = '0';
-          b.style.zIndex = '99997';
-          b.style.opacity = '1';
-          b.classList.remove('hidden');
-          b.removeAttribute('hidden');
-        }
-        // Always start on Slide 1 of 6 on every fresh load.
-        try {
-          if (typeof onboardingCurrentStep !== 'undefined') {
-            onboardingCurrentStep = 1;
-          }
-          if (typeof updateOnboardingUI === 'function') {
-            updateOnboardingUI();
-          }
-        } catch (e) {}
+      }
       }
 
       function prepareCustomerView() {

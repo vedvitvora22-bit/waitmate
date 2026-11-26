@@ -668,10 +668,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
-  // Safety: guarantee every secondary modal is strictly closed on initial load so
-  // nothing blocks the launch sequence: Logo Splash (0.75s) -> 6-Slide Guideline -> Customer View.
+  // Safety: guarantee every secondary modal EXCEPT the onboarding guideline
+  // is strictly closed on initial load. #onboardingModal is left alone: it
+  // starts hidden in HTML and is opened exclusively by the inline boot
+  // script at 750ms (Logo Splash -> 6-Slide Guideline -> Customer View).
   const SECONDARY_MODAL_IDS = [
-    'onboardingModal','waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
+    'waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
     'ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal',
     'walkinModal','venueQrModal','friendPassModal'
   ];
@@ -5509,13 +5511,34 @@ function openOnboarding() {
   if (!modal) return;
   localStorage.removeItem(ONBOARDING_SEEN_KEY);
   onboardingCurrentStep = 1;
+  // True centered full-screen overlay (inline styles win over any CSS class).
+  modal.style.display = 'flex';
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.zIndex = '99998';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.background = 'rgba(15, 23, 42, 0.85)';
+  modal.style.backdropFilter = 'blur(6px)';
+  modal.style.opacity = '1';
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  modal.removeAttribute('hidden');
+  modal.setAttribute('aria-hidden', 'false');
   const backdrop = document.getElementById('onboardingBackdrop');
-  if (backdrop) backdrop.classList.remove('hidden');
+  if (backdrop) {
+    backdrop.style.display = 'block';
+    backdrop.style.position = 'fixed';
+    backdrop.style.inset = '0';
+    backdrop.style.zIndex = '99997';
+    backdrop.style.opacity = '1';
+    backdrop.classList.remove('hidden');
+    backdrop.removeAttribute('hidden');
+  }
   updateOnboardingUI();
   lucide.createIcons();
   document.addEventListener('keydown', handleOnboardingKeydown);
+  initOnboardingTouch();
 }
 
 function handleOnboardingKeydown(e) {
