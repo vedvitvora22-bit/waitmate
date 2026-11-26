@@ -693,37 +693,43 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const SPLASH_DURATION_MS = 750;
 
-  function finishSplash() {
+  function hideSplash() {
     if (splashEl) {
-      splashEl.classList.add('is-fading');
-      setTimeout(() => {
-        splashEl.classList.add('is-hidden');
-        splashEl.classList.remove('is-fading');
-        splashEl.setAttribute('aria-hidden', 'true');
-      }, 300);
+      splashEl.style.display = 'none';
+      splashEl.setAttribute('aria-hidden', 'true');
     }
+  }
+
+  function showGuidelineModal() {
+    const modal = document.getElementById('onboardingModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.zIndex = '9999';
+    modal.removeAttribute('aria-hidden');
+    const backdrop = document.getElementById('onboardingBackdrop');
+    if (backdrop) backdrop.classList.remove('hidden');
   }
 
   if (_skipSplash) {
     // Skip splash and onboarding entirely for founder / shared-ticket deep-links.
-    if (splashEl) {
-      splashEl.classList.add('is-hidden');
-      splashEl.setAttribute('aria-hidden', 'true');
-    }
+    hideSplash();
     const om = document.getElementById('onboardingModal');
-    if (om) om.classList.add('hidden');
+    if (om) om.style.display = 'none';
     // Go straight to the customer view immediately.
     showCustomerInterface();
   } else {
     // Initialize onboarding at 0ms so Slide 1 is painted in the DOM underneath the
-    // splash (z-index 9998 vs splash 9999). The splash covers it until it fades.
+    // splash. The splash (z-index 9999) covers the guideline (z-index 9998) until
+    // it is removed at exactly 750ms.
     initOnboarding();
 
-    // Exactly 750ms splash visibility, then fade out ONLY the splash so the user
-    // lands directly on Slide 1 without ever flashing the customer discovery screen.
+    // Exactly 750ms of logo splash, then hide the splash and immediately reveal
+    // the 6-slide guideline modal with zero blank gap.
     await new Promise(resolve => setTimeout(resolve, SPLASH_DURATION_MS));
-    finishSplash();
-    await new Promise(resolve => setTimeout(resolve, 300));
+    hideSplash();
+    showGuidelineModal();
   }
 
   // ---- end splash ----
@@ -732,17 +738,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   setTimeout(() => {
     try {
       const splash = document.getElementById('appSplash');
-      if (splash && !splash.classList.contains('is-hidden')) {
-        splash.classList.add('is-hidden');
-        splash.setAttribute('aria-hidden', 'true');
-      }
+      if (splash) { splash.style.display = 'none'; splash.setAttribute('aria-hidden', 'true'); }
       const onboarding = document.getElementById('onboardingModal');
-      const onboardingVisible = onboarding && !onboarding.classList.contains('hidden');
+      const onboardingVisible = onboarding && !onboarding.classList.contains('hidden') && onboarding.style.display !== 'none';
       if (!onboardingVisible) {
         const main = document.getElementById('mainContainer');
-        if (main) main.classList.remove('hidden');
+        if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
         const customer = document.getElementById('customerInterface');
-        if (customer) customer.classList.remove('hidden');
+        if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
         switchInterface('customer');
       }
     } catch (e) {
@@ -751,9 +754,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const splash = document.getElementById('appSplash');
         if (splash) splash.style.display = 'none';
         const main = document.getElementById('mainContainer');
-        if (main) main.style.display = '';
+        if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
         const customer = document.getElementById('customerInterface');
-        if (customer) customer.style.display = '';
+        if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
+        switchInterface('customer');
       } catch { /* ignore */ }
     }
   }, 1500);
@@ -5537,9 +5541,9 @@ const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
 
 function showCustomerInterface() {
   const main = document.getElementById('mainContainer');
-  if (main) main.classList.remove('hidden');
+  if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
   const custDiv = document.getElementById('customerInterface');
-  if (custDiv) custDiv.classList.remove('hidden');
+  if (custDiv) { custDiv.classList.remove('hidden'); custDiv.style.display = 'block'; }
 
   // Always switch to customer view and render so the grid is never blank.
   switchInterface('customer');
@@ -5712,8 +5716,12 @@ function completeOnboarding(skipped = false) {
 
   document.removeEventListener('keydown', handleOnboardingKeydown);
 
-  // Reveal the main container + customer discovery view and render the 12
+  // Force the main container + customer discovery view visible and render the
   // restaurant cards immediately (hero, filter pills, grid).
+  const main = document.getElementById('mainContainer');
+  if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
+  const customer = document.getElementById('customerInterface');
+  if (customer) { customer.classList.remove('hidden'); customer.style.display = 'block'; }
   showCustomerInterface();
 
   if (!skipped) {
