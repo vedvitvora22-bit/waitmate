@@ -155,16 +155,15 @@ function send(response, status, data) {
 }
 
 async function parseBody(request) {
-  // If request.body is already populated (Buffer, string, object), use it directly
-  if (request.body) {
+  // 1. If request.body is already populated (Buffer, string, object), use it directly
+  if (request.body !== undefined && request.body !== null) {
     if (Buffer.isBuffer(request.body)) {
       try { return JSON.parse(request.body.toString("utf8")); } catch { return {}; }
     }
     if (typeof request.body === "string") {
       try { return JSON.parse(request.body); } catch { return {}; }
     }
-    if (typeof request.body === "object" && request.body !== null) {
-      // Readable stream: consume chunks and parse JSON
+    if (typeof request.body === "object") {
       if (typeof request.body.pipe === "function" || typeof request.body[Symbol.asyncIterator] === "function") {
         const chunks = [];
         for await (const chunk of request.body) {
@@ -178,16 +177,35 @@ async function parseBody(request) {
     }
     try { return JSON.parse(String(request.body)); } catch { return {}; }
   }
-  // Vercel/Node.js: request.body is not auto-populated; read raw stream chunks from request itself
+  // 2. request.body is undefined/null: read raw stream chunks from request itself (Vercel IncomingMessage)
   if (request !== null && typeof request === "object") {
-    if (typeof request.pipe === "function" || typeof request[Symbol.asyncIterator] === "function") {
-      const chunks = [];
-      for await (const chunk of request) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-      }
-      const buf = Buffer.concat(chunks);
-      if (buf.length === 0) return {};
-      try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+    // Try async iteration (Node.js Readable stream)
+    if (typeof request[Symbol.asyncIterator] === "function") {
+      try {
+        const chunks = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        }
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 0) {
+          try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+        }
+      } catch { /* fall through */ }
+    }
+    // Try EventEmitter 'data'/'end' events
+    if (typeof request.on === "function") {
+      try {
+        const chunks = [];
+        await new Promise((resolve, reject) => {
+          request.on("data", (chunk) => chunks.push(chunk));
+          request.on("end", resolve);
+          request.on("error", reject);
+        });
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 0) {
+          try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+        }
+      } catch { /* fall through */ }
     }
   }
   return {};
