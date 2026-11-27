@@ -1556,6 +1556,34 @@ function switchView(view) {
   }
 }
 
+// =========================================================================
+// Landing Page Light / Dark Theme Toggle
+// Persists to localStorage (wm_landing_theme), applies via .landing-light on
+// <html> (zero-flash head script), and flips the ☀️ / 🌙 toggle icon.
+// =========================================================================
+function toggleLandingTheme() {
+  const html = document.documentElement;
+  const isLight = html.classList.toggle('landing-light');
+  try { localStorage.setItem('wm_landing_theme', isLight ? 'light' : 'dark'); } catch (e) {}
+  syncLandingThemeIcon(isLight);
+}
+
+function syncLandingThemeIcon(isLight) {
+  const icon = document.getElementById('landingThemeIcon');
+  const btn = document.getElementById('landingThemeToggle');
+  if (!icon) return;
+  if (isLight) {
+    icon.textContent = '🌙';
+    if (btn) { btn.title = 'Switch to dark mode'; btn.setAttribute('aria-label', 'Switch to dark mode'); }
+  } else {
+    icon.textContent = '☀️';
+    if (btn) { btn.title = 'Switch to light mode'; btn.setAttribute('aria-label', 'Switch to light mode'); }
+  }
+}
+
+// Reflect the persisted theme in the toggle icon once the DOM is ready.
+(function(){ try { syncLandingThemeIcon(document.documentElement.classList.contains('landing-light')); } catch(e){} })();
+
 function switchInterface(role) {
   // Route guard: when ?founder=1 is active, never let a background callback
   // (DOMContentLoaded, loadRestaurants, onboarding complete, etc.) switch away
