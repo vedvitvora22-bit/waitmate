@@ -368,6 +368,7 @@ let currentSearch = '';
 let openOnly = true;
 
 let currentInterface = 'customer'; // 'customer', 'owner', 'founder'
+let currentView = 'landing'; // 'landing' | 'customer' | 'host' | 'founder'
 let founderInterfaceTemplate = null;
 let founderDeepLinkActive = false; // set when ?founder=1 is in the URL; blocks background callbacks from switching away
 
@@ -483,7 +484,7 @@ window.WaitMateBoot = (function () {
       main.classList.remove('hidden');
       main.removeAttribute('hidden');
     }
-    var cust = $('customerInterface') || $('customerView');
+    var cust = $('customerView');
     if (cust) {
       cust.style.display = 'block';
       cust.style.opacity = '1';
@@ -1516,6 +1517,45 @@ function initFounderSecretTriggers() {
   }
 }
 
+// Clean 3-view switching: 'landing' | 'customer' | 'host' | 'founder'.
+// Hides every other view and scrolls smoothly to the top so each screen feels
+// like its own dedicated, distraction-free application.
+function switchView(view) {
+  // Route guard: when ?founder=1 is active, never let a background callback
+  // (DOMContentLoaded, loadRestaurants, etc.) switch away from the Founder
+  // Command Center. Only an explicit user action may exit founder view.
+  if (founderDeepLinkActive && currentView === 'founder' && view !== 'founder') {
+    showToast('Founder Command Center is active (?founder=1). Use "Back to Customer View" to exit.', 'info');
+    return;
+  }
+  var views = {
+    landing: document.getElementById('landingView'),
+    customer: document.getElementById('customerView'),
+    host: document.getElementById('ownerInterface'),
+    founder: document.getElementById('founderInterface')
+  };
+  Object.keys(views).forEach(function (key) {
+    var el = views[key];
+    if (el) {
+      el.classList.add('hidden');
+      el.style.display = 'none';
+    }
+  });
+  var target = views[view];
+  if (target) {
+    target.classList.remove('hidden');
+    target.style.display = 'block';
+  }
+  currentView = view;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (window.lucide) lucide.createIcons();
+
+  // Bootstrap the freshly shown view
+  if (view === 'customer' && typeof renderRestaurantsGrid === 'function') {
+    renderRestaurantsGrid();
+  }
+}
+
 function switchInterface(role) {
   // Route guard: when ?founder=1 is active, never let a background callback
   // (DOMContentLoaded, loadRestaurants, onboarding complete, etc.) switch away
@@ -1538,74 +1578,48 @@ function switchInterface(role) {
   }
   currentInterface = role;
 
-  // Resolve view elements by both naming conventions (customerView/customerInterface, etc.)
-  const custDiv = document.getElementById('customerInterface') || document.getElementById('customerView');
-  const ownerDiv = document.getElementById('ownerInterface') || document.getElementById('ownerView');
-  const founderDiv = document.getElementById('founderInterface') || document.getElementById('founderView');
+  // Strictly hide ALL views, then show only the requested one + scroll to top.
+  switchView(role === 'owner' ? 'host' : role);
 
-  // Also grab the dedicated "View" ID elements if they exist separately.
-  const custViewEl = document.getElementById('customerView');
-  const ownerViewEl = document.getElementById('ownerView');
-  const founderViewEl = document.getElementById('founderView');
-
-  const tabCust = document.getElementById('tabCustomer');
-  const tabOwner = document.getElementById('tabOwner');
-  const tabFounder = document.getElementById('tabFounder');
+  var tabCust = document.getElementById('tabCustomer');
+  var tabOwner = document.getElementById('tabOwner');
+  var tabFounder = document.getElementById('tabFounder');
 
   const activeTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm";
   const inactiveTabClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900";
 
-  // Strictly hide ALL views first using BOTH classList and style.display.
-  if (custDiv) { custDiv.classList.add('hidden'); custDiv.style.display = 'none'; }
-  if (custViewEl && custViewEl !== custDiv) { custViewEl.classList.add('hidden'); custViewEl.style.display = 'none'; }
-  if (ownerDiv) { ownerDiv.classList.add('hidden'); ownerDiv.style.display = 'none'; }
-  if (ownerViewEl && ownerViewEl !== ownerDiv) { ownerViewEl.classList.add('hidden'); ownerViewEl.style.display = 'none'; }
-  if (founderDiv && founderDiv.isConnected) { founderDiv.classList.add('hidden'); founderDiv.style.display = 'none'; }
-  if (founderViewEl && founderViewEl !== founderDiv) { founderViewEl.classList.add('hidden'); founderViewEl.style.display = 'none'; }
+  if (tabCust) tabCust.className = inactiveTabClass;
+  if (tabOwner) tabOwner.className = inactiveTabClass;
+  if (tabFounder) tabFounder.className = inactiveTabClass;
 
-  tabCust.className = inactiveTabClass;
-  tabOwner.className = inactiveTabClass;
+  var founderDiv = document.getElementById('founderInterface') || document.getElementById('founderView');
 
   if (role === 'customer') {
     if (founderDiv && founderDiv.isConnected) {
       founderInterfaceTemplate = founderDiv.cloneNode(true);
       founderDiv.remove();
     }
-    custDiv.classList.remove('hidden');
-    custDiv.style.display = 'block';
-    if (custViewEl && custViewEl !== custDiv) { custViewEl.classList.remove('hidden'); custViewEl.style.display = 'block'; }
-    tabCust.className = activeTabClass;
     renderRestaurantsGrid();
   } else if (role === 'owner') {
     if (founderDiv && founderDiv.isConnected) {
       founderInterfaceTemplate = founderDiv.cloneNode(true);
       founderDiv.remove();
     }
-    ownerDiv.classList.remove('hidden');
-    ownerDiv.style.display = 'block';
-    if (ownerViewEl && ownerViewEl !== ownerDiv) { ownerViewEl.classList.remove('hidden'); ownerViewEl.style.display = 'block'; }
-    tabOwner.className = activeTabClass;
     showOwnerDirectory();
     startHostStandPolling();
   } else if (role === 'founder') {
-    ['roleGateway','gatewayOverlay','landingGateway'].forEach(id=>{const el=document.getElementById(id); if(el) el.classList.add('hidden');});
+    ['roleGateway','gatewayOverlay','landingGateway'].forEach(function (id) { var el = document.getElementById(id); if (el) el.classList.add('hidden'); });
     if (!document.getElementById('founderInterface') && founderInterfaceTemplate) {
       document.getElementById('mainContainer').appendChild(founderInterfaceTemplate.cloneNode(true));
       founderInterfaceTemplate = founderInterfaceTemplate.cloneNode(true);
     }
-    const founderEl = document.getElementById('founderInterface') || document.getElementById('founderView');
-    if (founderEl) founderEl.classList.remove('hidden');
-    if (founderEl) founderEl.style.display = 'block';
-    // Also explicitly handle the dedicated View ID elements for strict mutual exclusion.
-    const founderViewEl = document.getElementById('founderView');
-    if (founderViewEl && founderViewEl !== founderEl) { founderViewEl.classList.remove('hidden'); founderViewEl.style.display = 'block'; }
+    var founderEl = document.getElementById('founderInterface') || document.getElementById('founderView');
+    if (founderEl) { founderEl.classList.remove('hidden'); founderEl.style.display = 'block'; }
     if (tabFounder) {
       tabFounder.className = activeTabClass;
       tabFounder.style.removeProperty('display');
       tabFounder.classList.remove('hidden');
     }
-    if (tabCust) tabCust.className = inactiveTabClass;
-    if (tabOwner) tabOwner.className = inactiveTabClass;
     loadFounderDashboard();
   }
   lucide.createIcons();
@@ -2346,6 +2360,8 @@ function renderRestaurantsGrid() {
   if (topCountEl) topCountEl.textContent = `${totalGuestsInLine} active diners`;
   const sectionCBadge = document.getElementById('sectionCDinerBadge');
   if (sectionCBadge) sectionCBadge.textContent = `${totalGuestsInLine} active diners in line`;
+  const cwBadge = document.getElementById('cwActiveDinersCount');
+  if (cwBadge) cwBadge.textContent = `${totalGuestsInLine}`;
 
   // Sorting — favorited spots are pinned to the top of the default discovery grid
   const isDefaultGrid = currentCategory === 'all' && !currentSearch && currentCity === 'all' && currentArea === 'all';
@@ -5813,68 +5829,94 @@ let heroStageCurrent = 0;
 
 const heroStages = [
   {
-    label: 'Queue Open · Demo',
+    label: 'LIVE · QUEUE OPEN',
+    eta: '~22 min',
     progress: 0,
-    calls: [
-      'Sandbox preview — no live data is touched.',
-      'Tap a stage to simulate the diner journey.',
-      'Local component state only — demo data.'
-    ]
+    pass: 'REMOTE JOIN — queue open, rank locked when you travel',
+    statusClass: 'border-emerald-500/30 bg-emerald-950/25 text-emerald-300',
+    statusDot: 'bg-emerald-400'
   },
   {
-    label: 'Joined · Rank #4',
+    label: 'JOINED · RANK #4',
+    eta: '~14 min',
     progress: 35,
-    calls: [
-      'Remote Join locks your queue rank before you travel.',
-      'No sidewalk wait — join before you step out.',
-      'The host sees your rank before you arrive.'
-    ]
+    pass: 'DIGITAL PASS ACTIVE • 4 parties ahead of you',
+    statusClass: 'border-cyan-400/40 bg-cyan-950/25 text-cyan-300',
+    statusDot: 'bg-cyan-400'
   },
   {
-    label: 'Arrived · Table Prepped',
+    label: 'ARRIVED · TABLE PREPPED',
+    eta: '~2 min',
     progress: 75,
-    calls: [
-      '"I\'ve Arrived" confirms you are physically at the venue.',
-      'Prevents no-shows from holding tables unfairly.',
-      'Keeps queue order fair for walk-ins too.'
-    ]
+    pass: '“I’VE ARRIVED” VERIFIED • table being prepped',
+    statusClass: 'border-emerald-400/50 bg-emerald-900/40 text-emerald-200',
+    statusDot: 'bg-emerald-400'
   },
   {
-    label: 'Seated · Rated',
+    label: 'SEATED · RATED',
+    eta: '0 min',
     progress: 100,
-    calls: [
-      'Seated & rated by you.',
-      'Your check-in sharpens the Reliability Score.',
-      'The next diner gets an honest ETA.'
-    ]
+    pass: 'SEATED • rate your experience to sharpen the score',
+    statusClass: 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_24px_rgba(16,185,129,0.35)]',
+    statusDot: 'bg-emerald-400'
   }
 ];
 
+let heroEtaTimer = null;
+
+function setHeroEta(targetText) {
+  const el = document.getElementById('heroEtaCountdown');
+  if (!el) return;
+  const targetNum = parseInt(String(targetText || '').replace(/\D/g, ''), 10);
+  const curNum = parseInt(String(el.textContent || '').replace(/\D/g, ''), 10);
+  if (!Number.isFinite(targetNum) || !Number.isFinite(curNum)) {
+    el.textContent = targetText;
+    return;
+  }
+  clearInterval(heroEtaTimer);
+  const steps = 14;
+  let step = 0;
+  const stepMs = Math.max(40, 600 / steps);
+  heroEtaTimer = setInterval(function () {
+    step += 1;
+    const val = Math.round(curNum + (targetNum - curNum) * (step / steps));
+    el.textContent = String(targetText).replace(/\d+/, val) + ' min';
+    if (step >= steps) {
+      clearInterval(heroEtaTimer);
+      heroEtaTimer = null;
+    }
+  }, stepMs);
+}
+
 function heroStage(n) {
   heroStageCurrent = n;
-  const s = heroStages[n];
+  const s = heroStages[n - 1];
+  if (!s) return;
   const badge = document.getElementById('heroStatusBadge');
   const bar = document.getElementById('heroProgressBar');
+  const pct = document.getElementById('heroProgressPct');
+  const eta = document.getElementById('heroEtaCountdown');
+  const passBanner = document.getElementById('heroPassBanner');
+  const passText = document.getElementById('heroPassText');
   if (badge) badge.textContent = s.label;
   if (bar) bar.style.width = s.progress + '%';
-
-  const calls = document.getElementById('heroCallouts');
-  if (calls && s.calls) {
-    const pills = calls.querySelectorAll('.hero-callout');
-    s.calls.forEach(function (text, i) {
-      if (pills[i]) pills[i].textContent = text;
-    });
-  }
+  if (pct) pct.textContent = s.progress + '%';
+  if (eta) setHeroEta(s.eta);
+  if (passText) passText.textContent = s.pass;
+  if (passBanner) passBanner.className = 'mb-7 rounded-xl border ' + s.statusClass + ' backdrop-blur-sm text-xs font-mono px-4 py-3.5 flex items-center gap-3 relative overflow-hidden';
 
   document.querySelectorAll('.hero-stage-btn').forEach(function (btn, i) {
     var active = (i + 1 === n);
     if (active) {
-      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-orange-200 bg-orange-50 text-orange-700 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-orange-100 transition-all active:scale-95';
+      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-emerald-400/60 bg-emerald-500/12 text-emerald-300 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-emerald-500/20 hover:border-emerald-400 transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.25)]';
     } else {
-      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-slate-50 transition-all active:scale-95';
+      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-emerald-500/20 bg-slate-800/40 text-slate-500 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-emerald-500/08 hover:border-emerald-400/40 transition-all active:scale-95';
     }
   });
 }
+
+// Kick off stage 1 so the telemetry card is alive on first paint
+heroStage(1);
 
 // ==========================================
 // Section D — Expandable score breakdown cards
@@ -5908,6 +5950,49 @@ function toggleScoreCard(el) {
     if (icon) {
       icon.setAttribute('data-lucide', 'chevron-up');
       icon.className = 'w-4 h-4 text-slate-400 group-hover:text-orange-500 transition-transform duration-300';
+    }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+// Feature card "Tap/Hover to Inspect" toggle (one card open at a time)
+function toggleFeature(el) {
+  if (!el || !el.classList.contains('feature-card')) return;
+  var body = el.querySelector('.feature-body');
+  if (!body) return;
+  var isOpen = body.style.maxHeight && body.style.maxHeight !== '0px' && body.style.maxHeight !== '';
+  document.querySelectorAll('.feature-card .feature-body').forEach(function (b) {
+    b.style.maxHeight = '0';
+  });
+  if (!isOpen) {
+    body.style.maxHeight = body.scrollHeight + 'px';
+  }
+}
+
+// FAQ accordion toggle (one item open at a time)
+function toggleFaq(el) {
+  if (!el || !el.classList.contains('faq-item')) return;
+  var body = el.querySelector('.faq-body');
+  var icon = el.querySelector('i[data-lucide="chevron-down"], i[data-lucide="chevron-up"]');
+  var isOpen = body.style.maxHeight && body.style.maxHeight !== '0px' && body.style.maxHeight !== '';
+  document.querySelectorAll('.faq-item .faq-body').forEach(function (b) {
+    b.style.maxHeight = '0';
+  });
+  document.querySelectorAll('.faq-item i[data-lucide="chevron-up"]').forEach(function (ic) {
+    ic.setAttribute('data-lucide', 'chevron-down');
+    ic.className = 'w-4 h-4 text-slate-400 transition-transform duration-300';
+  });
+  if (isOpen) {
+    body.style.maxHeight = '0';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'chevron-down');
+      icon.className = 'w-4 h-4 text-slate-400 transition-transform duration-300';
+    }
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'chevron-up');
+      icon.className = 'w-4 h-4 text-slate-400 transition-transform duration-300';
     }
   }
   if (window.lucide) lucide.createIcons();
