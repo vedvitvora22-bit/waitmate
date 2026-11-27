@@ -264,18 +264,18 @@ function renderOwnerDirectory() {
   grid.innerHTML = list.map(r => {
     const isUnlocked = Boolean(getSavedHostPassword(r.id));
     return `
-      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
+      <div class="bg-slate-900/60 backdrop-blur-md border border-white/10 hover:border-emerald-400/40 rounded-2xl overflow-hidden flex flex-col justify-between transition-colors duration-300">
         <div>
-          <div class="h-32 w-full bg-slate-100 relative overflow-hidden">
+          <div class="h-32 w-full bg-slate-950/80 relative overflow-hidden">
             <img src="${r.image_url}" alt="${r.name}" class="w-full h-full object-cover">
             <span class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isUnlocked ? 'bg-emerald-600 text-white' : 'bg-slate-900/80 text-white'}">
               ${isUnlocked ? 'Unlocked' : 'Password Protected'}
             </span>
           </div>
           <div class="p-4">
-            <h4 class="font-heading font-extrabold text-base text-slate-900">${r.name}</h4>
-            <p class="text-xs text-slate-600 mt-0.5">${r.category}</p>
-            <p class="text-[11px] text-slate-600 mt-2">${r.address}</p>
+            <h4 class="font-heading font-extrabold text-base text-white">${r.name}</h4>
+            <p class="text-xs text-slate-400 mt-0.5">${r.category}</p>
+            <p class="text-[11px] text-slate-400 mt-2">${r.address}</p>
           </div>
         </div>
         <div class="px-4 pb-4">
@@ -1636,7 +1636,7 @@ function switchInterface(role) {
   const tabHost = document.getElementById('ownerTabHost');
 
   if (hostSub) hostSub.classList.remove('hidden');
-  if (tabHost) tabHost.className = "px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2";
+  if (tabHost) tabHost.className = "px-4 py-2 font-bold text-sm text-white border-b-2 border-emerald-500 flex items-center gap-2";
   showOwnerDirectory();
   lucide.createIcons();
 }
@@ -2301,9 +2301,9 @@ function setCityFilter(city) {
   currentCity = city;
   document.querySelectorAll('.city-btn').forEach(btn => {
     if (btn.dataset.city === city) {
-      btn.className = "city-btn active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs";
+      btn.className = "city-btn active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white border border-white/20 shadow-xs";
     } else {
-      btn.className = "city-btn px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
+      btn.className = "city-btn px-3 py-1.5 rounded-lg font-semibold bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400";
     }
   });
 
@@ -2315,9 +2315,9 @@ function setAreaFilter(area) {
   currentArea = area;
   document.querySelectorAll('.area-pill').forEach(btn => {
     if (btn.dataset.area === area) {
-      btn.className = "area-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs";
+      btn.className = "area-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white border border-white/20 shadow-xs whitespace-nowrap flex-shrink-0";
     } else {
-      btn.className = "area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
+      btn.className = "area-pill px-3 py-1.5 rounded-lg font-semibold bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400 whitespace-nowrap flex-shrink-0";
     }
   });
   renderRestaurantsGrid();
@@ -2381,11 +2381,11 @@ function renderRestaurantsGrid() {
 
   if (filtered.length === 0) {
     container.innerHTML = `
-      <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200 p-8">
-        <i data-lucide="store" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
-        <h3 class="text-base font-bold text-slate-800">No restaurants match your filters in ${currentCity === 'all' ? 'Mumbai' : currentCity}</h3>
-        <p class="text-xs text-slate-600 mt-1">Try clearing your search filters or selecting another neighborhood.</p>
-        <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-slate-100 border border-slate-300 text-slate-800 rounded-lg text-xs font-bold hover:bg-slate-200">Reset Filters</button>
+      <div class="col-span-full py-16 text-center bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 p-8">
+        <i data-lucide="store" class="w-12 h-12 text-slate-500 mx-auto mb-3"></i>
+        <h3 class="text-base font-bold text-white">No restaurants match your filters in ${currentCity === 'all' ? 'Mumbai' : currentCity}</h3>
+        <p class="text-xs text-slate-400 mt-1">Try clearing your search filters or selecting another neighborhood.</p>
+        <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-slate-800/60 border border-white/10 text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-700/80">Reset Filters</button>
       </div>
     `;
     lucide.createIcons();
@@ -2400,48 +2400,48 @@ function renderRestaurantsGrid() {
     // Live Peak Rush Crowd Indicator
     const parties = stats.active_parties != null ? stats.active_parties : stats.queue_count;
     const wait = stats.estimated_wait_mins || 0;
-    let rushBadgeClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+    let rushBadgeClass = "text-emerald-400 bg-emerald-900/30 border border-emerald-500/40";
     let rushIcon = "🟢";
     let rushLabel = "Walk right in";
     if (parties >= 4 || wait >= 20) {
-      rushBadgeClass = "text-rose-700 bg-rose-50 border border-rose-100";
+      rushBadgeClass = "text-rose-400 bg-rose-900/30 border border-rose-500/40";
       rushIcon = "🔴";
       rushLabel = "Peak Rush";
     } else if (parties >= 1 || (wait > 0 && wait < 20)) {
-      rushBadgeClass = "text-amber-700 bg-amber-50 border border-amber-100";
+      rushBadgeClass = "text-amber-400 bg-amber-900/30 border border-amber-500/40";
       rushIcon = "🟠";
       rushLabel = "Filling fast";
     }
 
-    // Reliability Badge styling
-    let scoreBadgeClass = "score-emerald";
+    // Reliability Badge styling (dark glass variants)
+    let scoreBadgeClass = "border border-emerald-500/40 bg-emerald-900/20 text-emerald-400";
     let scoreIcon = "award";
     if (rel.score < 80) {
-      scoreBadgeClass = "score-rose";
+      scoreBadgeClass = "border border-rose-500/40 bg-rose-900/20 text-rose-400";
       scoreIcon = "alert-circle";
     } else if (rel.score < 90) {
-      scoreBadgeClass = "score-amber";
+      scoreBadgeClass = "border border-amber-500/40 bg-amber-900/20 text-amber-400";
       scoreIcon = "shield-check";
     }
 
     const isCurrentInQueue = activeTicketData && activeTicketData.restaurant_id === r.id && ['waiting', 'notified', 'delayed'].includes(activeTicketData.status);
 
     return `
-      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col group">
+      <div class="bg-slate-900/60 backdrop-blur-md border border-white/10 hover:border-emerald-400/40 rounded-2xl overflow-hidden flex flex-col group transition-colors duration-300">
         
         <!-- Image Header -->
-        <div class="relative h-44 overflow-hidden bg-slate-100">
+        <div class="relative h-44 overflow-hidden bg-slate-950/80">
           <img src="${r.image_url}" alt="${r.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80'">
           
           <!-- Gradient overlay -->
-          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20"></div>
 
           <!-- Top Pills -->
           <div class="absolute top-3 right-3 flex items-center gap-1.5 z-10">
             <span class="badge-tag bg-slate-900/80 backdrop-blur text-white text-[10px] font-bold uppercase tracking-wider">
               ${isTruck ? '🚚 Food Truck' : '🍽️ Dine-in'}
             </span>
-            <span class="badge-tag bg-white/90 backdrop-blur text-slate-900 text-[10px] font-bold">
+            <span class="badge-tag bg-white/10 border border-white/20 text-slate-200 text-[10px] font-bold">
               ${r.price_range}
             </span>
             <span class="badge-tag bg-orange-500/90 text-white text-[10px] font-bold">
@@ -2450,14 +2450,14 @@ function renderRestaurantsGrid() {
           </div>
 
           <!-- Favorite / Bookmark Heart (top-left of cover image, opposite Reliability Score pill) -->
-          <button onclick="toggleFavorite('${r.id}', this)" class="favorite-btn absolute top-3 left-3 w-9 h-9 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center text-slate-900 shadow-md border border-white/70 transition-transform active:scale-90 hover:bg-white z-20" aria-label="${isFavorite(r.id) ? 'Remove from Favorites' : 'Add to Favorites'}" title="${isFavorite(r.id) ? 'Saved ♥' : 'Save to Favorites'}" id="fav-btn-${r.id}">
-            <span id="heart-icon-${r.id}" class="text-2xl leading-none ${isFavorite(r.id) ? 'text-orange-500' : 'text-slate-600'}">${isFavorite(r.id) ? '♥' : '♡'}</span>
+          <button onclick="toggleFavorite('${r.id}', this)" class="favorite-btn absolute top-3 left-3 w-9 h-9 rounded-full bg-white/5 backdrop-blur-md flex items-center justify-center text-white shadow-md border border-white/20 transition-transform active:scale-90 hover:bg-white/10 z-20" aria-label="${isFavorite(r.id) ? 'Remove from Favorites' : 'Add to Favorites'}" title="${isFavorite(r.id) ? 'Saved ♥' : 'Save to Favorites'}" id="fav-btn-${r.id}">
+            <span id="heart-icon-${r.id}" class="text-2xl leading-none ${isFavorite(r.id) ? 'text-orange-500' : 'text-slate-400'}">${isFavorite(r.id) ? '♥' : '♡'}</span>
           </button>
 
           <!-- Bottom Venue Title inside Image -->
           <div class="absolute bottom-3 left-3 right-3">
             <h3 class="font-heading font-extrabold text-lg text-white leading-tight drop-shadow-sm">${r.name}</h3>
-            <p class="text-xs text-slate-200/90 font-medium">${r.category}</p>
+            <p class="text-xs text-slate-400 font-medium">${r.category}</p>
           </div>
 
         </div>
@@ -2465,27 +2465,27 @@ function renderRestaurantsGrid() {
         <!-- Card Body -->
         <div class="p-5 flex-1 flex flex-col justify-between space-y-4">
           
-          <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+          <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
             ${r.description}
           </p>
 
           <div class="flex items-center justify-end pt-1">
-            <button onclick="openWaitInfoModal()" class="text-[10px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition" aria-label="How wait times work">
-              <i data-lucide="info" class="w-3.5 h-3.5"></i> How wait times work
+            <button onclick="openWaitInfoModal()" class="text-[10px] font-bold text-slate-400 hover:text-white flex items-center gap-1 transition" aria-label="How wait times work">
+              <i data-lucide="info" class="w-3.5 h-3.5 text-slate-400"></i> How wait times work
             </button>
           </div>
           <!-- Wait & Reliability Metric Strip -->
-          <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+          <div class="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
             
             <!-- Live Wait Time -->
-            <div class="bg-orange-50/70 rounded-xl p-3 border border-orange-100 flex flex-col justify-center">
-              <span class="text-[10px] font-bold text-orange-800 uppercase tracking-wider flex items-center gap-1">
-                <i data-lucide="clock" class="w-3 h-3 text-orange-600"></i> Estimated Wait
+            <div class="bg-orange-900/15 rounded-xl p-3 border border-orange-500/30 flex flex-col justify-center">
+              <span class="text-[10px] font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1">
+                <i data-lucide="clock" class="w-3 h-3 text-orange-400"></i> Estimated Wait
               </span>
-              <div class="text-xl font-heading font-extrabold text-orange-950 mt-0.5">
+              <div class="text-xl font-heading font-black text-orange-300 mt-0.5 font-mono tabular-nums">
                 ${stats.estimated_wait_mins > 0 ? `${stats.estimated_wait_mins} min` : 'No wait'}
               </div>
-              <span class="text-[10px] text-orange-700 font-medium">
+              <span class="text-[10px] text-orange-300 font-medium">
                 ${stats.queue_count} ${stats.queue_count === 1 ? 'party' : 'parties'} in line (${stats.total_waiting_people} guests)
               </span>
             </div>
@@ -2500,10 +2500,10 @@ function renderRestaurantsGrid() {
                 <span class="text-[9px] sm:text-[10px] font-black underline whitespace-nowrap shrink-0 cursor-pointer hover:opacity-70 transition" onclick="event.stopPropagation(); openReliabilityModal('${r.id}')" title="View full reliability breakdown">Details &rarr;</span>
               </div>
               <div class="flex items-baseline gap-1.5 mt-0.5">
-                <span class="text-xl font-heading font-black">${rel.score}%</span>
-                <span class="text-[11px] font-bold">Grade ${rel.grade}</span>
+                <span class="text-xl font-heading font-black font-mono tabular-nums text-white">${rel.score}%</span>
+                <span class="text-[11px] font-bold text-slate-300">Grade ${rel.grade}</span>
               </div>
-              <span class="text-[10px] font-medium opacity-90">
+              <span class="text-[10px] text-slate-400">
                 ± ${rel.avg_variance_mins}m avg variance
               </span>
             </div>
@@ -2519,40 +2519,40 @@ function renderRestaurantsGrid() {
 
           <!-- Live Host Announcement / Specials Banner -->
           ${r.announcement ? `
-          <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-2">
-            <span class="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1 mb-1">
+          <div class="bg-amber-900/20 border border-amber-500/30 rounded-xl p-2.5 mb-2">
+            <span class="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1 mb-1">
               <i data-lucide="megaphone" class="w-3 h-3"></i> Live Special
             </span>
-            <p class="text-xs text-amber-700 font-medium leading-snug">${r.announcement}</p>
+            <p class="text-xs text-amber-300 font-medium leading-snug">${r.announcement}</p>
           </div>
           ` : ''}
 
           <!-- Bottom Action Buttons -->
           <div class="space-y-2 pt-1">
             ${isCurrentInQueue ? `
-              <button onclick="openTicketModal()" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-slate-900/20">
+              <button onclick="openTicketModal()" class="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-800/60 border border-white/10 text-white shadow-md flex items-center justify-center gap-1.5 hover:bg-slate-700/80 transition">
                 <i data-lucide="ticket" class="w-4 h-4"></i>
                 <span>You're in Queue! View Live Pass</span>
               </button>
             ` : stats.is_queue_open ? `
               <div class="grid grid-cols-2 gap-2">
-                <button onclick="openJoinModal('${r.id}', 'remote')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5">
+                <button onclick="openJoinModal('${r.id}', 'remote')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm flex items-center justify-center gap-1.5 transition">
                   <i data-lucide="smartphone" class="w-3 h-3"></i>
                   <span>Remote Join</span>
                 </button>
-                <button onclick="openJoinModal('${r.id}', 'walk_in')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-100 border border-slate-300 text-slate-800 hover:bg-slate-200 transition flex items-center justify-center gap-1.5">
+                <button onclick="openJoinModal('${r.id}', 'walk_in')" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-800/60 border border-white/10 text-slate-300 hover:bg-slate-700/80 hover:border-white/30 transition flex items-center justify-center gap-1.5">
                   <i data-lucide="map-pin" class="w-3 h-3"></i>
                   <span>Walk-In</span>
                 </button>
               </div>
             ` : `
-              <button disabled class="w-full py-2.5 px-4 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold cursor-not-allowed">
+              <button disabled class="w-full py-2.5 px-4 bg-slate-800/40 text-slate-500 rounded-xl text-xs font-semibold cursor-not-allowed border border-white/5">
                 Queue Currently Paused
               </button>
             `}
 
-            <button onclick="event.stopPropagation(); openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-600 hover:text-slate-800 text-[11px] font-semibold text-center flex items-center justify-center gap-1">
-              <i data-lucide="bar-chart-2" class="w-3 h-3"></i>
+            <button onclick="event.stopPropagation(); openReliabilityModal('${r.id}')" class="w-full py-1.5 text-slate-400 hover:text-white text-[11px] font-semibold text-center flex items-center justify-center gap-1 transition">
+              <i data-lucide="bar-chart-2" class="w-3 h-3 text-slate-400"></i>
               <span>View Reliability History & Heatmap</span>
             </button>
           </div>
@@ -2571,9 +2571,9 @@ function setCategoryFilter(cat) {
   currentCategory = cat;
   document.querySelectorAll('.cat-pill').forEach(btn => {
     if (btn.dataset.cat === cat) {
-      btn.className = "cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white";
+      btn.className = "cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white border border-white/20";
     } else {
-      btn.className = "cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200";
+      btn.className = "cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400";
     }
   });
   renderRestaurantsGrid();
@@ -2661,10 +2661,10 @@ function setJoinChannel(channel) {
   if (badge) {
     if (channel === 'walk_in') {
       badge.textContent = 'Walk-In (I\'m at the restaurant)';
-      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-emerald-700 border-emerald-200 bg-emerald-50";
+      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-emerald-700 border-emerald-500/40 bg-emerald-900/20";
     } else {
       badge.textContent = 'Remote Join (On my way)';
-      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-700 border-slate-200 bg-slate-200/50";
+      badge.className = "text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-700 border-white/20 bg-white/5";
     }
   }
   const eyebrow = document.getElementById('joinModalEyebrow');
@@ -2681,9 +2681,9 @@ function setPartySize(size) {
   document.getElementById('joinPartySizeInput').value = size;
   document.querySelectorAll('.party-btn').forEach(btn => {
     if (parseInt(btn.dataset.size) === size) {
-      btn.className = "party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none bg-orange-500 text-white border-orange-500";
+      btn.className = "party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none bg-emerald-600 text-white border-emerald-400";
     } else {
-      btn.className = "party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none border-slate-200 text-slate-700";
+      btn.className = "party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none border-white/10 text-slate-400";
     }
   });
 }
@@ -2692,9 +2692,9 @@ function setSeatingPref(pref) {
   document.getElementById('joinSeatingPrefInput').value = pref;
   document.querySelectorAll('.pref-btn').forEach(btn => {
     if (btn.dataset.pref === pref) {
-      btn.className = "pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-orange-500 bg-orange-50 text-orange-950";
+      btn.className = "pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-emerald-500 bg-emerald-900/30 text-emerald-300";
     } else {
-      btn.className = "pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400";
+      btn.className = "pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-white/10 text-slate-400 hover:border-emerald-400 hover:bg-white/5";
     }
   });
 }
@@ -2711,12 +2711,12 @@ function showDeviceBlockedDialog(ticket) {
   modal.id = 'deviceBlockedModal';
   modal.className = 'fixed inset-0 z-60 flex items-center justify-center bg-black/60';
   modal.innerHTML = `
-    <div class="bg-white rounded-2xl p-6 w-[92%] max-w-md shadow-2xl border border-slate-200">
-      <h3 class="font-bold text-slate-900 mb-1">Already in a queue</h3>
-      <p class="text-slate-600 text-sm mb-4">You already have an active ticket (#${escapeHtml(String(ticketNum))} at ${escapeHtml(String(venue))}). Finish or leave your current queue before joining another.</p>
+    <div class="bg-slate-900 border border-white/15 text-slate-100 rounded-2xl p-6 w-[92%] max-w-md shadow-2xl">
+      <h3 class="font-bold text-white mb-1">Already in a queue</h3>
+      <p class="text-slate-400 text-sm mb-4">You already have an active ticket (#${escapeHtml(String(ticketNum))} at ${escapeHtml(String(venue))}). Finish or leave your current queue before joining another.</p>
       <div class="flex gap-2">
         <button onclick="closeDeviceBlockedModal(); openTicketModal()" class="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm">View My Active Pass</button>
-        <button onclick="closeDeviceBlockedModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm">Later</button>
+        <button onclick="closeDeviceBlockedModal()" class="px-4 py-2.5 rounded-xl bg-slate-800/60 border border-white/10 text-slate-300 font-bold text-sm hover:bg-slate-700/80">Later</button>
       </div>
     </div>
   `;
@@ -2961,7 +2961,7 @@ function renderExpiredTicketState(d) {
   const statusMsg = document.getElementById('ticketStatusMsg');
   if (statusMsg) {
     statusMsg.textContent = 'This pass has passed its arrival window and is no longer active.';
-    statusMsg.className = 'text-xs text-rose-600 font-medium mt-1';
+    statusMsg.className = 'text-xs text-rose-400 font-medium mt-1';
   }
 }
 
@@ -3173,7 +3173,7 @@ function updateTicketUI() {
   // Reset step 4 (Seated) unless actually seated/completed
   const step4Icon = document.getElementById('step4Icon');
   if (step4Icon && !(d.status === 'seated' || d.status === 'completed')) {
-    step4Icon.className = "w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1";
+    step4Icon.className = "w-5 h-5 mx-auto rounded-full bg-white/10 text-slate-500 flex items-center justify-center mb-1";
     step4Icon.textContent = "4";
   }
 
@@ -3201,13 +3201,13 @@ function updateTicketUI() {
   const arrivalStatusEl = document.getElementById('ticketArrivalStatus');
   if (graceUntil) {
     arrivalStatusEl.textContent = "Grace (+5m)";
-    arrivalStatusEl.className = "font-bold text-amber-800";
+    arrivalStatusEl.className = "font-bold text-amber-400";
   } else if (d.has_arrived) {
     arrivalStatusEl.textContent = "At Venue Entrance";
-    arrivalStatusEl.className = "font-bold text-emerald-600";
+    arrivalStatusEl.className = "font-bold text-emerald-400";
   } else {
     arrivalStatusEl.textContent = "In Queue";
-    arrivalStatusEl.className = "font-bold text-slate-600";
+    arrivalStatusEl.className = "font-bold text-slate-400";
   }
 
   document.getElementById('ticketVenueName').textContent = venueName;
@@ -3221,7 +3221,7 @@ function updateTicketUI() {
   const arrivedAtEl = document.getElementById('ticketArrivedAt');
   if (arrivedAtEl) {
     arrivedAtEl.textContent = d.arrived_time_ist || '–';
-    arrivedAtEl.className = d.has_arrived ? "font-bold text-emerald-700 text-[10px] leading-tight" : "font-bold text-slate-600 text-[10px] leading-tight";
+    arrivedAtEl.className = d.has_arrived ? "font-bold text-emerald-400 text-[10px] leading-tight" : "font-bold text-slate-400 text-[10px] leading-tight";
   }
 
   // Check state transitions & "Table is Near" Alert System
@@ -3236,17 +3236,17 @@ function updateTicketUI() {
   if (isTableReady) {
     document.title = "🔔 TABLE READY NOW! • WaitMate India";
     document.getElementById('ticketEtaCountdown').textContent = "TABLE READY NOW!";
-    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600 animate-pulse";
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-400 animate-pulse";
     document.getElementById('ticketStatusMsg').textContent = "Please proceed directly to the host counter. Your table is waiting.";
     
-    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1 border border-emerald-200 bg-emerald-50";
+    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-200 shadow-sm space-y-1 border border-emerald-500/30 bg-emerald-900/20";
     livePassAlertCard.classList.remove('hidden');
     document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is READY! Please head to the host desk with Token #${d.ticket_number}. We are holding your spot for 5 minutes."`;
 
     tableNearAlert.classList.add('hidden');
 
     // Timeline steps
-    document.getElementById('step3Icon').className = "w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center mb-1 font-bold";
+    document.getElementById('step3Icon').className = "w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.6)] flex items-center justify-center mb-1 font-bold";
     document.getElementById('step3Icon').textContent = "✓";
 
     // Play sound + push notification on first trigger
@@ -3260,24 +3260,24 @@ function updateTicketUI() {
     // Arrived at Venue — Waiting for Host screen
     document.title = "✓ Checked In at Entrance • WaitMate India";
     document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
-    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-600";
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-emerald-400";
     document.getElementById('ticketStatusMsg').textContent = "You're checked in at the entrance. The host will notify you when your table is ready.";
 
     tableNearAlert.classList.add('hidden');
-    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1 border border-emerald-200 bg-emerald-50";
+    livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-200 shadow-sm space-y-1 border border-emerald-500/30 bg-emerald-900/20";
     livePassAlertCard.classList.remove('hidden');
     document.getElementById('livePassAlertText').textContent = `"✓ Checked In at Entrance — Host Notified. You'll receive a sound chime as soon as the restaurant calls your table. Current wait: ~${d.estimated_remaining_mins} mins."`;
 
     // Timeline steps - step 2 (In Queue) is complete, step 3 (Table Ready) pending
-    document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center mb-1 font-bold";
+    document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.6)] flex items-center justify-center mb-1 font-bold";
     document.getElementById('step2Icon').textContent = "✓";
-    document.getElementById('step3Icon').className = "w-5 h-5 mx-auto rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-1";
+    document.getElementById('step3Icon').className = "w-5 h-5 mx-auto rounded-full bg-white/10 text-slate-500 flex items-center justify-center mb-1";
     document.getElementById('step3Icon').textContent = "3";
 
   } else if (isTableNear) {
     document.title = "🚨 (1) TABLE ALMOST READY • WaitMate India";
     document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
-    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-100";
     document.getElementById('ticketStatusMsg').textContent = "Host is clearing a table right now. Please start heading over!";
 
     const alertAcknowledged = acknowledgedAlertForTicket === d.id;
@@ -3287,11 +3287,11 @@ function updateTicketUI() {
       document.getElementById('nearPositionBadge').textContent = `#${d.position_in_line} in line`;
       document.getElementById('nearDistanceNotice').textContent = 'Priority Boarding';
 
-      livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-900 shadow-sm space-y-1";
+      livePassAlertCard.className = "p-3.5 rounded-xl whatsapp-card text-xs text-emerald-200 shadow-sm space-y-1 border border-emerald-500/30 bg-emerald-900/20";
       livePassAlertCard.classList.remove('hidden');
       document.getElementById('livePassAlertText').textContent = `"Namaste ${d.customer_name}! 🍽️ Your table at ${venueName} is less than 4 mins away. Please make your way to the host desk. Table held for 5 mins."`;
 
-      document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold animate-pulse";
+      document.getElementById('step2Icon').className = "w-5 h-5 mx-auto rounded-full bg-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.6)] flex items-center justify-center mb-1 font-bold animate-pulse";
 
       if (!d._hasNearSoundPlayed) {
         d._hasNearSoundPlayed = true;
@@ -3311,7 +3311,7 @@ function updateTicketUI() {
     tableNearAlert.classList.add('hidden');
     livePassAlertCard.classList.add('hidden');
 
-    document.getElementById('step4Icon').className = "w-5 h-5 mx-auto rounded-full bg-blue-500 text-white flex items-center justify-center mb-1 font-bold";
+    document.getElementById('step4Icon').className = "w-5 h-5 mx-auto rounded-full bg-blue-500 text-white shadow-[0_0_12px_rgba(59,130,246,0.6)] flex items-center justify-center mb-1 font-bold";
     document.getElementById('step4Icon').textContent = "✓";
 
     // Open post-seating feedback dialog ONLY on the Customer view, for this
@@ -3333,7 +3333,7 @@ function updateTicketUI() {
     // Normal waiting
     document.title = `(${d.position_in_line}) In Queue: ${venueName} • WaitMate India`;
     document.getElementById('ticketEtaCountdown').textContent = `${d.estimated_remaining_mins === 0 ? 'Up Next' : '~' + d.estimated_remaining_mins + (d.estimated_remaining_mins === 1 ? ' min remaining' : ' mins remaining')}`;
-    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-900";
+    document.getElementById('ticketEtaCountdown').className = "text-2xl font-black text-slate-100";
     document.getElementById('ticketStatusMsg').textContent = "You're in good shape! Wait times are estimates that improve as diners leave feedback.";
     tableNearAlert.classList.add('hidden');
     livePassAlertCard.classList.add('hidden');
@@ -3353,7 +3353,7 @@ function updateTicketUI() {
     arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-800 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm opacity-90 cursor-default";
   } else if (arrivedBtn) {
     arrivedBtn.innerHTML = `<i data-lucide="map-pin-check" class="w-4 h-4"></i> <span>I've Arrived at the Venue</span>`;
-    arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm";
+    arrivedBtn.className = "w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/25";
     arrivedBtn.onclick = dinerArrivedAction;
   }
 
@@ -4269,9 +4269,9 @@ function selectFbRating(rating) {
   document.getElementById('fbRatingInput').value = rating;
   document.querySelectorAll('.fb-opt-btn').forEach(btn => {
     if (btn.dataset.rating === rating) {
-      btn.className = "fb-opt-btn p-3 border rounded-xl font-semibold text-center border-emerald-500 bg-emerald-50 text-emerald-900";
+      btn.className = "fb-opt-btn p-3 border rounded-xl font-semibold text-center border-emerald-500 bg-emerald-900/20 text-emerald-300";
     } else {
-      btn.className = "fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-slate-300 text-slate-700";
+      btn.className = "fb-opt-btn p-3 border rounded-xl font-semibold text-center border-white/10 hover:border-emerald-400 hover:bg-white/5 text-slate-400";
     }
   });
 }
@@ -4498,11 +4498,11 @@ function renderHostDashboard() {
   const openBadge = document.getElementById('hostQueueOpenBadge');
   const toggleBtn = document.getElementById('hostToggleQueueBtn');
   if (stats.is_queue_open) {
-    openBadge.className = "bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300";
+    openBadge.className = "bg-emerald-900/30 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]";
     openBadge.textContent = "QUEUE ACTIVE";
     toggleBtn.innerHTML = `<i data-lucide="pause" class="w-3.5 h-3.5"></i> <span>Pause Queue</span>`;
   } else {
-    openBadge.className = "bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-300";
+    openBadge.className = "bg-rose-900/30 text-rose-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-500/40 shadow-[0_0_10px_rgba(190,30,45,0.35)]";
     openBadge.textContent = "QUEUE PAUSED";
     toggleBtn.innerHTML = `<i data-lucide="play" class="w-3.5 h-3.5"></i> <span>Open Queue</span>`;
   }
@@ -4537,15 +4537,15 @@ function renderHostDashboard() {
   }
 
   tbody.innerHTML = visibleQueue.map((q, idx) => {
-    let statusPill = `<span class="badge-tag bg-slate-100 text-slate-700">Waiting</span>`;
+    let statusPill = `<span class="badge-tag bg-white/5 text-slate-400 border border-white/10">Waiting</span>`;
     if (q.status === 'notified') {
-      statusPill = `<span class="badge-tag bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse font-bold">Table Ready</span>`;
+      statusPill = `<span class="badge-tag bg-emerald-900/30 text-emerald-400 border border-emerald-500/40 animate-pulse font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]">Table Ready</span>`;
     } else if (q.status === 'delayed') {
-      statusPill = `<span class="badge-tag bg-amber-100 text-amber-800 border border-amber-300">Delayed (+${q.delay_mins}m)</span>`;
+      statusPill = `<span class="badge-tag bg-amber-900/30 text-amber-400 border border-amber-500/40">Delayed (+${q.delay_mins}m)</span>`;
     } else if (q.status === 'seated') {
-      statusPill = `<span class="badge-tag bg-blue-100 text-blue-800">Seated</span>`;
+      statusPill = `<span class="badge-tag bg-blue-900/30 text-blue-400 border border-blue-500/40">Seated</span>`;
     } else if (q.status === 'cancelled' || q.status === 'no_show') {
-      statusPill = `<span class="badge-tag bg-rose-100 text-rose-800">${q.status}</span>`;
+      statusPill = `<span class="badge-tag bg-rose-900/30 text-rose-400 border border-rose-500/40">${q.status}</span>`;
     }
 
     const join = hostJoinInfo(q);
@@ -4553,60 +4553,60 @@ function renderHostDashboard() {
     const isWalkIn = source === 'walk-in' || q.channel === 'walk_in' || q['09_channel'] === 'walk_in';
     const channel = (q.channel || q['09_channel'] || 'remote').toLowerCase();
     const channelLabel = isWalkIn ? '🚶 Walk-In Guest' : '🌐 Remote Join';
-    const channelClass = isWalkIn ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+    const channelClass = isWalkIn ? 'bg-amber-900/20 text-amber-400 border border-amber-500/30' : 'bg-indigo-900/20 text-indigo-400 border border-indigo-500/30';
 
     // Customer Status column badge
     let customerStatusBadge = '';
     if (q.status === 'cancelled') {
-      customerStatusBadge = `<span class="badge-tag bg-rose-50 text-rose-700 border border-rose-200 font-bold">Cancelled Queue</span>`;
+      customerStatusBadge = `<span class="badge-tag bg-rose-900/20 text-rose-400 border border-rose-500/40 font-bold">Cancelled Queue</span>`;
     } else if (q.status === 'delayed') {
-      customerStatusBadge = `<span class="badge-tag bg-amber-50 text-amber-700 border border-amber-200 font-bold">+5 Mins Requested</span>`;
+      customerStatusBadge = `<span class="badge-tag bg-amber-900/20 text-amber-400 border border-amber-500/40 font-bold">+5 Mins Requested</span>`;
     } else if (q.has_arrived) {
-      customerStatusBadge = `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">Arrived at Venue</span>`;
+      customerStatusBadge = `<span class="badge-tag bg-emerald-900/30 text-emerald-400 border border-emerald-500/40 font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]">Arrived at Venue</span>`;
     } else {
-      customerStatusBadge = `<span class="badge-tag bg-slate-50 text-slate-700 border border-slate-200">Awaiting Arrival</span>`;
+      customerStatusBadge = `<span class="badge-tag bg-white/5 text-slate-400 border border-white/10">Awaiting Arrival</span>`;
     }
 
     // Disable Seat button if customer hasn't arrived
     const seatDisabled = !q.has_arrived;
     const seatButtonClass = seatDisabled 
-      ? 'px-2.5 py-1 bg-slate-300 text-slate-500 rounded font-bold text-[11px] cursor-not-allowed flex items-center gap-1' 
-      : 'px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1';
+      ? 'px-2.5 py-1 bg-white/5 text-slate-500 border border-white/10 rounded font-bold text-[11px] cursor-not-allowed flex items-center gap-1' 
+      : 'px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1';
     const seatButtonOnClick = seatDisabled ? '' : `onclick="hostAction('${q.id}', 'seat')" `;
     const seatTooltip = seatDisabled ? ' title="Waiting for arrival"' : '';
 
     return `
-      <tr class="hover:bg-slate-50 transition ${q.status === 'seated' ? 'opacity-60 bg-slate-50/50' : ''}">
+      <tr class="hover:bg-white/5 transition ${q.status === 'seated' ? 'opacity-60 bg-white/5' : ''}">
         
-        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+        <td class="py-3 px-4 font-mono font-bold text-slate-100">
           <div class="flex items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-[10px]">#${idx + 1}</span>
+            <span class="w-6 h-6 rounded-full bg-white/5 text-slate-400 border border-white/10 flex items-center justify-center text-[10px]">#${idx + 1}</span>
             <span>${q.ticket_number}</span>
           </div>
           <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border ${channelClass}">${channelLabel}</span>
-          <div class="text-[10px] text-slate-600 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">Joined ${join.ist} · ${join.relative}</div>
         </td>
 
         <td class="py-3 px-4">
-          <div class="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">${q.customer_name}</div>
-          ${q.special_requests ? `<div class="text-[10px] text-amber-700 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
+          <div class="font-bold text-slate-100 flex items-center gap-1.5 flex-wrap">${q.customer_name}</div>
+          ${q.special_requests ? `<div class="text-[10px] text-amber-400 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
         <td class="py-3 px-4">
-          <div class="font-semibold text-slate-800">${q.party_size} Guests</div>
-          <div class="text-[10px] text-slate-600">${q.seating_pref}</div>
+          <div class="font-semibold text-slate-200">${q.party_size} Guests</div>
+          <div class="text-[10px] text-slate-500">${q.seating_pref}</div>
         </td>
 
         <td class="py-3 px-4">
-          <div class="text-slate-800 font-medium">Joined ${join.relative}</div>
-          <div class="text-[10px] text-slate-600">Promised: ${q.promised_wait_mins ?? q.estimated_wait_mins ?? 0}m</div>
+          <div class="text-slate-200 font-medium">Joined ${join.relative}</div>
+          <div class="text-[10px] text-slate-500">Promised: ${q.promised_wait_mins ?? q.estimated_wait_mins ?? 0}m</div>
         </td>
 
         <td class="py-3 px-4">
           <div class="flex items-center gap-1.5 flex-wrap">
             ${statusPill}
-            ${idx < 2 && ['waiting', 'delayed'].includes(q.status) ? `<span class="badge-tag bg-orange-100 text-orange-900 border border-orange-300 font-bold animate-pulse">🚨 Near (#${idx+1})</span>` : ''}
-            ${q.has_arrived ? `<span class="badge-tag bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ At Entrance</span>` : `<span class="text-[10px] text-slate-600">En route</span>`}
+            ${idx < 2 && ['waiting', 'delayed'].includes(q.status) ? `<span class="badge-tag bg-orange-900/30 text-orange-400 border border-orange-500/30 font-bold animate-pulse">🚨 Near (#${idx+1})</span>` : ''}
+            ${q.has_arrived ? `<span class="badge-tag bg-emerald-900/30 text-emerald-400 border border-emerald-500/40 font-bold">✓ At Entrance</span>` : `<span class="text-[10px] text-amber-400">En route</span>`}
           </div>
         </td>
 
@@ -4627,12 +4627,12 @@ function renderHostDashboard() {
                 <i data-lucide="check" class="w-3 h-3"></i> Seat
               </button>
 
-              <button onclick="hostAction('${q.id}', 'remove')" class="px-2 py-1 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 rounded text-[11px] transition" title="Mark No-Show">
+              <button onclick="hostAction('${q.id}', 'remove')" class="px-2 py-1 bg-white/5 hover:bg-rose-500/30 text-slate-400 hover:text-rose-400 border border-white/10 rounded text-[11px] transition" title="Mark No-Show">
                 <i data-lucide="user-x" class="w-3 h-3"></i>
               </button>
             </div>
           ` : `
-            <span class="text-[11px] text-slate-600 font-medium">Completed</span>
+            <span class="text-[11px] text-slate-400 font-medium">Completed</span>
           `}
         </td>
 

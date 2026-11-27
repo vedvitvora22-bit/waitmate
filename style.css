@@ -101,11 +101,11 @@ body {
 /* Ticket Notch Cutout */
 .ticket-container {
   position: relative;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: #0b1120;
+  border: 1px solid rgba(16, 185, 129, 0.35);
   border-radius: 1.25rem;
   box-sizing: border-box;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(16, 185, 129, 0.25);
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
 }
@@ -121,7 +121,7 @@ body {
   top: 58%;
   width: 24px;
   height: 24px;
-  background-color: #f1f5f9;
+  background-color: #060913;
   border-radius: 50%;
   transform: translateY(-50%);
   z-index: 10;
@@ -134,7 +134,7 @@ body {
 }
 
 .ticket-divider {
-  border-top: 2px dashed #e2e8f0;
+  border-top: 2px dashed rgba(255, 255, 255, 0.1);
 }
 
 /* Progress Ring Animation */
@@ -190,9 +190,9 @@ body {
 
 /* WhatsApp Notification Preview */
 .whatsapp-card {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-left: 4px solid #16a34a;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-left: 4px solid #10b981;
 }
 
 .badge-tag {
@@ -472,8 +472,8 @@ button[aria-label="Toggle password visibility"] i {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .faq-item:hover {
-  border-color: #f97316;
-  box-shadow: 0 4px 12px -2px rgba(249, 115, 22, 0.08);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.10);
 }
 .faq-body {
   transition: max-height 0.4s ease;

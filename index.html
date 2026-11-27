@@ -155,10 +155,10 @@
     <!-- ========================================================================= -->
     <!-- INTERFACE 1: CUSTOMER VIEW (DISCOVERY, JOIN QUEUE & DIGITAL PASS)        -->
     <!-- ========================================================================= -->
-    <div id="landingView">
+    <div id="landingView" class="bg-[#060913] text-slate-100 min-h-screen">
 
       <!-- Sticky Top Navbar (Landing Page only) — frosted dark glass -->
-      <header id="topNavbar" class="sticky top-0 z-40 bg-slate-950/75 backdrop-blur-xl border-b border-white/10 shadow-lg">
+      <header id="topNavbar" class="sticky top-0 z-40 bg-[#060913]/80 backdrop-blur-xl border-b border-white/10 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
 
           <!-- Brand + live status badge -->
@@ -177,7 +177,7 @@
           </div>
 
           <!-- Smooth-scroll section links -->
-          <nav class="hidden sm:flex items-center gap-7 text-sm font-medium text-slate-300">
+          <nav class="hidden sm:flex items-center gap-7 text-sm font-medium text-slate-400">
             <a href="#features" onclick="scrollToSection('features')" class="hover:text-white transition-colors">Features</a>
             <a href="#steps" onclick="scrollToSection('steps')" class="hover:text-white transition-colors">How It Works</a>
             <a href="#features" onclick="scrollToSection('features')" class="hover:text-white transition-colors">Score Guide</a>
@@ -221,7 +221,7 @@
                 Skip the Line. <br class="hidden sm:block">
                 <span class="wm-shimmer">Know Your Real Wait Time.</span>
               </h1>
-              <p class="text-lg sm:text-xl text-slate-300 leading-relaxed mb-10 max-w-lg">
+              <p class="text-lg sm:text-xl text-slate-400 leading-relaxed mb-10 max-w-lg">
                 Check live restaurant queues across Mumbai, see honest AI-calculated ETA and Reliability scores, and join remotely before stepping out.
               </p>
               <div class="flex flex-wrap gap-3">
@@ -238,7 +238,7 @@
 
             <!-- Right Column: Interactive Demo Card (futuristic dark glass) -->
             <div class="relative flex flex-col items-center">
-              <div class="w-full sm:w-[430px] bg-slate-900/80 backdrop-blur-xl border border-emerald-500/20 shadow-2xl relative overflow-hidden z-10">
+              <div class="w-full sm:w-[430px] bg-slate-900/50 backdrop-blur-md border border-white/10 hover:border-emerald-400/40 transition-colors relative overflow-hidden z-10">
                 <div class="p-6 sm:p-8 relative z-10">
                   <div class="flex items-center justify-between mb-6">
                     <div class="flex items-center gap-2">
@@ -258,11 +258,11 @@
 
                   <!-- Score Strip -->
                   <div class="grid grid-cols-2 gap-4 mb-7">
-                    <div class="bg-slate-950/60 rounded-xl p-4 border border-emerald-500/20">
+                    <div class="bg-slate-900/40 rounded-xl p-4 border border-white/10">
                       <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">ETA Score</span>
                       <div class="text-2xl font-heading font-extrabold text-white mt-1">~22 min</div>
                     </div>
-                    <div class="bg-slate-950/60 rounded-xl p-4 border border-emerald-500/20">
+                    <div class="bg-slate-900/40 rounded-xl p-4 border border-white/10">
                       <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Reliability Score</span>
                       <div class="flex items-baseline gap-1 mt-1">
                         <span class="text-2xl font-heading font-extrabold text-emerald-400" id="heroReliabilityNum">94</span>
@@ -277,7 +277,7 @@
                       <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live Queue Progress</span>
                       <span id="heroProgressPct" class="text-[10px] font-bold text-emerald-400 font-mono">0%</span>
                     </div>
-                    <div class="w-full bg-slate-950/60 rounded-full h-2.5 overflow-hidden border border-white/5">
+                    <div class="w-full bg-slate-900/30 rounded-full h-2.5 overflow-hidden border border-white/10">
                       <div id="heroProgressBar" class="h-2.5 bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-400 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all duration-700 ease-out" style="width: 0%"></div>
                     </div>
                   </div>
@@ -303,15 +303,15 @@
 
               <!-- Stage Buttons -->
               <div class="mt-8 w-full sm:w-[430px] grid grid-cols-3 gap-2">
-                <button onclick="heroStage(1)" id="heroBtn1" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-emerald-500/20 bg-slate-800/40 text-slate-500 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-emerald-500/08 hover:border-emerald-400/40 transition-all active:scale-95">
+                <button onclick="heroStage(1)" id="heroBtn1" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-white/10 bg-slate-900/40 text-slate-400 text-sm font-semibold flex flex-col items-center gap-1.5 hover:border-emerald-400/40 transition-colors active:scale-95">
                   <span class="text-[10px] text-slate-400">Step 1</span>
                   <span class="font-semibold leading-none">Remote Join</span>
                 </button>
-                <button onclick="heroStage(2)" id="heroBtn2" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-emerald-500/20 bg-slate-800/40 text-slate-500 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-emerald-500/08 hover:border-emerald-400/40 transition-all active:scale-95">
+                <button onclick="heroStage(2)" id="heroBtn2" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-white/10 bg-slate-900/40 text-slate-400 text-sm font-semibold flex flex-col items-center gap-1.5 hover:border-emerald-400/40 transition-colors active:scale-95">
                   <span class="text-[10px] text-slate-400">Step 2</span>
                   <span class="font-semibold leading-none">Tap "I've Arrived"</span>
                 </button>
-                <button onclick="heroStage(3)" id="heroBtn3" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-emerald-500/20 bg-slate-800/40 text-slate-500 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-emerald-500/08 hover:border-emerald-400/40 transition-all active:scale-95">
+                <button onclick="heroStage(3)" id="heroBtn3" class="hero-stage-btn px-4 py-3.5 rounded-xl border border-white/10 bg-slate-900/40 text-slate-400 text-sm font-semibold flex flex-col items-center gap-1.5 hover:border-emerald-400/40 transition-colors active:scale-95">
                   <span class="text-[10px] text-slate-400">Step 3</span>
                   <span class="font-semibold leading-none">Seated &amp; Rated</span>
                 </button>
@@ -329,21 +329,21 @@
       <!-- ========================================================================= -->
       <!-- 3-METRIC PROOF BAR                                                        -->
       <!-- ========================================================================= -->
-      <section id="proofBar" class="bg-slate-900 text-white py-12 sm:py-16">
+      <section id="proofBar" class="bg-[#060913] text-white py-12 sm:py-16">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="reveal reveal-hover bg-slate-800/50 backdrop-blur-sm p-8 sm:p-10 rounded-2xl border border-slate-700/50">
-              <span class="text-xs font-bold text-orange-400 uppercase tracking-wider mb-2 block">12+ Live Venues</span>
+            <div class="reveal reveal-hover bg-slate-900/50 backdrop-blur-md p-8 sm:p-10 rounded-2xl border border-white/10 hover:border-emerald-400/40 transition-colors">
+              <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 block">12+ Live Venues</span>
               <div class="text-3xl sm:text-4xl font-heading font-extrabold tracking-tight">Restaurants &amp; food trucks</div>
               <p class="text-xs text-slate-400 mt-3 max-w-xs">Zero commission — on every order, forever.</p>
             </div>
-            <div class="reveal reveal-hover bg-slate-800/50 backdrop-blur-sm p-8 sm:p-10 rounded-2xl border border-slate-700/50">
+            <div class="reveal reveal-hover bg-slate-900/50 backdrop-blur-md p-8 sm:p-10 rounded-2xl border border-white/10 hover:border-emerald-400/40 transition-colors">
               <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 block">±3 Min AI ETA</span>
               <div class="text-3xl sm:text-4xl font-heading font-extrabold tracking-tight">Real-time queue velocity</div>
               <p class="text-xs text-slate-400 mt-3 max-w-xs">Live queue length + Groq rush calibration, quoted honestly.</p>
             </div>
-            <div class="reveal reveal-hover bg-slate-800/50 backdrop-blur-sm p-8 sm:p-10 rounded-2xl border border-slate-700/50">
-              <span class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 block">0 Ghost No-Shows</span>
+            <div class="reveal reveal-hover bg-slate-900/50 backdrop-blur-md p-8 sm:p-10 rounded-2xl border border-white/10 hover:border-emerald-400/40 transition-colors">
+              <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 block">0 Ghost No-Shows</span>
               <div class="text-3xl sm:text-4xl font-heading font-extrabold tracking-tight">Verified arrival gate</div>
               <p class="text-xs text-slate-400 mt-3 max-w-xs">Hosts seat remote diners only after "I've Arrived" check-in.</p>
             </div>
@@ -354,61 +354,61 @@
       <!-- ========================================================================= -->
       <!-- WHAT WAITMATE SOLVES — INTERACTIVE 4-CARD FEATURE GRID                    -->
       <!-- ========================================================================= -->
-      <section id="features" class="py-14 sm:py-20 bg-slate-50">
+      <section id="features" class="py-14 sm:py-20 bg-[#060913]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-14">
-            <h2 class="text-3xl font-heading font-extrabold text-slate-900 mb-3">What WaitMate Solves</h2>
-            <p class="text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">Tap or hover any card to inspect how each part of the queue works.</p>
+            <h2 class="text-3xl font-heading font-extrabold text-white mb-3">What WaitMate Solves</h2>
+            <p class="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">Tap or hover any card to inspect how each part of the queue works.</p>
           </div>
           <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6" id="featuresGrid">
             <!-- Card 1: Live ETA Score -->
-            <div class="feature-card group reveal reveal-hover bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 hover:border-orange-200 hover:shadow-lg transition-all cursor-pointer" onclick="toggleFeature(this)" id="featureCard1" role="button" tabindex="0">
-              <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold mb-6 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+            <div class="feature-card group reveal reveal-hover bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/10 p-8 sm:p-10 hover:border-emerald-400/40 transition-colors cursor-pointer" onclick="toggleFeature(this)" id="featureCard1" role="button" tabindex="0">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold mb-6 group-hover:bg-emerald-500/20 group-hover:text-emerald-400 transition-colors">
                 <i data-lucide="clock" class="w-5 h-5"></i>
               </div>
-              <h3 class="text-lg font-bold text-slate-900 mb-2">Live ETA Score</h3>
-              <p class="text-sm text-slate-600 leading-relaxed mb-4">Realistic arrival times from party size, queue length, and table turnover.</p>
+              <h3 class="text-lg font-bold text-white mb-2">Live ETA Score</h3>
+              <p class="text-sm text-slate-400 leading-relaxed mb-4">Realistic arrival times from party size, queue length, and table turnover.</p>
               <div class="feature-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="pt-4 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="pt-4 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   Your ETA is estimated from the <strong>live queue length</strong> ahead of you, the <strong>active party sizes</strong> (a party of 6 takes longer than a party of 2), and the venue's <strong>average table turnover speed</strong>. <strong>Groq AI rush adjustments</strong> nudge the estimate up during detected rush spikes — so the number you see is the number you get.
                 </div>
               </div>
             </div>
             <!-- Card 2: Reliability Grade -->
-            <div class="feature-card group reveal reveal-hover bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 hover:border-emerald-200 hover:shadow-lg transition-all cursor-pointer" onclick="toggleFeature(this)" id="featureCard2" role="button" tabindex="0">
-              <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <div class="feature-card group reveal reveal-hover bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/10 p-8 sm:p-10 hover:border-emerald-400/40 transition-colors cursor-pointer" onclick="toggleFeature(this)" id="featureCard2" role="button" tabindex="0">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold mb-6 group-hover:bg-emerald-500/20 group-hover:text-emerald-400 transition-colors">
                 <i data-lucide="shield-check" class="w-5 h-5"></i>
               </div>
-              <h3 class="text-lg font-bold text-slate-900 mb-2">Reliability Grade (A–D)</h3>
-              <p class="text-sm text-slate-600 leading-relaxed mb-4">Historical on-time seating accuracy and low wait-time variance.</p>
+              <h3 class="text-lg font-bold text-white mb-2">Reliability Grade (A–D)</h3>
+              <p class="text-sm text-slate-400 leading-relaxed mb-4">Historical on-time seating accuracy and low wait-time variance.</p>
               <div class="feature-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="pt-4 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="pt-4 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   Reliability reflects <strong>historical on-time seating accuracy</strong> — how often the restaurant seats diners within the promised ETA. It weighs <strong>verified "I've Arrived" check-ins</strong> and favors venues with <strong>low wait-time variance</strong>. A 94% Grade A score means the wait you're quoted is the wait you'll get.
                 </div>
               </div>
             </div>
             <!-- Card 3: Verified "I've Arrived" Gate -->
-            <div class="feature-card group reveal reveal-hover bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 hover:border-amber-200 hover:shadow-lg transition-all cursor-pointer" onclick="toggleFeature(this)" id="featureCard3" role="button" tabindex="0">
-              <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold mb-6 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+            <div class="feature-card group reveal reveal-hover bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/10 p-8 sm:p-10 hover:border-emerald-400/40 transition-colors cursor-pointer" onclick="toggleFeature(this)" id="featureCard3" role="button" tabindex="0">
+              <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold mb-6 group-hover:bg-cyan-500/20 group-hover:text-cyan-400 transition-colors">
                 <i data-lucide="map-pin-check" class="w-5 h-5"></i>
               </div>
-              <h3 class="text-lg font-bold text-slate-900 mb-2">Verified "I've Arrived" Gate</h3>
-              <p class="text-sm text-slate-600 leading-relaxed mb-4">Hosts only seat remote diners once they tap "I've Arrived" at the venue.</p>
+              <h3 class="text-lg font-bold text-white mb-2">Verified "I've Arrived" Gate</h3>
+              <p class="text-sm text-slate-400 leading-relaxed mb-4">Hosts only seat remote diners once they tap "I've Arrived" at the venue.</p>
               <div class="feature-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="pt-4 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="pt-4 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   When you join remotely, your rank is locked — but the host only seats you after you tap <strong>"I've Arrived"</strong> at the venue entrance. This confirms your physical presence before a table is assigned, so remote joiners can't hold tables they never show up for and walk-in guests aren't skipped unfairly. Every check-in also feeds the Reliability Score, keeping the whole network honest.
                 </div>
               </div>
             </div>
             <!-- Card 4: +5 Mins &amp; Instant Cancel Controls -->
-            <div class="feature-card group reveal reveal-hover bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 hover:border-rose-200 hover:shadow-lg transition-all cursor-pointer" onclick="toggleFeature(this)" id="featureCard4" role="button" tabindex="0">
-              <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold mb-6 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+            <div class="feature-card group reveal reveal-hover bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/10 p-8 sm:p-10 hover:border-emerald-400/40 transition-colors cursor-pointer" onclick="toggleFeature(this)" id="featureCard4" role="button" tabindex="0">
+              <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold mb-6 group-hover:bg-cyan-500/20 group-hover:text-cyan-400 transition-colors">
                 <i data-lucide="clock-plus" class="w-5 h-5"></i>
               </div>
-              <h3 class="text-lg font-bold text-slate-900 mb-2">+5 Mins &amp; Instant Cancel Controls</h3>
-              <p class="text-sm text-slate-600 leading-relaxed mb-4">One-tap status updates prevent queue bottlenecks.</p>
+              <h3 class="text-lg font-bold text-white mb-2">+5 Mins &amp; Instant Cancel Controls</h3>
+              <p class="text-sm text-slate-400 leading-relaxed mb-4">One-tap status updates prevent queue bottlenecks.</p>
               <div class="feature-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="pt-4 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="pt-4 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   Stuck in traffic? Tap <strong>"+5 Mins"</strong> to gracefully delay your turn without losing your place. Can't make it? <strong>Instant Cancel</strong> frees the table for the next diner immediately. Both updates reflect on the Host Stand in real time.
                 </div>
               </div>
@@ -420,39 +420,39 @@
       <!-- ========================================================================= -->
       <!-- FROM BROWSE TO SEATED — 5-STEP HORIZONTAL TIMELINE                        -->
       <!-- ========================================================================= -->
-      <section id="steps" class="py-14 sm:py-20">
+      <section id="steps" class="py-14 sm:py-20 bg-[#060913]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-14">
-            <h2 class="text-3xl font-heading font-extrabold text-slate-900 mb-3">From Browse to Seated in 5 Simple Steps</h2>
-            <p class="text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">The complete diner journey, from discovery to the table.</p>
+            <h2 class="text-3xl font-heading font-extrabold text-white mb-3">From Browse to Seated in 5 Simple Steps</h2>
+            <p class="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">The complete diner journey, from discovery to the table.</p>
           </div>
           <div class="relative timeline-wrap">
-            <span class="absolute left-0 right-0 top-[56px] h-[1px] bg-slate-200 z-0 hidden md:block"></span>
+            <span class="absolute left-0 right-0 top-[56px] h-[1px] bg-white/10 z-0 hidden md:block"></span>
             <div class="grid grid-cols-1 md:grid-cols-5 gap-6 items-start">
-              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover border border-transparent rounded-2xl p-4">
+              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-emerald-400/40 transition-colors">
                 <span class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-heading font-extrabold text-lg shrink-0 shadow-lg z-10 relative">01</span>
-                <h3 class="font-bold text-slate-900 text-sm">Compare Venues &amp; Scores</h3>
-                <p class="text-xs text-slate-500 leading-relaxed">Check live ETA and Reliability scores before you leave.</p>
+                <h3 class="font-bold text-white text-sm">Compare Venues &amp; Scores</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">Check live ETA and Reliability scores before you leave.</p>
               </div>
-              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover border border-transparent rounded-2xl p-4">
+              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-emerald-400/40 transition-colors">
                 <span class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-heading font-extrabold text-lg shrink-0 shadow-lg z-10 relative">02</span>
-                <h3 class="font-bold text-slate-900 text-sm">Join Queue Remotely</h3>
-                <p class="text-xs text-slate-500 leading-relaxed">Tap Remote Join to lock your rank before you step out.</p>
+                <h3 class="font-bold text-white text-sm">Join Queue Remotely</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">Tap Remote Join to lock your rank before you step out.</p>
               </div>
-              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover border border-transparent rounded-2xl p-4">
+              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-emerald-400/40 transition-colors">
                 <span class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-heading font-extrabold text-lg shrink-0 shadow-lg z-10 relative">03</span>
-                <h3 class="font-bold text-slate-900 text-sm">Track Live Position</h3>
-                <p class="text-xs text-slate-500 leading-relaxed">Watch your rank and ETA update live on your pass.</p>
+                <h3 class="font-bold text-white text-sm">Track Live Position</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">Watch your rank and ETA update live on your pass.</p>
               </div>
-              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover border border-transparent rounded-2xl p-4">
+              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-emerald-400/40 transition-colors">
                 <span class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-heading font-extrabold text-lg shrink-0 shadow-lg z-10 relative">04</span>
-                <h3 class="font-bold text-slate-900 text-sm">Tap "I've Arrived" at Door</h3>
-                <p class="text-xs text-slate-500 leading-relaxed">Confirm presence so the host seats you in fair order.</p>
+                <h3 class="font-bold text-white text-sm">Tap "I've Arrived" at Door</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">Confirm presence so the host seats you in fair order.</p>
               </div>
-              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover border border-transparent rounded-2xl p-4">
+              <div class="flex flex-col items-center gap-3 text-center reveal reveal-hover bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-emerald-400/40 transition-colors">
                 <span class="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-heading font-extrabold text-lg shrink-0 shadow-lg z-10 relative">05</span>
-                <h3 class="font-bold text-slate-900 text-sm">Get Seated &amp; Rate Experience</h3>
-                <p class="text-xs text-slate-500 leading-relaxed">Your check-in sharpens the Reliability Score.</p>
+                <h3 class="font-bold text-white text-sm">Get Seated &amp; Rate Experience</h3>
+                <p class="text-xs text-slate-400 leading-relaxed">Your check-in sharpens the Reliability Score.</p>
               </div>
             </div>
           </div>
@@ -463,35 +463,35 @@
       <!-- ========================================================================= -->
       <!-- BUILT FOR BOTH SIDES — AUDIENCE COMPARISON                                -->
       <!-- ========================================================================= -->
-      <section id="audience" class="py-14 sm:py-20 bg-white">
+      <section id="audience" class="py-14 sm:py-20 bg-[#060913]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-14">
-            <h2 class="text-3xl font-heading font-extrabold text-slate-900 mb-3">Built For Both Sides</h2>
-            <p class="text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">One platform, two dedicated workspaces — built for diners and for restaurants.</p>
+            <h2 class="text-3xl font-heading font-extrabold text-white mb-3">Built For Both Sides</h2>
+            <p class="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">One platform, two dedicated workspaces — built for diners and for restaurants.</p>
           </div>
           <div class="grid md:grid-cols-2 gap-8">
             <!-- For Diners -->
-            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-8 sm:p-10">
+            <div class="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-8 sm:p-10 hover:border-emerald-400/40 transition-colors">
               <div class="flex items-center gap-2 mb-5">
-                <i data-lucide="utensils" class="w-5 h-5 text-orange-500"></i>
-                <h3 class="font-bold text-lg text-slate-900">For Diners</h3>
+                <i data-lucide="utensils" class="w-5 h-5 text-emerald-400"></i>
+                <h3 class="font-bold text-lg text-white">For Diners</h3>
               </div>
-              <ul class="space-y-3 text-sm text-slate-600 mb-8">
+              <ul class="space-y-3 text-sm text-slate-400 mb-8">
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> Live wait transparency across Mumbai venues</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> Join queues remotely before you step out</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> Arrival chimes &amp; table-near alerts</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> +5 min buffer &amp; instant cancel controls</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> Post-meal rating that sharpens Reliability Scores</li>
               </ul>
-              <button onclick="switchInterface('customer')" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition active:scale-95 flex items-center justify-center gap-2">
+              <button onclick="switchInterface('customer')" class="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold border border-white/10 transition-colors active:scale-95 flex items-center justify-center gap-2">
                 <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 <span>Launch Customer App →</span>
               </button>
             </div>
             <!-- For Restaurants &amp; Food Trucks -->
-            <div class="bg-slate-900 border border-slate-700 text-slate-200 rounded-2xl p-8 sm:p-10">
+            <div class="bg-slate-900/50 backdrop-blur-md border border-white/10 text-slate-100 rounded-2xl p-8 sm:p-10 hover:border-emerald-400/40 transition-colors">
               <div class="flex items-center gap-2 mb-5">
-                <i data-lucide="store" class="w-5 h-5 text-orange-400"></i>
+                <i data-lucide="store" class="w-5 h-5 text-emerald-400"></i>
                 <h3 class="font-bold text-lg text-white">For Restaurants &amp; Food Trucks</h3>
               </div>
               <ul class="space-y-3 text-sm text-slate-400 mb-8">
@@ -500,7 +500,7 @@
                 <li class="flex items-start gap-2"><span class="text-emerald-400 shrink-0">✓</span> Walk-in + remote unified queue</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-400 shrink-0">✓</span> Live announcement banner per venue</li>
               </ul>
-              <button onclick="openHostStand()" class="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shadow-sm transition active:scale-95 flex items-center justify-center gap-2">
+              <button onclick="openHostStand()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/30 transition-colors active:scale-95 flex items-center justify-center gap-2">
                 <i data-lucide="building-2" class="w-4 h-4"></i>
                 <span>Launch Host Stand →</span>
               </button>
@@ -512,42 +512,42 @@
       <!-- ========================================================================= -->
       <!-- TRANSPARENT FAQ ACCORDION                                                 -->
       <!-- ========================================================================= -->
-      <section id="faq" class="py-14 sm:py-20 bg-slate-50">
+      <section id="faq" class="py-14 sm:py-20 bg-[#060913]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-14">
-            <h2 class="text-3xl font-heading font-extrabold text-slate-900 mb-3">Transparent FAQ</h2>
-            <p class="text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">Straight answers about how WaitMate works.</p>
+            <h2 class="text-3xl font-heading font-extrabold text-white mb-3">Transparent FAQ</h2>
+            <p class="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">Straight answers about how WaitMate works.</p>
           </div>
           <div class="space-y-3" id="faqList" style="max-width: 42rem; margin: 0 auto;">
-            <div class="faq-item bg-white rounded-xl border border-slate-200" onclick="toggleFaq(this)">
+            <div class="faq-item bg-slate-900/50 backdrop-blur-md rounded-xl border border-white/10 hover:border-emerald-400/40 transition-colors" onclick="toggleFaq(this)">
               <div class="faq-head flex items-center justify-between p-4 cursor-pointer">
-                <h4 class="font-bold text-slate-900">How is the ETA Score calculated?</h4>
+                <h4 class="font-bold text-white">How is the ETA Score calculated?</h4>
                 <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-300"></i>
               </div>
               <div class="faq-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="p-4 bg-slate-50 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="p-4 bg-slate-900/30 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   Your ETA is estimated from the <strong>live queue length</strong> ahead of you, <strong>active party sizes</strong>, table turnover speed, and <strong>Groq AI rush adjustments</strong> — so the quoted time matches reality.
                 </div>
               </div>
             </div>
-            <div class="faq-item bg-white rounded-xl border border-slate-200" onclick="toggleFaq(this)">
+            <div class="faq-item bg-slate-900/50 backdrop-blur-md rounded-xl border border-white/10 hover:border-emerald-400/40 transition-colors" onclick="toggleFaq(this)">
               <div class="faq-head flex items-center justify-between p-4 cursor-pointer">
-                <h4 class="font-bold text-slate-900">How is the Reliability Score calculated?</h4>
+                <h4 class="font-bold text-white">How is the Reliability Score calculated?</h4>
                 <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-300"></i>
               </div>
               <div class="faq-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-                <div class="p-4 bg-slate-50 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+                <div class="p-4 bg-slate-900/30 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                   Reliability reflects <strong>historical on-time seating accuracy</strong> — how often diners are seated within the promised ETA. It weighs <strong>verified "I've Arrived" check-ins</strong> and favors venues with <strong>low wait-time variance</strong>. Grade A–D bands make trust instant.
                 </div>
               </div>
             </div>
-            <div class="faq-item bg-white rounded-xl border border-slate-200" onclick="toggleFaq(this)">
+            <div class="faq-item bg-slate-900/50 backdrop-blur-md rounded-xl border border-white/10 hover:border-emerald-400/40 transition-colors" onclick="toggleFaq(this)">
               <div class="faq-head flex items-center justify-between p-4 cursor-pointer">
-                <h4 class="font-bold text-slate-900">Why can't a restaurant seat me until I click "I've Arrived"?</h4>
+                <h4 class="font-bold text-white">Why can't a restaurant seat me until I click "I've Arrived"?</h4>
                 <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-300"></i>
               </div>
               <div class="faq-body overflow-hidden" style="max-height: 0; transition: max-height 0.4s ease;">
-              <div class="p-4 bg-slate-50 border-t border-slate-100 text-sm text-slate-600 leading-relaxed">
+              <div class="p-4 bg-slate-900/30 border-t border-white/10 text-sm text-slate-400 leading-relaxed">
                 The gate confirms your physical presence before a table is assigned, so remote joiners can't hold tables they never show up for and walk-in guests aren't skipped unfairly. Every check-in also feeds the venue's Reliability Score.
                 </div>
               </div>
@@ -559,22 +559,22 @@
       <!-- ========================================================================= -->
       <!-- CLEAN FOOTER                                                              -->
       <!-- ========================================================================= -->
-      <footer id="landingFooter" class="border-t border-slate-200 bg-white">
+      <footer id="landingFooter" class="border-t border-white/10 bg-[#060913]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div class="grid md:grid-cols-3 gap-6 mb-8">
             <div>
               <div class="flex items-center gap-2 mb-3">
                 <img src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
-                <span id="footerBrandText" class="font-heading font-extrabold text-base tracking-tight text-slate-800 cursor-default">Wait<span class="text-emerald-500">Mate</span> <span class="text-[10px] font-black text-slate-600 align-middle">INDIA</span></span>
+                <span id="footerBrandText" class="font-heading font-extrabold text-base tracking-tight text-white cursor-default">Wait<span class="text-emerald-500">Mate</span> <span class="text-[10px] font-black text-slate-400 align-middle">INDIA</span></span>
               </div>
-              <p class="text-[11px] text-slate-600 font-medium">Less waiting, smarter dining. &copy; 2026 WaitMate India. &middot; Demo with sample data.</p>
+              <p class="text-[11px] text-slate-400 font-medium">Less waiting, smarter dining. &copy; 2026 WaitMate India. &middot; Demo with sample data.</p>
             </div>
             <div class="text-center sm:text-left">
-              <button onclick="switchInterface('customer'); window.scrollTo({top:0,behavior:'smooth'})" class="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition block sm:inline-block">Open Customer App</button>
+              <button onclick="switchInterface('customer'); window.scrollTo({top:0,behavior:'smooth'})" class="w-full sm:w-auto px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/10 transition-colors block sm:inline-block">Open Customer App</button>
             </div>
             <div class="text-center sm:text-right">
-              <button onclick="openHostStand()" class="w-full sm:w-auto px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition block sm:inline-block">Open Host Stand</button>
-              <button onclick="window.scrollTo({top:0,behavior:'smooth'})" class="mt-2 sm:mt-0 w-full sm:w-auto px-4 py-2 text-slate-500 hover:text-slate-900 text-xs font-medium underline underline-offset-4 transition block sm:inline-block">Back to Top</button>
+              <button onclick="openHostStand()" class="w-full sm:w-auto px-4 py-2 border border-white/10 hover:bg-white/10 text-slate-300 text-xs font-bold rounded-lg transition-colors block sm:inline-block">Open Host Stand</button>
+              <button onclick="window.scrollTo({top:0,behavior:'smooth'})" class="mt-2 sm:mt-0 w-full sm:w-auto px-4 py-2 text-slate-400 hover:text-white text-xs font-medium underline underline-offset-4 transition-colors block sm:inline-block">Back to Top</button>
             </div>
           </div>
         </div>
@@ -585,10 +585,10 @@
     <!-- ========================================================================= -->
     <!-- VIEW 2: DEDICATED CUSTOMER QUEUE WORKSPACE                                -->
     <!-- ========================================================================= -->
-    <div id="customerView" class="hidden">
-      <div class="mb-6 flex items-center justify-between gap-4">
+    <div id="customerView" class="hidden bg-[#060913] text-slate-100 min-h-screen">
+      <header class="sticky top-0 z-40 mb-6 flex items-center justify-between gap-4 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
         <!-- Left: Back to Overview (View 1: Landing Page) -->
-        <button onclick="switchView('landing'); return false;" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition underline underline-offset-2 whitespace-nowrap">
+        <button onclick="switchView('landing'); return false;" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white transition underline underline-offset-2 whitespace-nowrap">
           <span>← Back to Overview</span>
         </button>
 
@@ -596,17 +596,17 @@
         <div class="flex items-center gap-2">
           <img src="/logo.png?v=2" alt="WaitMate" class="w-7 h-7 shrink-0 rounded object-contain" width="28" height="28">
           <div>
-            <h2 class="font-heading font-bold text-lg text-slate-900">Customer App</h2>
-            <p class="text-xs text-slate-500">Live queues • Remote join • Digital pass</p>
+            <h2 class="font-heading font-bold text-lg text-white">Customer App</h2>
+            <p class="text-xs text-slate-400">Live queues • Remote join • Digital pass</p>
           </div>
         </div>
 
         <!-- Right: live Active Diners badge -->
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 text-xs font-bold border border-orange-100 whitespace-nowrap">
-          <span class="w-1.5 h-1.5 rounded-full bg-orange-500 live-pulse"></span>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/70 border border-white/10 text-slate-200 text-xs font-bold whitespace-nowrap">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
           <span id="cwActiveDinersCount">0</span> active diners in line
         </div>
-      </div>
+      </header>
 
       <!-- ========================================================================= -->
       <!-- SECTION C — LIVE RESTAURANT DIRECTORY (Existing Real Functionality)       -->
@@ -617,56 +617,56 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="flex items-center justify-between mb-8">
             <div>
-              <h2 class="text-2xl font-heading font-bold text-slate-900 mb-1">Live Restaurant Directory</h2>
-              <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Real queues, real ETAs — join or walk in to any Mumbai venue below.</p>
+              <h2 class="text-2xl font-heading font-bold text-white mb-1">Live Restaurant Directory</h2>
+              <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Real queues, real ETAs — join or walk in to any Mumbai venue below.</p>
             </div>
-            <span id="sectionCDinerBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100">Live diners counting…</span>
+            <span id="sectionCDinerBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-900/70 border border-white/10 text-slate-200">Live diners counting…</span>
           </div>
 
           <!-- Mumbai Neighborhood Filter Pills (single-line scrollable) -->
           <div class="area-pill-row mb-6 overflow-x-auto pb-1 text-xs whitespace-nowrap" role="group" aria-label="Mumbai Area">
             <button onclick="setAreaFilter('all')" class="area-pill active px-3 py-1.5 rounded-lg font-bold bg-slate-900 text-white shadow-xs whitespace-nowrap flex-shrink-0" data-area="all">All Mumbai</button>
-            <button onclick="setAreaFilter('south')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 whitespace-nowrap flex-shrink-0" data-area="south">South Mumbai</button>
-            <button onclick="setAreaFilter('west')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 whitespace-nowrap flex-shrink-0" data-area="west">Bandra &amp; Juhu</button>
-            <button onclick="setAreaFilter('central')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 whitespace-nowrap flex-shrink-0" data-area="central">Lower Parel &amp; Central</button>
+            <button onclick="setAreaFilter('south')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400 whitespace-nowrap flex-shrink-0" data-area="south">South Mumbai</button>
+            <button onclick="setAreaFilter('west')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400 whitespace-nowrap flex-shrink-0" data-area="west">Bandra &amp; Juhu</button>
+            <button onclick="setAreaFilter('central')" class="area-pill px-3 py-1.5 rounded-lg font-semibold bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400 whitespace-nowrap flex-shrink-0" data-area="central">Lower Parel &amp; Central</button>
           </div>
 
           <!-- Filters & Search Toolbar -->
-          <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="bg-slate-900/70 border border-white/10 rounded-xl p-4 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-md">
             
             <!-- Search bar -->
             <div class="relative flex-1">
-              <i data-lucide="search" class="w-4 h-4 text-slate-600 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-              <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search dosa, biryani, kebabs, Rameshwaram, Meghana, Toit..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search dosa, biryani, kebabs, Rameshwaram, Meghana, Toit..." class="w-full pl-10 pr-4 py-2 bg-slate-900/70 border border-white/10 rounded-lg text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 transition">
             </div>
 
             <!-- Category Filters -->
             <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-              <button onclick="setCategoryFilter('all')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white" data-cat="all">
+              <button onclick="setCategoryFilter('all')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900 text-white border border-white/20" data-cat="all">
                 All Spots
               </button>
-              <button onclick="setCategoryFilter('saved')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="saved">
+              <button onclick="setCategoryFilter('saved')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400" data-cat="saved">
                 Saved ♥
               </button>
-              <button onclick="setCategoryFilter('restaurant')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="restaurant">
+              <button onclick="setCategoryFilter('restaurant')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400" data-cat="restaurant">
                 🍽️ Restaurants
               </button>
-              <button onclick="setCategoryFilter('food_truck')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-100 text-slate-600 hover:bg-slate-200" data-cat="food_truck">
+              <button onclick="setCategoryFilter('food_truck')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition bg-slate-900/70 border border-white/10 text-slate-200 hover:bg-slate-800/80 focus:border-emerald-400" data-cat="food_truck">
                 🚚 Food Trucks & Kiosks
               </button>
             </div>
 
             <!-- Sort By & Toggles -->
             <div class="flex items-center gap-3">
-              <div class="flex items-center gap-1.5 text-xs text-slate-600">
+              <div class="flex items-center gap-1.5 text-xs text-slate-400">
                 <span>Sort:</span>
-                <select id="sortSelect" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg py-1.5 px-2.5 font-medium focus:outline-none focus:ring-1 focus:ring-orange-500">
-                  <option value="reliability">Highest Reliability Score</option>
-                   <option value="wait_asc">Shortest Wait Time</option>
+                <select id="sortSelect" onchange="applyFilters()" class="bg-slate-900/70 border border-white/10 text-slate-200 text-xs rounded-lg py-1.5 px-2.5 font-medium focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 transition">
+                  <option value="reliability" class="text-slate-200 bg-slate-900">Highest Reliability Score</option>
+                   <option value="wait_asc" class="text-slate-200 bg-slate-900">Shortest Wait Time</option>
                 </select>
               </div>
-              <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
-                <input type="checkbox" id="openOnlyCheckbox" onchange="applyFilters()" checked class="rounded text-orange-500 focus:ring-orange-500">
+              <label class="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                <input type="checkbox" id="openOnlyCheckbox" onchange="applyFilters()" checked class="rounded text-emerald-400 focus:ring-emerald-400">
                 <span>Open Queues</span>
               </label>
             </div>
@@ -676,9 +676,9 @@
           <!-- Restaurant Grid -->
           <div id="restaurantsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <!-- Rendered via JavaScript -->
-            <div class="col-span-full py-16 text-center text-slate-600">
-              <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-orange-500"></i>
-              <p>Loading live restaurants & queues...</p>
+            <div class="col-span-full py-16 text-center text-slate-400">
+              <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-emerald-400"></i>
+              <p>Loading live restaurants &amp; queues...</p>
             </div>
           </div>
 
@@ -690,11 +690,11 @@
     <!-- ========================================================================= -->
     <!-- INTERFACE 2: RESTAURANT OWNER PORTAL                                      -->
     <!-- ========================================================================= -->
-    <div id="ownerInterface" class="hidden">
+    <div id="ownerInterface" class="hidden bg-[#060913] text-slate-100 min-h-screen">
       
       <!-- Dedicated Host Stand top bar -->
-      <div class="mb-6 flex items-center gap-4">
-        <button onclick="switchView('landing'); return false;" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition underline underline-offset-2 whitespace-nowrap">
+      <header class="sticky top-0 z-40 mb-6 flex items-center gap-4 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
+        <button onclick="switchView('landing'); return false;" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white transition underline underline-offset-2 whitespace-nowrap">
           <span>← Back to Overview</span>
         </button>
         <div class="flex items-center gap-2">
@@ -702,33 +702,33 @@
             <i data-lucide="building-2" class="w-4 h-4 text-orange-400"></i>
           </div>
           <div>
-            <h2 class="font-heading font-bold text-lg text-slate-900">Restaurant Host Stand</h2>
-            <p class="text-xs text-slate-500">Walk-in &amp; remote • Seat controls • Announcements</p>
+            <h2 class="font-heading font-bold text-lg text-white">Restaurant Host Stand</h2>
+            <p class="text-xs text-slate-400">Walk-in &amp; remote • Seat controls • Announcements</p>
           </div>
         </div>
-      </div>
+      </header>
 
       <!-- Owner Navigation Tabs -->
-      <div class="flex items-center justify-between border-b border-slate-200 mb-6 pb-2">
+      <div class="flex items-center justify-between border-b border-white/10 mb-6 pb-2">
         <div class="flex items-center gap-3">
-          <button onclick="switchOwnerTab('host')" id="ownerTabHost" class="px-4 py-2 font-bold text-sm text-slate-900 border-b-2 border-orange-500 flex items-center gap-2">
-            <i data-lucide="clipboard-list" class="w-4 h-4 text-orange-500"></i>
+          <button onclick="switchOwnerTab('host')" id="ownerTabHost" class="px-4 py-2 font-bold text-sm text-white border-b-2 border-emerald-500 flex items-center gap-2">
+            <i data-lucide="clipboard-list" class="w-4 h-4 text-emerald-400"></i>
             <span>Live Host Stand & Queue Manager</span>
           </button>
         </div>
-        <span class="text-xs text-slate-600 font-medium hidden sm:inline">Owner Management Portal</span>
+        <span class="text-xs text-slate-400 font-medium hidden sm:inline">Owner Management Portal</span>
       </div>
 
       <!-- SUB-TAB 1: LIVE HOST STAND -->
       <div id="ownerSubTabHost">
       <!-- Step 1: Browse Registered Restaurants Directory -->
       <div id="ownerVenueDirectory" class="space-y-4">
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 class="font-heading font-extrabold text-lg text-slate-900">Registered Restaurants on WaitMate</h3>
-            <p class="text-xs text-slate-600">Select your restaurant below and enter its owner password to access live queue data and host controls.</p>
+            <h3 class="font-heading font-extrabold text-lg text-white">Registered Restaurants on WaitMate</h3>
+            <p class="text-xs text-slate-400">Select your restaurant below and enter its owner password to access live queue data and host controls.</p>
           </div>
-          <span class="text-xs font-semibold px-3 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-full">Owner Access Protected</span>
+          <span class="text-xs font-semibold px-3 py-1 bg-slate-900/70 border border-white/10 text-slate-200 rounded-full">Owner Access Protected</span>
         </div>
         <div id="ownerDirectoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
@@ -738,7 +738,7 @@
         
         
         <!-- Host Top Control Bar -->
-        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="bg-slate-900/60 border border-white/10 rounded-xl p-5 mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 backdrop-blur-md">
           
           <div class="flex flex-wrap items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
@@ -746,19 +746,19 @@
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="font-heading font-extrabold text-xl text-slate-900" id="hostVenueName">The Rameshwaram Cafe</h2>
-                <span id="hostQueueOpenBadge" class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">QUEUE ACTIVE</span>
+                <h2 class="font-heading font-extrabold text-xl text-white" id="hostVenueName">The Rameshwaram Cafe</h2>
+                <span id="hostQueueOpenBadge" class="bg-emerald-900/30 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]">QUEUE ACTIVE</span>
               </div>
-              <p class="text-xs text-slate-600" id="hostVenueLocationSub">Linking Road, Bandra West, Mumbai • Host Stand Dashboard</p>
+              <p class="text-xs text-slate-400" id="hostVenueLocationSub">Linking Road, Bandra West, Mumbai • Host Stand Dashboard</p>
             </div>
           </div>
 
           <!-- Venue Selector Dropdown & Actions -->
           <div class="flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2">
-              <button onclick="showOwnerDirectory()" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition mr-1">← All Restaurants</button>
-              <span class="text-xs text-slate-600 font-medium">Your Restaurant:</span>
-              <select id="hostVenueSelect" onchange="switchHostVenue(this.value)" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg py-2 px-3 font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <button onclick="showOwnerDirectory()" class="px-3 py-1.5 bg-slate-800/60 hover:bg-slate-700/80 border border-white/10 text-slate-300 rounded-lg text-xs font-bold transition mr-1">← All Restaurants</button>
+              <span class="text-xs text-slate-400 font-medium">Your Restaurant:</span>
+              <select id="hostVenueSelect" onchange="switchHostVenue(this.value)" class="bg-slate-900/70 border border-white/10 text-slate-200 text-xs rounded-lg py-2 px-3 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 transition">
                 <!-- Populated via JS -->
               </select>
             </div>
@@ -768,7 +768,7 @@
               <span>Add Walk-In Guest</span>
             </button>
 
-            <button onclick="toggleQueueStatus()" id="hostToggleQueueBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+            <button onclick="toggleQueueStatus()" id="hostToggleQueueBtn" class="px-3 py-2 bg-slate-800/60 hover:bg-slate-700/80 border border-white/10 text-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
               <i data-lucide="pause" class="w-3.5 h-3.5"></i>
               <span>Pause Queue</span>
             </button>
@@ -786,14 +786,14 @@
         </div>
 
         <!-- Live Venue Announcement / Specials -->
-        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-wrap items-center gap-3">
-          <span class="text-xs font-bold text-slate-600 uppercase tracking-wider">Live Announcement / Specials:</span>
-          <input type="text" id="hostAnnouncementInput" placeholder="e.g. Today's Special: Butter Chicken 20% Off • Live music from 8 PM" class="flex-1 min-w-[200px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+        <div class="bg-slate-900/60 border border-white/10 rounded-xl p-5 mb-6 flex flex-wrap items-center gap-3 backdrop-blur-md">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Live Announcement / Specials:</span>
+          <input type="text" id="hostAnnouncementInput" placeholder="e.g. Today's Special: Butter Chicken 20% Off • Live music from 8 PM" class="flex-1 min-w-[200px] px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
           <button onclick="updateHostAnnouncement()" id="hostAnnouncementPublishBtn" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-sm">
             <i data-lucide="megaphone" class="w-3.5 h-3.5"></i>
             <span>Publish</span>
           </button>
-          <button onclick="updateHostAnnouncement('')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1 transition">
+          <button onclick="updateHostAnnouncement('')" class="px-3 py-2 bg-slate-800/60 border border-white/10 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 transition hover:bg-slate-700/80">
             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             <span>Clear</span>
           </button>
@@ -801,106 +801,106 @@
 
         <!-- Host KPI Summary Cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-slate-900/60 border border-white/10 rounded-xl p-4 backdrop-blur-md">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-semibold text-slate-600">Active Waiting Parties</span>
-              <div class="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+              <span class="text-xs font-semibold text-slate-400">Active Waiting Parties</span>
+              <div class="w-7 h-7 rounded-lg bg-orange-900/20 text-orange-400 flex items-center justify-center border border-orange-500/30">
                 <i data-lucide="users" class="w-4 h-4"></i>
               </div>
             </div>
             <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiParties">0</span>
-              <span class="text-xs text-slate-600" id="hostKpiHeads">(0 guests)</span>
+              <span class="text-2xl font-extrabold font-mono tabular-nums text-slate-100" id="hostKpiParties">0</span>
+              <span class="text-xs text-slate-400" id="hostKpiHeads">(0 guests)</span>
             </div>
           </div>
 
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-slate-900/60 border border-white/10 rounded-xl p-4 backdrop-blur-md">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-semibold text-slate-500">Current Wait Estimate</span>
-              <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+              <span class="text-xs font-semibold text-slate-400">Current Wait Estimate</span>
+              <div class="w-7 h-7 rounded-lg bg-blue-900/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
                 <i data-lucide="clock" class="w-4 h-4"></i>
               </div>
             </div>
             <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiWait">-- min</span>
-              <span class="text-[11px] text-slate-600" id="hostKpiCalcType">Algorithmic</span>
+              <span class="text-2xl font-extrabold font-mono tabular-nums text-slate-100" id="hostKpiWait">-- min</span>
+              <span class="text-[11px] text-slate-400" id="hostKpiCalcType">Algorithmic</span>
             </div>
           </div>
 
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-slate-900/60 border border-white/10 rounded-xl p-4 backdrop-blur-md">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-semibold text-slate-500">Reliability Score</span>
-              <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <span class="text-xs font-semibold text-slate-400">Reliability Score</span>
+              <div class="w-7 h-7 rounded-lg bg-emerald-900/30 text-emerald-400 flex items-center justify-center border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.35)]">
                 <i data-lucide="award" class="w-4 h-4"></i>
               </div>
             </div>
             <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-extrabold text-emerald-600" id="hostKpiScore">--%</span>
-              <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700" id="hostKpiGrade">A</span>
+              <span class="text-2xl font-extrabold font-mono tabular-nums text-emerald-400" id="hostKpiScore">--%</span>
+              <span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.3)]" id="hostKpiGrade">A</span>
             </div>
           </div>
 
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-slate-900/60 border border-white/10 rounded-xl p-4 backdrop-blur-md">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-semibold text-slate-500">Avg Wait Discrepancy</span>
-              <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+              <span class="text-xs font-semibold text-slate-400">Avg Wait Discrepancy</span>
+              <div class="w-7 h-7 rounded-lg bg-amber-900/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
                 <i data-lucide="activity" class="w-4 h-4"></i>
               </div>
             </div>
             <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-extrabold text-slate-900" id="hostKpiVariance">± 0m</span>
-              <span class="text-[11px] text-slate-600">vs promised</span>
+              <span class="text-2xl font-extrabold font-mono tabular-nums text-slate-100" id="hostKpiVariance">± 0m</span>
+              <span class="text-[11px] text-slate-400">vs promised</span>
             </div>
           </div>
         </div>
 
         <!-- Host Wait Adjustment & Anti-Overpromising Warning -->
-        <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-[var(--wm-text-primary)] rounded-xl p-5 mb-6 border border-slate-700">
+        <div class="bg-slate-900/60 border border-white/10 rounded-xl p-5 mb-6 backdrop-blur-md">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-sm font-bold flex items-center gap-1.5 text-orange-400">
                   <i data-lucide="sliders" class="w-4 h-4"></i> Wait Time Estimate Control
                 </span>
-                <span class="text-[10px] px-2 py-0.5 rounded bg-white/10 text-[#475569]">Dynamic Anti-Overpromising Engine</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-white/5 text-slate-400">Dynamic Anti-Overpromising Engine</span>
               </div>
-      <p class="text-xs text-[#475569]">
-        WaitMate automatically computes estimated wait based on table turnaround pace. You can manually override, but underestimating will harm your public Reliability Score!
+              <p class="text-xs text-slate-400">
+                WaitMate automatically computes estimated wait based on table turnaround pace. You can manually override, but underestimating will harm your public Reliability Score!
               </p>
             </div>
 
             <div class="flex items-center gap-3">
-              <div class="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700">
-                <span class="text-xs text-[#475569]">Set Wait:</span>
-                <input type="number" id="hostManualWaitInput" min="0" max="180" step="5" class="w-16 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs font-bold text-white text-center focus:outline-none focus:ring-1 focus:ring-orange-500" placeholder="Auto">
-                <span class="text-xs text-[#475569]">mins</span>
+              <div class="flex items-center gap-2 bg-slate-800/60 p-2 rounded-lg border border-white/10">
+                <span class="text-xs text-slate-400">Set Wait:</span>
+                <input type="number" id="hostManualWaitInput" min="0" max="180" step="5" class="w-16 px-2 py-1 bg-slate-900 border border-white/10 rounded text-xs font-bold text-white text-center focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400" placeholder="Auto">
+                <span class="text-xs text-slate-400">mins</span>
                 <button onclick="saveHostWaitEstimate()" class="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-bold transition">Apply</button>
-                <button onclick="resetHostWaitToAuto()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-[#475569] rounded text-xs transition" title="Revert to algorithm">Reset</button>
+                <button onclick="resetHostWaitToAuto()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded text-xs transition" title="Revert to algorithm">Reset</button>
               </div>
             </div>
           </div>
 
-          <div id="hostOverrideWarning" class="hidden mt-3 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2">
-            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600 shrink-0"></i>
+          <div id="hostOverrideWarning" class="hidden mt-3 p-2.5 rounded-lg bg-rose-900/20 border border-rose-500/30 text-rose-200 text-xs flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400 shrink-0"></i>
             <span><strong>Reliability Warning:</strong> You set wait to <span id="warnMins">10m</span>, but with multiple parties ahead, the real wait is estimated at <span id="warnAlgo">25m</span>. Diners will penalize this score if seated late!</span>
           </div>
         </div>
 
         <!-- Live Queue Table -->
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div class="bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden backdrop-blur-md">
+          <div class="p-4 border-b border-white/10 flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <h3 class="font-bold text-slate-900 text-sm">Live Waitlist Queue</h3>
-              <span class="text-xs text-slate-600">(Ranked by arrival / priority)</span>
+              <h3 class="font-bold text-white text-sm">Live Waitlist Queue</h3>
+              <span class="text-xs text-slate-400">(Ranked by arrival / priority)</span>
             </div>
             <div class="flex items-center gap-3">
-              <span class="text-xs text-slate-600">Live queue sync</span>
+              <span class="text-xs text-slate-400">Live queue sync</span>
             </div>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider border-b border-slate-200">
+              <thead class="bg-slate-950/60 text-slate-400 font-bold uppercase tracking-wider border-b border-white/10">
                 <tr>
                   <th class="py-3 px-4">Ticket / Rank</th>
                   <th class="py-3 px-4">Guest Info</th>
@@ -911,10 +911,10 @@
                   <th class="py-3 px-4 text-right">Host Actions</th>
                 </tr>
               </thead>
-              <tbody id="hostQueueTableBody" class="divide-y divide-slate-100">
+              <tbody id="hostQueueTableBody" class="divide-y divide-white/10">
                 <!-- Rendered via JS -->
                 <tr>
-                  <td colspan="7" class="py-8 text-center text-slate-600">Loading queue entries...</td>
+                  <td colspan="7" class="py-8 text-center text-slate-400">Loading queue entries...</td>
                 </tr>
               </tbody>
             </table>
@@ -1029,17 +1029,17 @@
   <!-- ========================================================================= -->
   <div id="joinQueueModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeJoinModal()"></div>
-    <div class="modal-content relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+    <div class="modal-content relative bg-slate-900 border border-white/15 text-slate-100 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden z-10">
       
       <!-- Modal Header -->
-      <div class="bg-slate-900 text-white p-5 flex items-start justify-between">
+      <div class="bg-slate-900/80 text-slate-100 p-5 flex items-start justify-between">
         <div>
-          <span id="joinModalEyebrow" class="text-[#475569] text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • Mumbai</span>
+          <span id="joinModalEyebrow" class="text-slate-400 text-xs font-bold uppercase tracking-wider block mb-1">Remote Queue Entry • Mumbai</span>
           <h3 id="joinModalVenueName" class="text-lg font-heading font-bold text-white">The Rameshwaram Cafe</h3>
-          <p id="joinModalAddress" class="text-xs text-[#475569]">Linking Road, Bandra West, Mumbai</p>
-          <p id="joinModalAnnouncement" class="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1 hidden inline-flex items-center gap-1.5"></p>
+          <p id="joinModalAddress" class="text-xs text-slate-400">Linking Road, Bandra West, Mumbai</p>
+          <p id="joinModalAnnouncement" class="text-xs text-amber-400 font-medium mt-1.5 bg-amber-900/20 border border-amber-500/30 rounded-lg px-3 py-1 hidden inline-flex items-center gap-1.5"></p>
         </div>
-        <button onclick="closeJoinModal()" class="text-[#475569] hover:text-white p-1 rounded-lg">
+        <button onclick="closeJoinModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -1049,75 +1049,75 @@
         <input type="hidden" id="joinVenueId">
 
         <!-- Entry Mode badge (chosen on the restaurant card) -->
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+        <div class="bg-slate-800/50 border border-white/10 rounded-xl p-3 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <span class="text-[11px] font-bold text-[#475569] uppercase shrink-0">Entry Mode:</span>
-            <span id="joinChannelBadge" class="text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-700 border-slate-200 bg-slate-200/50">Remote Join (On my way)</span>
+            <span class="text-[11px] font-bold text-slate-400 uppercase shrink-0">Entry Mode:</span>
+            <span id="joinChannelBadge" class="text-xs font-bold px-2.5 py-1 rounded border inline-block text-slate-200 border-white/20 bg-white/5">Remote Join (On my way)</span>
           </div>
-          <button type="button" onclick="toggleJoinChannel()" class="text-[10px] text-[#475569] hover:text-slate-900 underline">Change</button>
+          <button type="button" onclick="toggleJoinChannel()" class="text-[10px] text-slate-400 hover:text-white underline">Change</button>
         </div>
         <input type="hidden" id="joinChannelInput" value="remote">
 
         <!-- Estimated Wait Preview Card -->
-        <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center justify-between">
+        <div class="bg-orange-900/20 border border-orange-500/30 rounded-xl p-3 flex items-center justify-between">
           <div>
-            <span class="text-[11px] font-bold text-orange-800 uppercase">Live Estimate</span>
-            <div class="text-xl font-extrabold text-orange-950" id="joinPreviewWait">~10 mins wait</div>
-            <span class="text-xs text-orange-700" id="joinPreviewAhead">2 parties ahead of you</span>
+            <span class="text-[11px] font-bold text-orange-400 uppercase">Live Estimate</span>
+            <div class="text-xl font-extrabold text-orange-300" id="joinPreviewWait">~10 mins wait</div>
+            <span class="text-xs text-orange-300" id="joinPreviewAhead">2 parties ahead of you</span>
           </div>
           <div class="text-right">
-            <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300" id="joinPreviewScore">
+            <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-900/20 text-emerald-400 border border-emerald-500/40" id="joinPreviewScore">
               <i data-lucide="award" class="w-3 h-3"></i> 96% Reliability
             </span>
-            <span class="text-[10px] text-[#475569] block mt-1">± 1.9m avg variance</span>
+            <span class="text-[10px] text-slate-400 block mt-1">± 1.9m avg variance</span>
           </div>
         </div>
 
         <!-- Party Size -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1.5">How many guests in your party?</label>
+          <label class="block text-xs font-bold text-slate-400 mb-1.5">How many guests in your party?</label>
           <div class="grid grid-cols-6 gap-2">
-            <button type="button" onclick="setPartySize(1)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="1">1</button>
-            <button type="button" onclick="setPartySize(2)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none bg-orange-500 text-white border-orange-500" data-size="2">2</button>
-            <button type="button" onclick="setPartySize(3)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="3">3</button>
-            <button type="button" onclick="setPartySize(4)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="4">4</button>
-            <button type="button" onclick="setPartySize(5)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="5">5</button>
-            <button type="button" onclick="setPartySize(6)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-orange-500 focus:outline-none" data-size="6">6+</button>
+            <button type="button" onclick="setPartySize(1)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none" data-size="1">1</button>
+            <button type="button" onclick="setPartySize(2)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none bg-emerald-600 text-white border-emerald-400" data-size="2">2</button>
+            <button type="button" onclick="setPartySize(3)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none" data-size="3">3</button>
+            <button type="button" onclick="setPartySize(4)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none" data-size="4">4</button>
+            <button type="button" onclick="setPartySize(5)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none" data-size="5">5</button>
+            <button type="button" onclick="setPartySize(6)" class="party-btn py-2 border rounded-lg text-xs font-bold hover:border-emerald-400 hover:bg-white/5 focus:outline-none" data-size="6">6+</button>
           </div>
           <input type="hidden" id="joinPartySizeInput" value="2">
         </div>
 
         <!-- Seating Preference -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1.5">Seating Preference</label>
+          <label class="block text-xs font-bold text-slate-400 mb-1.5">Seating Preference</label>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button type="button" onclick="setSeatingPref('First Available')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-orange-500 bg-orange-50 text-orange-950" data-pref="First Available">First Available</button>
-            <button type="button" onclick="setSeatingPref('Family AC Section')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Family AC Section">Family AC Section</button>
-            <button type="button" onclick="setSeatingPref('Outdoor / Standing')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Outdoor / Standing">Outdoor / Standing</button>
-            <button type="button" onclick="setSeatingPref('Bar Counter')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-slate-200 text-slate-700 hover:border-orange-400" data-pref="Bar Counter">Bar Counter</button>
+            <button type="button" onclick="setSeatingPref('First Available')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-emerald-500 bg-emerald-900/30 text-emerald-300" data-pref="First Available">First Available</button>
+            <button type="button" onclick="setSeatingPref('Family AC Section')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-white/10 text-slate-400 hover:border-emerald-400 hover:bg-white/5" data-pref="Family AC Section">Family AC Section</button>
+            <button type="button" onclick="setSeatingPref('Outdoor / Standing')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-white/10 text-slate-400 hover:border-emerald-400 hover:bg-white/5" data-pref="Outdoor / Standing">Outdoor / Standing</button>
+            <button type="button" onclick="setSeatingPref('Bar Counter')" class="pref-btn py-2 px-2 border rounded-lg text-xs font-semibold text-center border-white/10 text-slate-400 hover:border-emerald-400 hover:bg-white/5" data-pref="Bar Counter">Bar Counter</button>
           </div>
           <input type="hidden" id="joinSeatingPrefInput" value="First Available">
         </div>
 
         <!-- Contact Information -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Your Name</label>
-          <input type="text" id="joinCustomerName" required placeholder="Enter your name" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          <label class="block text-xs font-bold text-slate-400 mb-1">Your Name</label>
+          <input type="text" id="joinCustomerName" required placeholder="Enter your name" class="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
         </div>
 
         <!-- Special Requests -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Special Notes (Optional)</label>
-          <input type="text" id="joinSpecialReq" placeholder="Filter coffee priority, high chair, baby stroller, booth..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          <label class="block text-xs font-bold text-slate-400 mb-1">Special Notes (Optional)</label>
+          <input type="text" id="joinSpecialReq" placeholder="Filter coffee priority, high chair, baby stroller, booth..." class="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
         </div>
 
         <!-- Submit Button -->
-        <button type="submit" id="joinSubmitBtn" class="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm shadow-md shadow-slate-900/25 transition flex items-center justify-center gap-2">
+        <button type="submit" id="joinSubmitBtn" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
           <i data-lucide="ticket" class="w-4 h-4"></i>
           <span>Join Online Queue & Get Pass</span>
         </button>
 
-        <p class="text-[11px] text-center text-slate-600">
+        <p class="text-[11px] text-center text-slate-500">
           Free to join. Demo experience — not sponsored by or affiliated with any venue.
         </p>
       </form>
@@ -1132,180 +1132,180 @@
     <div class="modal-backdrop fixed inset-0" onclick="closeTicketModal()"></div>
     <div class="modal-content relative w-full max-w-[420px] mx-auto z-10">
       
-      <!-- Boarding Pass Style Digital Ticket -->
-      <div class="ticket-container bg-white text-slate-900 border border-slate-200 shadow-2xl" style="height:auto;max-height:none;overflow:visible;">
-        <div class="ticket-notch-left"></div>
-        <div class="ticket-notch-right"></div>
+        <!-- Boarding Pass Style Digital Ticket -->
+        <div class="ticket-container text-slate-100" style="height:auto;max-height:none;overflow:visible;">
+          <div class="ticket-notch-left"></div>
+          <div class="ticket-notch-right"></div>
 
-        <div class="ticket-clip overflow-hidden relative">
+          <div class="ticket-clip overflow-hidden relative">
 
-          <!-- Ticket Header -->
-        <div class="bg-slate-900 text-[var(--wm-text-primary)] p-5 pb-6">
-          <div class="flex items-center justify-between mb-3">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-500 text-white">
-              <span class="w-1.5 h-1.5 rounded-full bg-white live-pulse"></span>
-              LIVE QUEUE PASS
-            </span>
-            <button onclick="closeTicketModal()" class="text-[#475569] hover:text-white p-1">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
-              <div>
-                <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
-                <p id="ticketVenueCategory" class="text-xs text-[#475569]">Iconic South Indian & Filter Coffee</p>
+            <!-- Ticket Header -->
+            <div class="bg-slate-900/90 border-b border-white/10 p-5 pb-6 text-slate-100">
+              <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-400/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-white live-pulse"></span>
+                  LIVE QUEUE PASS
+                </span>
+                <button onclick="closeTicketModal()" class="text-slate-400 hover:text-white p-1">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
               </div>
-            </div>
-            <div class="text-right">
-              <span class="text-[10px] text-[#475569] uppercase font-mono block">Ticket Number</span>
-              <span id="ticketNumber" class="text-lg font-mono font-black text-orange-600">#WM-104</span>
-            </div>
-          </div>
-        </div>
 
-        <!-- Dynamic Position & Countdown Display -->
-        <div class="p-6 text-center bg-gradient-to-b from-orange-50/60 to-white">
-          
-          <div class="inline-block relative mb-4">
-            <svg class="w-36 h-36 mx-auto" viewBox="0 0 100 100">
-              <circle class="text-slate-200" stroke-width="8" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
-              <circle id="ticketProgressCircle" class="text-orange-500 progress-ring__circle" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="60" stroke-linecap="round" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
-            </svg>
-            <div class="absolute inset-0 flex flex-col items-center justify-center">
-              <span class="text-xs font-semibold text-[#475569] uppercase tracking-wider">Queue Rank</span>
-              <span id="ticketPosition" class="text-3xl font-heading font-black text-slate-900">#2</span>
-              <span id="ticketPartiesAhead" class="text-[11px] text-[#475569]">1 party ahead</span>
-            </div>
-          </div>
-
-          <!-- Dynamic Remaining Time -->
-          <div class="mb-4">
-            <span class="text-xs font-bold text-[#475569] uppercase">Estimated Call Time</span>
-            <div id="ticketEtaCountdown" class="text-2xl font-black text-slate-900">~10 mins remaining</div>
-            <p id="ticketStatusMsg" class="text-xs text-emerald-700 font-medium mt-1">
-              You're in good shape! Wait times are estimates that improve as diners leave feedback.
-            </p>
-          </div>
-
-          <!-- Timeline Stepper -->
-          <div class="grid grid-cols-4 gap-1 text-[10px] font-semibold text-[#475569] pt-2 border-t border-slate-100">
-            <div class="text-center" id="step1">
-              <div class="w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold">✓</div>
-              <span>Joined</span>
-            </div>
-            <div class="text-center" id="step2">
-              <div class="w-5 h-5 mx-auto rounded-full bg-orange-500 text-white flex items-center justify-center mb-1 font-bold" id="step2Icon">✓</div>
-              <span>In Queue</span>
-            </div>
-            <div class="text-center" id="step3">
-              <div class="w-5 h-5 mx-auto rounded-full bg-slate-200 text-[#475569] flex items-center justify-center mb-1" id="step3Icon">3</div>
-              <span>Table Ready</span>
-            </div>
-            <div class="text-center" id="step4">
-              <div class="w-5 h-5 mx-auto rounded-full bg-slate-200 text-[#475569] flex items-center justify-center mb-1" id="step4Icon">4</div>
-              <span>Seated</span>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Ticket Expired state (shown when a pass passes its arrival window) -->
-        <div id="ticketExpiredState" class="hidden p-6 text-center bg-rose-50 border border-rose-200 rounded-2xl">
-          <div class="text-rose-700 font-bold text-xl mb-2">Ticket Expired</div>
-          <p class="text-slate-600 text-sm mb-4">This pass has passed its arrival window and is no longer active. Join a fresh queue below.</p>
-          <button onclick="joinFreshQueue()" id="btnJoinFreshQueue" class="py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm shadow-sm">Join a Fresh Queue</button>
-          <span id="expiredTicketNumber" class="mt-3 block text-xs text-slate-400 font-mono">#–</span>
-        </div>
-
-        <!-- Dotted Ticket Divider -->
-        <div class="ticket-divider mx-6"></div>
-
-        <!-- Ticket Details Body -->
-        <div class="p-6 pt-4 space-y-4">
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span class="text-[10px] text-slate-600 block uppercase">Party Size</span>
-              <span id="ticketPartySize" class="font-bold text-slate-800">2 Guests</span>
-            </div>
-            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span class="text-[10px] text-slate-600 block uppercase">Preference</span>
-              <span id="ticketSeating" class="font-bold text-slate-800">Indoor</span>
-            </div>
-            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span class="text-[10px] text-slate-600 block uppercase">Arrival</span>
-              <span id="ticketArrivalStatus" class="font-bold text-emerald-600">In Queue</span>
-            </div>
-            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span class="text-[10px] text-slate-600 block uppercase">Arrived At</span>
-              <span id="ticketArrivedAt" class="font-bold text-emerald-700 text-[10px] leading-tight">–</span>
-            </div>
-          </div>
-
-          <!-- High-Urgency "Table is Near / Next in Line" Alert Box -->
-          <div id="tableNearAlertBanner" class="hidden p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border-2 border-orange-500/80 table-near-pulse text-xs relative overflow-hidden">
-            <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
-                <i data-lucide="bell-ring" class="w-5 h-5 animate-bounce"></i>
-              </div>
-              <div class="flex-1">
-                <div class="flex items-center gap-1.5 mb-1">
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-500 text-white tracking-wider animate-pulse">
-                    🚨 TABLE ALMOST READY
-                  </span>
-                  <span class="text-[10px] text-orange-950 font-bold" id="nearDistanceNotice">Priority Boarding</span>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <img src="/logo.png?v=2" alt="WaitMate" class="w-6 h-6 shrink-0 rounded object-contain" width="24" height="24">
+                  <div>
+                    <h3 id="ticketVenueName" class="text-xl font-heading font-bold text-white">The Rameshwaram Cafe</h3>
+                    <p id="ticketVenueCategory" class="text-xs text-slate-400">Iconic South Indian &amp; Filter Coffee</p>
+                  </div>
                 </div>
-                <h4 class="font-heading font-extrabold text-sm text-slate-900 leading-tight" id="nearHeadline">
-                  Start heading to the host counter now!
-                </h4>
-                <p class="text-slate-700 text-[11px] mt-1 leading-snug" id="nearSubtext">
-                  You are <strong id="nearPositionBadge">#1 in line</strong>. The host is currently clearing a table for your party. Please arrive at the entrance to secure your spot.
+                <div class="text-right">
+                  <span class="text-[10px] text-slate-400 uppercase font-mono block">Ticket Number</span>
+                  <span id="ticketNumber" class="text-2xl font-mono font-black text-emerald-400 tabular-nums">#WM-104</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Position & Countdown Display -->
+            <div class="p-6 text-center bg-slate-900/50 backdrop-blur-sm border border-white/10 rounded-2xl">
+              
+              <div class="inline-block relative mb-4">
+                <svg class="w-36 h-36 mx-auto" viewBox="0 0 100 100">
+                  <circle class="text-white/20" stroke-width="8" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
+                  <circle id="ticketProgressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="60" stroke-linecap="round" stroke="currentColor" fill="transparent" r="42" cx="50" cy="50"/>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Queue Rank</span>
+                  <span id="ticketPosition" class="text-4xl font-mono font-black text-white tabular-nums">#2</span>
+                  <span id="ticketPartiesAhead" class="text-[11px] text-slate-400">1 party ahead</span>
+                </div>
+              </div>
+
+              <!-- Dynamic Remaining Time -->
+              <div class="mb-4">
+                <span class="text-xs font-bold text-slate-400 uppercase">Estimated Call Time</span>
+                <div id="ticketEtaCountdown" class="text-2xl font-mono font-black text-white tabular-nums">~10 mins remaining</div>
+                <p id="ticketStatusMsg" class="text-xs text-emerald-400 font-medium mt-1">
+                  You're in good shape! Wait times are estimates that improve as diners leave feedback.
                 </p>
-                
-                <div class="mt-2.5 flex items-center gap-2">
-                  <button onclick="dinerArrivedAction()" class="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition shadow-xs flex items-center justify-center gap-1">
-                    <i data-lucide="map-pin-check" class="w-3.5 h-3.5"></i> I'm at the Entrance
-                  </button>
-                  <button onclick="dinerDelayAction(5)" class="py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-[11px] transition flex items-center gap-1" title="Stuck in parking or traffic">
-                    <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-500"></i> +5m Grace
-                  </button>
+              </div>
+
+              <!-- Timeline Stepper -->
+              <div class="grid grid-cols-4 gap-1 text-[10px] font-semibold text-slate-400 pt-2 border-t border-white/20">
+                <div class="text-center" id="step1">
+                  <div class="w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)] flex items-center justify-center mb-1 font-bold">✓</div>
+                  <span>Joined</span>
+                </div>
+                <div class="text-center" id="step2">
+                  <div class="w-5 h-5 mx-auto rounded-full bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)] flex items-center justify-center mb-1 font-bold" id="step2Icon">✓</div>
+                  <span>In Queue</span>
+                </div>
+                <div class="text-center" id="step3">
+                  <div class="w-5 h-5 mx-auto rounded-full bg-white/10 text-slate-500 flex items-center justify-center mb-1" id="step3Icon">3</div>
+                  <span>Table Ready</span>
+                </div>
+                <div class="text-center" id="step4">
+                  <div class="w-5 h-5 mx-auto rounded-full bg-white/10 text-slate-500 flex items-center justify-center mb-1" id="step4Icon">4</div>
+                  <span>Seated</span>
                 </div>
               </div>
+
             </div>
-          </div>
+
+            <!-- Ticket Expired state (shown when a pass passes its arrival window) -->
+            <div id="ticketExpiredState" class="hidden p-6 text-center bg-rose-900/20 border border-rose-500/30 rounded-2xl">
+              <div class="text-rose-400 font-bold text-xl mb-2">Ticket Expired</div>
+              <p class="text-slate-400 text-sm mb-4">This pass has passed its arrival window and is no longer active. Join a fresh queue below.</p>
+              <button onclick="joinFreshQueue()" id="btnJoinFreshQueue" class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm shadow-emerald-500/20">Join a Fresh Queue</button>
+              <span id="expiredTicketNumber" class="mt-3 block text-xs text-slate-500 font-mono">#–</span>
+            </div>
+
+            <!-- Dotted Ticket Divider -->
+            <div class="ticket-divider mx-6"></div>
+
+            <!-- Ticket Details Body -->
+            <div class="p-6 pt-4 space-y-4">
+              <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                <div class="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                  <span class="text-[10px] text-slate-400 block uppercase">Party Size</span>
+                  <span id="ticketPartySize" class="font-mono font-bold text-slate-200 tabular-nums">2 Guests</span>
+                </div>
+                <div class="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                  <span class="text-[10px] text-slate-400 block uppercase">Preference</span>
+                  <span id="ticketSeating" class="font-mono font-bold text-slate-200 tabular-nums">Indoor</span>
+                </div>
+                <div class="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                  <span class="text-[10px] text-slate-400 block uppercase">Arrival</span>
+                  <span id="ticketArrivalStatus" class="font-mono font-bold text-emerald-400 tabular-nums">In Queue</span>
+                </div>
+                <div class="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                  <span class="text-[10px] text-slate-400 block uppercase">Arrived At</span>
+                  <span id="ticketArrivedAt" class="font-mono font-bold text-emerald-400 text-[10px] leading-tight tabular-nums">–</span>
+                </div>
+              </div>
+
+              <!-- High-Urgency "Table is Near / Next in Line" Alert Box -->
+              <div id="tableNearAlertBanner" class="hidden p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-amber-500/15 to-emerald-500/10 border-2 border-emerald-500/40 table-near-pulse text-xs relative overflow-hidden">
+                <div class="flex items-start gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/30">
+                    <i data-lucide="bell-ring" class="w-5 h-5 animate-bounce"></i>
+                  </div>
+                  <div class="flex-1">
+                    <div class="flex items-center gap-1.5 mb-1">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white tracking-wider animate-pulse">
+                        🚨 TABLE ALMOST READY
+                      </span>
+                      <span class="text-[10px] text-emerald-100 font-bold" id="nearDistanceNotice">Priority Boarding</span>
+                    </div>
+                    <h4 class="font-heading font-extrabold text-sm text-white leading-tight" id="nearHeadline">
+                      Start heading to the host counter now!
+                    </h4>
+                    <p class="text-slate-300 text-[11px] mt-1 leading-snug" id="nearSubtext">
+                      You are <strong id="nearPositionBadge">#1 in line</strong>. The host is currently clearing a table for your party. Please arrive at the entrance to secure your spot.
+                    </p>
+                    
+                    <div class="mt-2.5 flex items-center gap-2">
+                      <button onclick="dinerArrivedAction()" class="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-[11px] transition shadow-xs flex items-center justify-center gap-1">
+                        <i data-lucide="map-pin-check" class="w-3.5 h-3.5"></i> I'm at the Entrance
+                      </button>
+                      <button onclick="dinerDelayAction(5)" class="py-1.5 px-3 bg-slate-800/60 border border-white/10 text-slate-200 rounded-lg font-semibold text-[11px] transition flex items-center gap-1 hover:bg-slate-700/80 hover:border-white/30" title="Stuck in parking or traffic">
+                        <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i> +5m Grace
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
           <!-- WhatsApp Notification Preview for India -->
-          <div id="livePassAlertCard" class="hidden p-3.5 rounded-xl whatsapp-card text-xs text-slate-800 shadow-sm space-y-1">
-            <div class="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-0.5">
+          <div id="livePassAlertCard" class="hidden p-3.5 rounded-xl whatsapp-card text-xs text-slate-200 shadow-sm space-y-1">
+            <div class="flex items-center justify-between text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-0.5">
               <span class="flex items-center gap-1">
-                <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-600"></i> Live Digital Boarding Pass Alert
+                <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-400"></i> Live Digital Boarding Pass Alert
               </span>
-              <span class="text-slate-600 font-normal">Just now</span>
+              <span class="text-slate-500 font-normal">Just now</span>
             </div>
-            <p class="text-slate-800 font-medium text-[11px]" id="livePassAlertText">
+            <p class="text-slate-200 font-medium text-[11px]" id="livePassAlertText">
               "Namaste Aarav! 🍽️ Your table at The Rameshwaram Cafe is less than 4 mins away. Please make your way to the host desk. Table held for 5 mins."
             </p>
           </div>
 
           <!-- Share Your Live Pass Section -->
-          <div class="space-y-2 pt-3 border-t border-slate-100">
+          <div class="space-y-2 pt-3 border-t border-white/20">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Share Your Pass</span>
-              <span class="text-[10px] text-slate-600">Friends can track live — read-only</span>
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Share Your Pass</span>
+              <span class="text-[10px] text-slate-500">Friends can track live — read-only</span>
             </div>
             <div id="passActionRow" class="flex gap-2 items-center">
-              <button onclick="sharePass()" id="btnSharePass" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-800" title="Share your live pass via native share">
+              <button onclick="sharePass()" id="btnSharePass" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-800/60 border border-white/10 text-slate-200 shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-700/80 hover:border-white/30" title="Share your live pass via native share">
                 <svg id="iconShare" class="w-[18px] h-[18px] shrink-0 text-white" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
                 <span id="sharePassLabel" class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">Share Pass</span>
               </button>
-              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-emerald-700" title="Share your live pass on WhatsApp">
+              <button onclick="sharePassWhatsApp()" id="btnShareWhatsApp" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-emerald-500" title="Share your live pass on WhatsApp">
                 <svg id="iconWhatsapp" class="w-[18px] h-[18px] shrink-0 text-white" viewBox="0 0 24 24"><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
                 <span class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">WhatsApp</span>
               </button>
-              <button onclick="copySharePassLink()" id="btnCopyShareLink" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-slate-300 bg-slate-100 text-slate-800 shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900" title="Copy live pass link">
-                <svg id="copyShareIcon" class="w-[18px] h-[18px] shrink-0 text-[#0F172A]" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              <button onclick="copySharePassLink()" id="btnCopyShareLink" class="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-white/10 bg-slate-800/60 text-slate-200 shadow-sm flex items-center justify-center gap-1.5 transition hover:bg-slate-700/80 hover:border-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" title="Copy live pass link">
+                <svg id="copyShareIcon" class="w-[18px] h-[18px] shrink-0 text-white" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                 <span id="copyShareLabel" class="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">Copy Link</span>
               </button>
             </div>
@@ -1313,18 +1313,18 @@
 
           <!-- Diner Action Buttons -->
           <div class="space-y-2">
-            <button onclick="dinerArrivedAction()" id="btnArrivedAction" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+            <button onclick="dinerArrivedAction()" id="btnArrivedAction" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/25">
               <i data-lucide="map-pin-check" class="w-4 h-4"></i>
               <span>I've Arrived at the Venue</span>
             </button>
 
             <div class="grid grid-cols-2 gap-2">
-              <button onclick="dinerDelayAction(5)" class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1">
-                <i data-lucide="clock-plus" class="w-3.5 h-3.5"></i>
+              <button onclick="dinerDelayAction(5)" class="py-2 px-3 bg-slate-800/60 border border-white/10 text-slate-200 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 hover:bg-slate-700/80 hover:border-white/30">
+                <i data-lucide="clock-plus" class="w-3.5 h-3.5 text-slate-300"></i>
                 <span>Need +5 Mins</span>
               </button>
-              <button onclick="dinerCancelAction()" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1">
-                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              <button onclick="dinerCancelAction()" class="py-2 px-3 bg-slate-800/60 border border-white/10 text-slate-200 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 hover:bg-rose-500/30 hover:text-rose-400 hover:border-rose-500/50">
+                <i data-lucide="x" class="w-3.5 h-3.5 text-slate-400"></i>
                 <span>Leave Queue</span>
               </button>
               </div>
@@ -1401,16 +1401,16 @@
   <!-- ========================================================================= -->
   <div id="reliabilityModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0" onclick="closeReliabilityModal()"></div>
-    <div class="modal-content relative bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 max-h-[90dvh] flex flex-col">
+    <div class="modal-content relative bg-slate-900 border border-white/15 text-slate-100 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden z-10 max-h-[90dvh] flex flex-col">
       
       <!-- Header -->
-      <div class="bg-slate-900 text-[var(--wm-text-primary)] p-5 flex items-start justify-between shrink-0">
+      <div class="bg-slate-900/80 text-slate-100 p-5 flex items-start justify-between shrink-0">
         <div>
           <span class="text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
             <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> WaitMate Reliability Audit™
           </span>
           <h3 id="relModalVenueName" class="text-xl font-heading font-bold text-white mt-1">The Rameshwaram Cafe</h3>
-          <p class="text-xs text-[#475569]">How estimated wait times compare with diner feedback (sample data)</p>
+          <p class="text-xs text-slate-400">How estimated wait times compare with diner feedback (sample data)</p>
         </div>
         <button onclick="closeReliabilityModal()" class="text-slate-400 hover:text-white p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -1421,71 +1421,71 @@
       <div class="p-6 overflow-y-auto space-y-6">
 
         <!-- Score Hero Card -->
-        <div class="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-slate-50 to-emerald-500/10 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-slate-900/80 to-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div class="text-center sm:text-left">
-            <span class="text-xs font-bold text-emerald-800 uppercase">Wait Reliability Score</span>
+            <span class="text-xs font-bold text-emerald-400 uppercase">Wait Reliability Score</span>
             <div class="flex items-baseline gap-2 mt-1">
-              <span id="relModalScoreNum" class="text-4xl font-extrabold text-emerald-700">96%</span>
-              <span id="relModalGrade" class="text-xl font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900">Grade A+</span>
+              <span id="relModalScoreNum" class="text-4xl font-extrabold font-mono tabular-nums text-emerald-400">96%</span>
+              <span id="relModalGrade" class="text-xl font-extrabold px-2 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-500/40">Grade A+</span>
             </div>
-            <p id="relModalVerdict" class="text-xs text-slate-600 mt-1 font-medium">Consistently close to the estimated wait (sample data).</p>
+            <p id="relModalVerdict" class="text-xs text-slate-400 mt-1 font-medium">Consistently close to the estimated wait (sample data).</p>
           </div>
 
-          <div class="bg-white p-3 rounded-xl border border-slate-200 text-center shrink-0 shadow-sm w-full sm:w-auto">
-            <span class="text-[10px] text-slate-600 font-bold uppercase block">Avg Variance</span>
-            <span id="relModalVariance" class="text-2xl font-black text-slate-900">± 1.9 mins</span>
-            <span id="relModalTotalReviews" class="text-[10px] text-slate-600 block mt-0.5">31 diner check-ins</span>
+          <div class="bg-slate-800/60 p-3 rounded-xl border border-white/10 text-center shrink-0 w-full sm:w-auto">
+            <span class="text-[10px] text-slate-400 font-bold uppercase block">Avg Variance</span>
+            <span id="relModalVariance" class="text-2xl font-black font-mono tabular-nums text-slate-200">± 1.9 mins</span>
+            <span id="relModalTotalReviews" class="text-[10px] text-slate-400 block mt-0.5">31 diner check-ins</span>
           </div>
         </div>
 
         <!-- Accuracy Distribution Breakdown -->
         <div>
-          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Wait Time Outcome Distribution</h4>
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Wait Time Outcome Distribution</h4>
           <div class="space-y-2 text-xs">
             <div>
               <div class="flex justify-between font-semibold mb-1">
-                <span class="text-emerald-700 flex items-center gap-1">
+                <span class="text-emerald-400 flex items-center gap-1">
                   <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Spot On (Within 3 mins of estimate)
                 </span>
                 <span id="distSpotOn" class="font-bold">77%</span>
               </div>
-              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div id="barSpotOn" class="h-full bg-emerald-500 rounded-full" style="width: 77%"></div>
               </div>
             </div>
 
             <div>
               <div class="flex justify-between font-semibold mb-1">
-                <span class="text-blue-700 flex items-center gap-1">
+                <span class="text-blue-400 flex items-center gap-1">
                   <span class="w-2 h-2 rounded-full bg-blue-500"></span> Seated Faster than Promised
                 </span>
                 <span id="distFaster" class="font-bold">16%</span>
               </div>
-              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div id="barFaster" class="h-full bg-blue-500 rounded-full" style="width: 16%"></div>
               </div>
             </div>
 
             <div>
               <div class="flex justify-between font-semibold mb-1">
-                <span class="text-amber-700 flex items-center gap-1">
+                <span class="text-amber-400 flex items-center gap-1">
                   <span class="w-2 h-2 rounded-full bg-amber-500"></span> Slight Delay (4–7 mins late)
                 </span>
                 <span id="distSlight" class="font-bold">7%</span>
               </div>
-              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div id="barSlight" class="h-full bg-amber-500 rounded-full" style="width: 7%"></div>
               </div>
             </div>
 
             <div>
               <div class="flex justify-between font-semibold mb-1">
-                <span class="text-rose-700 flex items-center gap-1">
+                <span class="text-rose-400 flex items-center gap-1">
                   <span class="w-2 h-2 rounded-full bg-rose-500"></span> Severe Delay (> 10 mins late)
                 </span>
                 <span id="distSevere" class="font-bold">0%</span>
               </div>
-              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div id="barSevere" class="h-full bg-rose-500 rounded-full" style="width: 0%"></div>
               </div>
             </div>
@@ -1494,33 +1494,33 @@
 
         <!-- Rush Hour Wait Patterns Chart -->
         <div>
-          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Rush Hour Wait vs Estimated Forecast</h4>
-          <div id="hourlyChartContainer" class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rush Hour Wait vs Estimated Forecast</h4>
+
+          <div id="hourlyChartContainer" class="bg-slate-800/60 p-4 rounded-xl border border-white/10">
             <!-- Dynamic Chart via JS -->
           </div>
         </div>
-
         <!-- Recent Diner Check-ins -->
         <div>
           <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Recent Diner Check-ins</h4>
 
           <!-- Star Rating Widget — only shown once the diner has been seated at this venue -->
-          <div id="reviewWidget" class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 hidden">
+          <div id="reviewWidget" class="bg-slate-800/60 p-4 rounded-xl border border-white/10 mb-4 hidden">
             <div class="mb-3">
-              <label class="block text-xs font-bold text-slate-700 mb-2">Leave a Check-in</label>
+              <label class="block text-xs font-bold text-slate-400 mb-2">Leave a Check-in</label>
               <div class="flex items-center gap-1" id="starRatingWidget">
                 <button type="button" class="star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="1" aria-label="1 star">★</button>
                 <button type="button" class="star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="2" aria-label="2 stars">★</button>
                 <button type="button" class="star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="3" aria-label="3 stars">★</button>
                 <button type="button" class="star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="4" aria-label="4 stars">★</button>
                 <button type="button" class="star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="5" aria-label="5 stars">★</button>
-                <span id="starRatingDisplay" class="ml-3 text-xs font-bold text-slate-600 min-w-[48px]"></span>
+                <span id="starRatingDisplay" class="ml-3 text-xs font-bold text-slate-400 min-w-[48px]"></span>
               </div>
               <input type="hidden" id="reviewRatingInput" value="0">
             </div>
             <div class="mb-3">
-              <label class="block text-xs font-bold text-slate-700 mb-1">Optional Comment</label>
-              <input type="text" id="reviewCommentInput" placeholder="e.g., Got seated exactly on time, great dosa!" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none">
+              <label class="block text-xs font-bold text-slate-400 mb-1">Optional Comment</label>
+              <input type="text" id="reviewCommentInput" placeholder="e.g., Got seated exactly on time, great dosa!" class="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-400 focus:outline-none">
             </div>
             <button type="button" id="submitReviewBtn" onclick="submitReview()" class="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
               Submit Review
@@ -1542,7 +1542,7 @@
   <!-- ========================================================================= -->
   <div id="feedbackModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="modal-backdrop fixed inset-0"></div>
-    <div class="modal-content relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10">
+    <div class="modal-content relative bg-slate-900 border border-white/15 text-slate-100 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden z-10">
       <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 text-center">
         <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2 text-2xl">
           🎉
@@ -1555,34 +1555,34 @@
         <input type="hidden" id="fbTicketId">
         <input type="hidden" id="fbRestaurantId">
 
-        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs flex justify-between">
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-white/10 text-xs flex justify-between">
           <div>
-            <span class="text-slate-600 block">Promised Wait</span>
-            <span id="fbPromisedWait" class="font-bold text-slate-800">0 mins</span>
+            <span class="text-slate-400 block">Promised Wait</span>
+            <span id="fbPromisedWait" class="font-bold font-mono tabular-nums text-slate-200">0 mins</span>
           </div>
           <div>
-            <span class="text-slate-600 block">Actual Wait</span>
-            <span id="fbActualWait" class="font-bold text-slate-800">11 mins</span>
+            <span class="text-slate-400 block">Actual Wait</span>
+            <span id="fbActualWait" class="font-bold font-mono tabular-nums text-slate-200">11 mins</span>
           </div>
           <div>
-            <span class="text-slate-600 block">Accuracy</span>
-            <span class="font-bold text-emerald-600">Spot On</span>
+            <span class="text-slate-400 block">Accuracy</span>
+            <span class="font-bold text-emerald-400">Spot On</span>
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-2">How close was your wait to the estimate?</label>
+          <label class="block text-xs font-bold text-slate-400 mb-2">How close was your wait to the estimate?</label>
           <div class="grid grid-cols-2 gap-2 text-xs">
-            <button type="button" onclick="selectFbRating('spot_on')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-emerald-500 bg-emerald-50 text-emerald-900" data-rating="spot_on">
+            <button type="button" onclick="selectFbRating('spot_on')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-emerald-500 bg-emerald-900/20 text-emerald-300" data-rating="spot_on">
               🎯 Spot On (Exact)
             </button>
-            <button type="button" onclick="selectFbRating('faster')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-blue-400 text-slate-700" data-rating="faster">
+            <button type="button" onclick="selectFbRating('faster')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-white/10 text-slate-400 hover:border-emerald-400 hover:bg-white/5" data-rating="faster">
               ⚡ Faster than ETA
             </button>
-            <button type="button" onclick="selectFbRating('slight_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-amber-400 text-slate-700" data-rating="slight_delay">
+            <button type="button" onclick="selectFbRating('slight_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-white/10 text-slate-400 hover:border-amber-400 hover:bg-white/5" data-rating="slight_delay">
               ⏳ Slight Delay (+5m)
             </button>
-            <button type="button" onclick="selectFbRating('severe_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-slate-200 hover:border-rose-400 text-slate-700" data-rating="severe_delay">
+            <button type="button" onclick="selectFbRating('severe_delay')" class="fb-opt-btn p-3 border rounded-xl font-semibold text-center border-white/10 text-slate-400 hover:border-rose-400 hover:bg-white/5" data-rating="severe_delay">
               ⚠️ Too Long (+15m)
             </button>
           </div>
@@ -1591,27 +1591,27 @@
 
         <!-- 1–5 Star overall experience selector (seated rating) -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-2">Overall Experience (1–5 ★)</label>
+          <label class="block text-xs font-bold text-slate-400 mb-2">Overall Experience (1–5 ★)</label>
           <div class="flex items-center gap-1" id="fbStarRating">
             <button type="button" class="fb-star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="1" aria-label="1 star">★</button>
             <button type="button" class="fb-star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="2" aria-label="2 stars">★</button>
             <button type="button" class="fb-star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="3" aria-label="3 stars">★</button>
             <button type="button" class="fb-star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="4" aria-label="4 stars">★</button>
             <button type="button" class="fb-star-btn text-2xl text-slate-300 hover:text-amber-400 focus:outline-none transition-colors" data-star="5" aria-label="5 stars">★</button>
-            <span id="fbStarDisplay" class="ml-3 text-xs font-bold text-slate-600 min-w-[48px]"></span>
+            <span id="fbStarDisplay" class="ml-3 text-xs font-bold text-slate-400 min-w-[48px]"></span>
           </div>
           <input type="hidden" id="fbStarInput" value="0">
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Optional comment</label>
-          <input type="text" id="fbNoteInput" placeholder="Token called right on time, great host staff!" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <label class="block text-xs font-bold text-slate-400 mb-1">Optional comment</label>
+          <input type="text" id="fbNoteInput" placeholder="Token called right on time, great host staff!" class="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-400">
         </div>
 
-        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md">
+        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md">
           Submit Check-in & Update Score
         </button>
-        <button type="button" onclick="skipDinerFeedback()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition">
+        <button type="button" onclick="skipDinerFeedback()" class="w-full py-2.5 bg-slate-800/60 border border-white/10 text-slate-300 font-bold rounded-xl text-xs transition hover:bg-slate-700/80">
           Skip / Close
         </button>
       </form>
