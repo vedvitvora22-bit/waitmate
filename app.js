@@ -1559,25 +1559,70 @@ function switchView(view) {
 // =========================================================================
 // Landing Page Light / Dark Theme Toggle
 // Persists to localStorage (wm_landing_theme), applies via .landing-light on
-// <html> (zero-flash head script), and flips the ☀️ / 🌙 toggle icon.
+// <html> (zero-flash head script), and swaps the vector SVG sun/moon icon
+// with a tactile rotate/scale transition.
 // =========================================================================
 function toggleLandingTheme() {
   const html = document.documentElement;
+  const body = document.body;
+  const landingView = document.getElementById('landingView');
+  const btn = document.getElementById('landingThemeToggle');
+
+  // Tactile rotate/scale transition on the toggle button
+  if (btn) {
+    btn.classList.add('rotate-180', 'scale-95');
+    setTimeout(() => btn.classList.remove('rotate-180', 'scale-95'), 150);
+  }
+
   const isLight = html.classList.toggle('landing-light');
+
+  // Full-page background color switching: documentElement, body, and #landingView
+  if (isLight) {
+    html.style.backgroundColor = '#F8FAFC';
+    body.style.backgroundColor = '#F8FAFC';
+    html.classList.remove('text-slate-100');
+    html.classList.add('text-slate-900');
+    body.classList.remove('bg-[#060913]', 'text-slate-100');
+    body.classList.add('bg-[#F8FAFC]', 'text-slate-900');
+    if (landingView) {
+      landingView.classList.remove('bg-[#060913]', 'text-slate-100');
+      landingView.classList.add('bg-[#F8FAFC]', 'text-slate-900');
+    }
+    if (btn) { btn.title = 'Switch to Dark Mode'; btn.setAttribute('aria-label', 'Switch to Dark Mode'); }
+  } else {
+    html.style.backgroundColor = '#060913';
+    body.style.backgroundColor = '#060913';
+    html.classList.remove('text-slate-900');
+    html.classList.add('text-slate-100');
+    body.classList.remove('bg-[#F8FAFC]', 'text-slate-900');
+    body.classList.add('bg-[#060913]', 'text-slate-100');
+    if (landingView) {
+      landingView.classList.remove('bg-[#F8FAFC]', 'text-slate-900');
+      landingView.classList.add('bg-[#060913]', 'text-slate-100');
+    }
+    if (btn) { btn.title = 'Switch to Light Mode'; btn.setAttribute('aria-label', 'Switch to Light Mode'); }
+  }
+
   try { localStorage.setItem('wm_landing_theme', isLight ? 'light' : 'dark'); } catch (e) {}
   syncLandingThemeIcon(isLight);
 }
 
 function syncLandingThemeIcon(isLight) {
-  const icon = document.getElementById('landingThemeIcon');
+  const sun = document.getElementById('landingThemeIconSun');
+  const moon = document.getElementById('landingThemeIconMoon');
   const btn = document.getElementById('landingThemeToggle');
-  if (!icon) return;
+  if (!sun || !moon) return;
+
   if (isLight) {
-    icon.textContent = '🌙';
-    if (btn) { btn.title = 'Switch to dark mode'; btn.setAttribute('aria-label', 'Switch to dark mode'); }
+    // Light Mode: show Moon icon, light circle
+    sun.classList.add('hidden');
+    moon.classList.remove('hidden');
+    btn.className = 'w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 bg-white border-slate-300 shadow-sm text-slate-900 hover:border-emerald-500';
   } else {
-    icon.textContent = '☀️';
-    if (btn) { btn.title = 'Switch to light mode'; btn.setAttribute('aria-label', 'Switch to light mode'); }
+    // Dark Mode: show Sun icon, dark glass circle
+    moon.classList.add('hidden');
+    sun.classList.remove('hidden');
+    btn.className = 'w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 bg-slate-900/80 border-white/15 hover:border-amber-400/50 text-slate-300 hover:text-white';
   }
 }
 

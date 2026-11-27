@@ -145,7 +145,7 @@
 <!-- Role switcher buttons kept in DOM (visually hidden) so switchInterface() -->
   <!-- keeps working for Host Stand / Founder access. Not part of the marketing navbar. -->
   <div id="roleTabsHost" style="display:none">
-    <button id="tabCustomer" onclick="switchInterface('customer')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm whitespace-nowrap" title="Customer View: Browse spots & join queues">
+    <button id="tabCustomer" onclick="openCustomerFlow()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm whitespace-nowrap" title="Customer View: Browse spots & join queues">
       <i data-lucide="utensils" class="w-3.5 h-3.5 text-orange-500"></i>
       <span>Customer</span>
     </button>
@@ -172,7 +172,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
 
           <!-- Brand + live status badge -->
-          <div class="flex items-center gap-3 cursor-pointer" onclick="switchInterface('customer'); window.scrollTo({top:0,behavior:'smooth'}); return false;">
+          <div class="flex items-center gap-3 cursor-pointer" onclick="openCustomerFlow(); window.scrollTo({top:0,behavior:'smooth'}); return false;">
             <img src="/logo.png?v=2" alt="WaitMate" class="w-8 h-8 shrink-0 rounded object-contain" width="32" height="32">
             <div class="flex flex-col">
               <div class="flex items-center gap-2">
@@ -196,10 +196,18 @@
 
           <!-- Action buttons: Customer App + Host Stand -->
           <div class="flex items-center gap-3">
-            <a href="#" onclick="event.preventDefault(); switchInterface('customer')" class="text-sm font-semibold text-slate-200 hover:text-white transition-colors px-4 py-1.5 border border-white/10 hover:bg-white/5 rounded-lg">Customer App</a>
+            <a href="#" onclick="event.preventDefault(); openCustomerFlow()" class="text-sm font-semibold text-slate-200 hover:text-white transition-colors px-4 py-1.5 border border-white/10 hover:bg-white/5 rounded-lg">Customer App</a>
             <a href="#" onclick="event.preventDefault(); openHostStand()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold backdrop-blur-sm shadow-sm transition active:scale-95">Host Stand</a>
-            <button id="landingThemeToggle" onclick="toggleLandingTheme()" aria-label="Switch to light mode" title="Switch to light mode" class="p-2 rounded-xl border border-white/10 hover:border-emerald-400/50 transition-colors text-slate-300 hover:text-white">
-              <span id="landingThemeIcon">☀️</span>
+            <button id="landingThemeToggle" onclick="toggleLandingTheme()" aria-label="Switch to light mode" title="Switch to Light Mode" class="w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 text-slate-300 hover:text-white">
+              <!-- Dark Mode Sun icon (shown when dark) -->
+              <svg id="landingThemeIconSun" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="#FBBF24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"/>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+              </svg>
+              <!-- Light Mode Moon icon (shown when light) -->
+              <svg id="landingThemeIconMoon" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="#0F172A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79"/>
+              </svg>
             </button>
           </div>
 
@@ -238,7 +246,7 @@
                 Check live restaurant queues across Mumbai, see honest AI-calculated ETA and Reliability scores, and join remotely before stepping out.
               </p>
               <div class="flex flex-wrap gap-3">
-                <button onclick="switchInterface('customer')" class="px-7 py-3.5 rounded-xl text-sm font-bold flex items-center gap-2 active:scale-95 transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-500/30 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-white">
+                <button onclick="openCustomerFlow()" class="px-7 py-3.5 rounded-xl text-sm font-bold flex items-center gap-2 active:scale-95 transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-500/30 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-white">
                   <i data-lucide="arrow-right" class="w-4 h-4"></i>
                   <span>Open Customer App →</span>
                 </button>
@@ -496,7 +504,7 @@
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> +5 min buffer &amp; instant cancel controls</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 shrink-0">✓</span> Post-meal rating that sharpens Reliability Scores</li>
               </ul>
-              <button onclick="switchInterface('customer')" class="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold border border-white/10 transition-colors active:scale-95 flex items-center justify-center gap-2">
+              <button onclick="openCustomerFlow()" class="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold border border-white/10 transition-colors active:scale-95 flex items-center justify-center gap-2">
                 <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 <span>Launch Customer App →</span>
               </button>
@@ -583,7 +591,7 @@
               <p class="text-[11px] text-slate-400 font-medium">Less waiting, smarter dining. &copy; 2026 WaitMate India. &middot; Demo with sample data.</p>
             </div>
             <div class="text-center sm:text-left">
-              <button onclick="switchInterface('customer'); window.scrollTo({top:0,behavior:'smooth'})" class="w-full sm:w-auto px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/10 transition-colors block sm:inline-block">Open Customer App</button>
+              <button onclick="openCustomerFlow(); window.scrollTo({top:0,behavior:'smooth'})" class="w-full sm:w-auto px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/10 transition-colors block sm:inline-block">Open Customer App</button>
             </div>
             <div class="text-center sm:text-right">
               <button onclick="openHostStand()" class="w-full sm:w-auto px-4 py-2 border border-white/10 hover:bg-white/10 text-slate-300 text-xs font-bold rounded-lg transition-colors block sm:inline-block">Open Host Stand</button>
@@ -614,10 +622,17 @@
           </div>
         </div>
 
-        <!-- Right: live Active Diners badge -->
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/70 border border-white/10 text-slate-200 text-xs font-bold whitespace-nowrap">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
-          <span id="cwActiveDinersCount">0</span> active diners in line
+        <!-- Right: live Active Diners badge + customer WhatsApp phone pill -->
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/70 border border-white/10 text-slate-200 text-xs font-bold whitespace-nowrap">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
+            <span id="cwActiveDinersCount">0</span> active diners in line
+          </div>
+          <div id="customerPhonePill" class="hidden flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/70 border border-white/10 text-slate-200 text-xs font-bold whitespace-nowrap">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
+            <span id="customerPhoneText" class="text-slate-100">📱 +91 99999 99999</span>
+            <button onclick="openCustomerPhoneModal(true)" class="text-slate-400 hover:text-emerald-400 text-[10px] underline">Edit</button>
+          </div>
         </div>
       </header>
 
@@ -1135,6 +1150,33 @@
         </p>
       </form>
 
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: CUSTOMER WHATSAPP PHONE CAPTURE (Landing → Customer transition)    -->
+  <!-- ========================================================================= -->
+  <div id="customerPhoneModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="closeCustomerPhoneModal()"></div>
+    <div class="modal-content relative bg-slate-900 border border-white/15 text-slate-100 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden z-10">
+      <div class="bg-slate-900/80 border-b border-white/10 p-6">
+        <h3 class="text-lg font-heading font-bold text-white mb-2">Enter Your WhatsApp Number for Live Table Alerts</h3>
+        <p class="text-sm text-slate-400 leading-relaxed mb-4">We only use your 10-digit Indian mobile number (+91) to send your digital queue pass and notify you on WhatsApp the moment your table is ready. Zero spam, 100% free.</p>
+      </div>
+      <form id="customerPhoneForm" onsubmit="submitCustomerPhone(event)" class="p-6 space-y-4">
+        <div class="relative">
+          <span class="absolute left-3.5 top-1/2 -translate-y-1/2 z-10 text-xs font-bold bg-slate-900 text-emerald-400 px-1.5">+91</span>
+          <input type="tel" id="customerPhoneInput" inputmode="numeric" maxlength="10" placeholder="9XXXXXXXX" autocomplete="tel" class="w-full pl-10 pr-4 py-3 bg-slate-800/60 border border-white/10 rounded-xl text-slate-200 placeholder-slate-400 text-lg font-bold tracking-widest focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none">
+        </div>
+        <p id="customerPhoneError" class="text-[11px] text-rose-400 hidden font-medium">Please enter a valid 10-digit Indian mobile number starting with 6–9.</p>
+        <div class="flex items-center justify-between">
+          <a href="#" onclick="closeCustomerPhoneModal(); openCustomerFlow()" class="text-[12px] text-slate-400 hover:text-white underline whitespace-nowrap">Skip for now</a>
+          <button type="submit" id="customerPhoneSubmit" class="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span>Save & Send Welcome on WhatsApp →</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

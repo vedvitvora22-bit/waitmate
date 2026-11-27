@@ -567,82 +567,112 @@ button[aria-label="Toggle password visibility"] i {
    Triggered by `.landing-light` on <html> (zero-flash via head script).
    All existing HTML classes/IDs/animations are left untouched; only the
    colour/background/border tokens flip when `.landing-light` is present.
+   Full-page background switches on documentElement, body, and #landingView
+   so there are no dark gaps, white edges, or un-themed sections.
    ========================================================================= */
 
+/* Zero-flash: apply light canvas at the root before paint */
+html.landing-light { background-color: #F8FAFC !important; color: #0F172A !important; }
+html.landing-light body { background-color: #F8FAFC !important; color: #0F172A !important; }
+html.landing-light #landingView { background-color: #F8FAFC !important; color: #0F172A !important; }
+
 /* Smooth full-page theme transition */
-.landing-light #landingView,
-.landing-light #landingView * {
+html.landing-light #landingView,
+html.landing-light #landingView * {
   transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease;
 }
 
-/* Canvas + headings + body */
-.landing-light #landingView .bg-\[#060913\]{ background-color: #f8fafc !important; }
-.landing-light #landingView .text-white{ color: #0f172a !important; }
-.landing-light #landingView .text-slate-400{ color: #64748b !important; }
-.landing-light #landingView .text-slate-300{ color: #94a3b8 !important; }
-.landing-light #landingView .text-slate-200{ color: #475569 !important; }
-.landing-light #landingView .text-slate-200\/90{ color: #94a3b8 !important; }
+/* Canvas + headings + body text */
+html.landing-light #landingView .bg-\[#060913\]{ background-color: #F8FAFC !important; }
+html.landing-light #landingView .text-white{ color: #0F172A !important; }
+html.landing-light #landingView .text-slate-100{ color: #0F172A !important; }
+html.landing-light #landingView .text-slate-400{ color: #64748b !important; }
+html.landing-light #landingView .text-slate-300{ color: #94a3b8 !important; }
+html.landing-light #landingView .text-slate-200{ color: #475569 !important; }
+html.landing-light #landingView .text-slate-200\/90{ color: #94a3b8 !important; }
+html.landing-light #landingView .text-slate-900{ color: #0F172A !important; }
+html.landing-light #landingView .text-slate-600{ color: #475569 !important; }
 
-/* Glass cards & surfaces */
-.landing-light #landingView .bg-slate-900\/50{ background-color: rgba(255,255,255,0.90) !important; }
-.landing-light #landingView .bg-slate-900\/40{ background-color: rgba(255,255,255,0.70) !important; }
-.landing-light #landingView .bg-slate-900\/30{ background-color: rgba(255,255,255,0.50) !important; }
-.landing-light #landingView .bg-slate-900\/60{ background-color: rgba(255,255,255,0.88) !important; }
-.landing-light #landingView .bg-slate-900\/70{ background-color: rgba(255,255,255,0.92) !important; }
-.landing-light #landingView .bg-slate-950\/60,
-.landing-light #landingView .bg-slate-950\/80,
-.landing-light #landingView .bg-slate-950\/75{ background-color: rgba(255,255,255,0.92) !important; }
-.landing-light #landingView .bg-slate-100{ background-color: rgba(241,245,249,0.85) !important; }
+/* Glass cards & surfaces -> crisp white / light surfaces */
+html.landing-light #landingView .bg-slate-900\/50,
+html.landing-light #landingView .bg-slate-900\/40,
+html.landing-light #landingView .bg-slate-900\/30,
+html.landing-light #landingView .bg-slate-900\/60,
+html.landing-light #landingView .bg-slate-900\/70,
+html.landing-light #landingView .bg-slate-950\/60,
+html.landing-light #landingView .bg-slate-950\/80,
+html.landing-light #landingView .bg-slate-950\/75{
+  background-color: rgba(255,255,255,0.92) !important;
+}
+html.landing-light #landingView .bg-white\/90{ background-color: rgba(255,255,255,0.92) !important; }
+html.landing-light #landingView .bg-white{ background-color: #FFFFFF !important; }
 
 /* Subtle dark-elevation fills -> light */
-.landing-light #landingView .bg-white\/10{ background-color: rgba(0,0,0,0.04) !important; }
-.landing-light #landingView .bg-white\/20{ background-color: rgba(0,0,0,0.07) !important; }
-.landing-light #landingView .bg-white\/5{ background-color: rgba(0,0,0,0.03) !important; }
+html.landing-light #landingView .bg-white\/10{ background-color: rgba(0,0,0,0.04) !important; }
+html.landing-light #landingView .bg-white\/20{ background-color: rgba(0,0,0,0.07) !important; }
+html.landing-light #landingView .bg-white\/5{ background-color: rgba(0,0,0,0.03) !important; }
 
-/* Borders */
-.landing-light #landingView .border-white\/10{ border-color: rgba(226,232,240,0.55) !important; }
-.landing-light #landingView .border-white\/20{ border-color: rgba(226,232,240,0.75) !important; }
+/* Borders -> slate-200 */
+html.landing-light #landingView .border-white\/10{ border-color: rgba(226,232,240,0.55) !important; }
+html.landing-light #landingView .border-white\/20{ border-color: rgba(226,232,240,0.75) !important; }
 
 /* Emerald accent fills (kept crisp & readable on light canvas) */
-.landing-light #landingView .bg-emerald-500\/10{ background-color: rgba(16,185,129,0.10) !important; }
-.landing-light #landingView .bg-emerald-500\/20{ background-color: rgba(16,185,129,0.14) !important; }
-.landing-light #landingView .bg-emerald-500\/30{ background-color: rgba(16,185,129,0.18) !important; }
-.landing-light #landingView .bg-emerald-950\/10{ background-color: rgba(16,185,129,0.08) !important; }
-.landing-light #landingView .bg-emerald-950\/25{ background-color: rgba(16,185,129,0.10) !important; }
-.landing-light #landingView .bg-emerald-950\/80{ background-color: rgba(16,185,129,0.20) !important; }
-.landing-light #landingView .bg-emerald-400{ background-color: #10b981 !important; }
-.landing-light #landingView .bg-cyan-500\/5{ background-color: rgba(6,182,212,0.06) !important; }
+html.landing-light #landingView .bg-emerald-500\/10{ background-color: rgba(16,185,129,0.10) !important; }
+html.landing-light #landingView .bg-emerald-500\/20{ background-color: rgba(16,185,129,0.14) !important; }
+html.landing-light #landingView .bg-emerald-500\/30{ background-color: rgba(16,185,129,0.18) !important; }
+html.landing-light #landingView .bg-emerald-950\/10{ background-color: rgba(16,185,129,0.08) !important; }
+html.landing-light #landingView .bg-emerald-950\/25{ background-color: rgba(16,185,129,0.10) !important; }
+html.landing-light #landingView .bg-emerald-950\/80{ background-color: rgba(16,185,129,0.20) !important; }
+html.landing-light #landingView .bg-emerald-400{ background-color: #10b981 !important; }
+html.landing-light #landingView .bg-cyan-500\/5{ background-color: rgba(6,182,212,0.06) !important; }
 
 /* Ambient motion toned down for light canvas */
-.landing-light #landingView .wm-grid{
+html.landing-light #landingView .wm-grid{
   background-image: linear-gradient(to_right,rgba(16,185,129,0.015) 1px,transparent 1px),linear-gradient(to_bottom,rgba(16,185,129,0.015) 1px,transparent 1px) !important;
   opacity: 0.5 !important;
 }
-.landing-light #landingView .wm-radar{ border-color: rgba(16,185,129,0.06) !important; }
+html.landing-light #landingView .wm-radar{ border-color: rgba(16,185,129,0.06) !important; }
 
 /* Hero / feature / FAQ hover states stay legible in light mode */
-.landing-light #landingView .reveal-hover:hover{
+html.landing-light #landingView .reveal-hover:hover{
   border-color: rgba(16,185,129,0.45) !important;
   box-shadow: 0 0 24px rgba(16,185,129,0.08) !important;
 }
 
 /* Keep emerald/cyan accent text sharp */
-.landing-light #landingView .text-emerald-400{ color: #10b981 !important; }
-.landing-light #landingView .text-emerald-300{ color: #34d399 !important; }
-.landing-light #landingView .text-emerald-500{ color: #059669 !important; }
+html.landing-light #landingView .text-emerald-400{ color: #10b981 !important; }
+html.landing-light #landingView .text-emerald-300{ color: #34d399 !important; }
+html.landing-light #landingView .text-emerald-500{ color: #059669 !important; }
 
-/* Theme toggle button appearance in light mode */
-.landing-light #landingThemeToggle{
+/* Theme toggle button: sun (dark) vs moon (light) circle styling */
+html.landing-light #landingThemeToggle{
+  background-color: #FFFFFF !important;
   border-color: rgba(226,232,240,0.6) !important;
-  color: #475569 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+  color: #0F172A !important;
 }
-.landing-light #landingThemeToggle:hover{
+html.landing-light #landingThemeToggle:hover{
   border-color: rgba(16,185,129,0.5) !important;
   color: #059669 !important;
 }
+html:not(.landing-light) #landingThemeToggle{
+  background-color: rgba(15,23,42,0.8) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: #D1D5DB !important;
+}
+html:not(.landing-light) #landingThemeToggle:hover{
+  border-color: rgba(251,191,36,0.5) !important;
+  color: #FBBF24 !important;
+}
+
+/* SVG icon swap with tactile rotate/scale */
+html.landing-light #landingThemeIconSun{ display: none !important; }
+html.landing-light #landingThemeIconMoon{ display: block !important; }
+html:not(.landing-light) #landingThemeIconSun{ display: block !important; }
+html:not(.landing-light) #landingThemeIconMoon{ display: none !important; }
 
 /* Toggle off ambient glows that compete with the light canvas */
-.landing-light #landingView [class*="shadow-emerald"]{
+html.landing-light #landingView [class*="shadow-emerald"]{
   box-shadow: none !important;
 }
 
