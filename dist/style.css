@@ -277,14 +277,14 @@ button[aria-label="Toggle password visibility"] i {
 .splash-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100dvh;
-  background: #FAFAFA;
-  color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
   transition: opacity 0.3s ease;
   -webkit-transition: opacity 0.3s ease;
   will-change: opacity;
@@ -348,11 +348,11 @@ button[aria-label="Toggle password visibility"] i {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: #0f172a;
+  color: #ffffff;
 }
 
 .splash-title-accent {
-  color: #15803d;
+  color: #10b981;
 }
 
 .splash-badge {
@@ -372,7 +372,7 @@ button[aria-label="Toggle password visibility"] i {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #334155;
+  color: #cbd5e1;
   letter-spacing: 0.01em;
 }
 
@@ -454,132 +454,5 @@ button[aria-label="Toggle password visibility"] i {
 .area-pill {
   flex-shrink: 0;
   white-space: nowrap;
-}
-
-/* ==========================================
-   Onboarding Guidelines — 5-Slide Problem → WaitMate Solution
-   Mobile-first frame, calm off-white / midnight-navy palette
-   ========================================== */
-.font-pjs {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-.font-jb {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-}
-
-.onboarding-container {
-  width: 100%;
-  max-width: 430px;
-  height: 100dvh;
-  max-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: #F8FAFC;
-  color: #0F172A;
-  outline: none;
-}
-
-.onboarding-screen {
-  display: none;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-}
-.onboarding-screen.flex {
-  display: flex;
-}
-
-.onboarding-media {
-  position: relative;
-  width: 100%;
-  flex-shrink: 0;
-  height: 44vh;
-  min-height: 250px;
-  background: #E2E8F0;
-}
-.onboarding-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.onboarding-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 0 1.5rem;
-}
-
-.onboarding-tag {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.onboarding-heading {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 1.3rem;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-  color: #0F172A;
-  margin: 0.5rem 0 1rem 0;
-}
-
-.onboarding-body-text {
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: #475569;
-  margin: 0;
-  max-width: 30ch;
-}
-
-.onboarding-nav {
-  flex-shrink: 0;
-  width: 100%;
-}
-
-.onboarding-progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-.onboarding-progress-text {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-.onboarding-progress-fill {
-  border-radius: 9999px;
-}
-
-.onboarding-prev,
-.onboarding-next,
-.onboarding-cta {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.onboarding-container button:focus-visible {
-  outline: 2px solid #10B981;
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .onboarding-progress-fill {
-    transition: none !important;
-  }
-  .onboarding-prev,
-  .onboarding-next,
-  .onboarding-cta {
-    transition: none !important;
-  }
 }
 

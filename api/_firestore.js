@@ -23,6 +23,16 @@ const cache = {
 
 let useMemoryFallback = false;
 
+function fetchWithTimeout(url, opts, ms = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  const promise = fetch(url, { ...opts, signal: controller.signal });
+  return promise.then(
+    (res) => { clearTimeout(timer); return res; },
+    (err) => { clearTimeout(timer); if (err.name === "AbortError") { const t = new Error(`Firebase request timed out after ${ms}ms`); t.status = 504; t.code = "ETIMEDOUT"; throw t; } throw err; }
+  );
+}
+
 function encodeSegment(value) {
   return encodeURIComponent(String(value));
 }
@@ -205,14 +215,14 @@ async function getAccessToken() {
     throw err;
   }
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenResponse = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: `${unsignedToken}.${signature}`
     })
-  });
+  }, 10000);
   const tokenData = await tokenResponse.json();
   if (!tokenResponse.ok) {
     const msg = tokenData.error_description || tokenData.error || `HTTP ${tokenResponse.status}`;
@@ -236,14 +246,14 @@ async function firestoreRequest(path, options = {}) {
 
   const accessToken = await getAccessToken();
   const url = `${BASE}${path}`;
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${accessToken}`,
       ...(options.headers || {})
     }
-  });
+  }, 10000);
   const text = await response.text();
   let data = null;
   if (text) {
@@ -311,6 +321,20 @@ async function commitWrites(writes) {
   }
 }
 
+// Delete a single document via the native document DELETE endpoint (the
+// `:commit` "delete" verb is not accepted by this Firestore instance, so
+// all removals go through individual DELETE calls here).
+async function deleteDocument(collection, id) {
+  try {
+    return await firestoreRequest(`/${encodeSegment(collection)}/${encodeSegment(id)}`, {
+      method: "DELETE"
+    });
+  } catch (error) {
+    if (error.status === 404) return null; // already gone
+    throw error;
+  }
+}
+
 function setDocument(collection, id, fields) {
   invalidateCache(collection);
   return {
@@ -338,6 +362,7 @@ module.exports = {
   getDocument,
   commitWrites,
   setDocument,
+  deleteDocument,
   toFirestoreFields,
   fromFirestoreFields,
   PROJECT_ID,

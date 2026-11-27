@@ -6,6 +6,7 @@ const {
   getDocument,
   commitWrites,
   setDocument,
+  deleteDocument,
   PROJECT_ID,
   getProjectId,
   encodeSegment,
@@ -20,6 +21,56 @@ const now = Date.now();
 // intentionally stricter than the 60s persistence guard).
 global._lastSimCache = global._lastSimCache || {};
 const LAST_SIM_COOLDOWN_MS = 120000;
+
+// ---------------------------------------------------------------------------
+// Lightweight in-memory fixed-window rate limiter (per IP + endpoint path).
+// Protects public endpoints from bot spam and Firestore/Groq quota exhaustion
+// without touching any auth logic or existing credentials.
+// ---------------------------------------------------------------------------
+const RATE_WINDOW_MS = 60 * 1000;
+const RATE_BUCKETS = {};
+const MAX_BODY_BYTES = 100 * 1024; // 100KB request body cap
+
+// Endpoint -> max requests per window. Public/mutation endpoints are strictest.
+const RATE_LIMITS = {
+  "/api/queue/join": 20,
+  "/api/host/verify-password": 15,
+  "/api/founder/verify-password": 15,
+  "/api/founder/login": 15,
+  "/api/reviews": 30,
+  "/api/queue/action": 60,
+  "/api/host/action": 60,
+  default: 300
+};
+
+function clientIp(request) {
+  const forwarded = request.headers["x-forwarded-for"];
+  if (forwarded) return String(forwarded).split(",")[0].trim();
+  return request.socket && request.socket.remoteAddress ? String(request.socket.remoteAddress) : "unknown";
+}
+
+function rateLimitPath(pathParts) {
+  const p = "/" + (Array.isArray(pathParts) ? pathParts.join("/") : String(pathParts || "")).replace(/^\/+/, "");
+  for (const [prefix, limit] of Object.entries(RATE_LIMITS)) {
+    if (p.startsWith(prefix)) return { limit, keyPrefix: prefix };
+  }
+  return { limit: RATE_LIMITS.default, keyPrefix: "default" };
+}
+
+function checkRateLimit(request, pathParts) {
+  const now = Date.now();
+  const ip = clientIp(request);
+  const { limit, keyPrefix } = rateLimitPath(pathParts);
+  const key = ip + "|" + keyPrefix;
+  let b = RATE_BUCKETS[key];
+  if (!b || now - b.reset > RATE_WINDOW_MS) {
+    b = { count: 0, reset: now };
+    RATE_BUCKETS[key] = b;
+  }
+  b.count += 1;
+  const remaining = Math.max(0, limit - b.count);
+  return { allowed: b.count <= limit, limit, remaining, reset: b.reset + RATE_WINDOW_MS };
+}
 
 const FOUNDER_MASTER_PASSWORD = "waitmatefounder2026";
 const FOUNDER_SETTINGS_DOC = "settings/founder";
@@ -145,7 +196,7 @@ function send(response, status, data) {
   response.setHeader("Content-Type", "application/json");
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Restaurant-Password, X-Founder-Password");
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   // Live queue/ticket data must never be cached by browsers or proxies, so the
   // Host Stand and diner passes always reflect the latest Firestore state.
   response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -155,6 +206,15 @@ function send(response, status, data) {
 }
 
 async function parseBody(request) {
+  // Body size cap: reject oversized payloads before parsing to protect memory/quota.
+  const contentLength = request.headers && request.headers["content-length"];
+  if (contentLength !== undefined) {
+    const len = Number(contentLength);
+    if (!Number.isNaN(len) && len > MAX_BODY_BYTES) {
+      return { _oversized: true };
+    }
+  }
+
   // 1. If request.body is already populated (Buffer, string, object), use it directly
   if (request.body !== undefined && request.body !== null) {
     if (Buffer.isBuffer(request.body)) {
@@ -183,8 +243,12 @@ async function parseBody(request) {
     if (typeof request[Symbol.asyncIterator] === "function") {
       try {
         const chunks = [];
+        let bytes = 0;
         for await (const chunk of request) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+          bytes += buf.length;
+          if (bytes > MAX_BODY_BYTES) return { _oversized: true };
+          chunks.push(buf);
         }
         const buf = Buffer.concat(chunks);
         if (buf.length > 0) {
@@ -196,8 +260,14 @@ async function parseBody(request) {
     if (typeof request.on === "function") {
       try {
         const chunks = [];
+        let bytes = 0;
         await new Promise((resolve, reject) => {
-          request.on("data", (chunk) => chunks.push(chunk));
+          request.on("data", (chunk) => {
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+            bytes += buf.length;
+            if (bytes > MAX_BODY_BYTES) { reject(new Error("oversized")); return; }
+            chunks.push(buf);
+          });
           request.on("end", resolve);
           request.on("error", reject);
         });
@@ -555,6 +625,7 @@ async function updateRestaurantAggregates(restaurantId) {
   const queueCount = active.length;
   const totalWaitingPeople = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
   const activeDiners = active.reduce((s, e) => s + Number(e.party_size || 0), 0);
+  const seated = allEntries.filter(e => e.restaurant_id === restaurantId && e.status === "seated");
   const restaurant = await getRawRestaurant(restaurantId);
   if (!restaurant) return;
   const totalTables = Math.max(1, Number(restaurant.total_tables || 1));
@@ -761,10 +832,93 @@ async function getLiveStats(restaurant, queueEntries) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Strict input validation for public/mutation endpoints. All checks are
+// additive: they only reject malformed/oversized payloads and never alter
+// valid login credentials or existing restaurant passwords.
+// ---------------------------------------------------------------------------
+function capString(value, max) {
+  if (value === undefined || value === null) return value;
+  const s = String(value);
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+function validateOversized(body) {
+  if (body && body._oversized) return { ok: false, status: 413, error: "Request body too large." };
+  if (body && body._malformedJson) return { ok: false, status: 400, error: "Malformed JSON body." };
+  return null;
+}
+
+function validateJoinBody(body) {
+  const err = validateOversized(body);
+  if (err) return err;
+  if (!body || !body.restaurant_id || typeof body.restaurant_id !== "string") {
+    return { ok: false, status: 400, error: "restaurant_id is required." };
+  }
+  if (String(body.restaurant_id).length > 64) return { ok: false, status: 400, error: "restaurant_id too long." };
+  if (!body.name || typeof body.name !== "string") {
+    return { ok: false, status: 400, error: "name is required." };
+  }
+  if (String(body.name).length > 100) return { ok: false, status: 400, error: "name too long." };
+  const partySize = Number(body.party_size);
+  if (!Number.isFinite(partySize) || partySize < 1 || partySize > 20) {
+    return { ok: false, status: 400, error: "party_size must be between 1 and 20." };
+  }
+  if (body.device_id && String(body.device_id).length > 128) {
+    return { ok: false, status: 400, error: "device_id too long." };
+  }
+  if (body.seating_pref && String(body.seating_pref).length > 64) {
+    return { ok: false, status: 400, error: "seating_pref too long." };
+  }
+  if (body.special_requests && String(body.special_requests).length > 500) {
+    return { ok: false, status: 400, error: "special_requests too long." };
+  }
+  return null;
+}
+
+function validateReviewBody(body) {
+  const err = validateOversized(body);
+  if (err) return err;
+  if (!body || !body.restaurantId || typeof body.restaurantId !== "string") {
+    return { ok: false, status: 400, error: "restaurantId is required." };
+  }
+  if (String(body.restaurantId).length > 64) return { ok: false, status: 400, error: "restaurantId too long." };
+  if (!body.restaurantName || typeof body.restaurantName !== "string") {
+    return { ok: false, status: 400, error: "restaurantName is required." };
+  }
+  if (String(body.restaurantName).length > 120) return { ok: false, status: 400, error: "restaurantName too long." };
+  const rating = Number(body.rating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return { ok: false, status: 400, error: "rating must be between 1 and 5." };
+  }
+  if (body.comment && String(body.comment).length > 1000) {
+    return { ok: false, status: 400, error: "comment too long." };
+  }
+  if (body.ticket_id && String(body.ticket_id).length > 128) {
+    return { ok: false, status: 400, error: "ticket_id too long." };
+  }
+  return null;
+}
+
+function validatePasswordBody(body, field = "password") {
+  const err = validateOversized(body);
+  if (err) return err;
+  if (!body || body[field] === undefined || body[field] === null) {
+    return { ok: false, status: 400, error: field + " is required." };
+  }
+  if (String(body[field]).length > 128) return { ok: false, status: 400, error: field + " too long." };
+  return null;
+}
+
 async function route(request, response, pathParts) {
   const normalized = pathParts[0] === "api" ? pathParts : ["api", ...pathParts];
   const path = `/${normalized.join("/")}`;
+
+  // Reject oversized / malformed bodies early for mutating endpoints.
   const body = await parseBody(request);
+  const oversized = validateOversized(body);
+  if (oversized) return send(response, oversized.status, oversized);
+
 
   if (request.method === "OPTIONS") return send(response, 204, {});
 
@@ -892,6 +1046,11 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && (path === "/api/host/verify-password" || /^\/api\/restaurants\/[^/]+\/verify-password$/.test(path))) {
     const restId = body.restaurant_id;
+    const pwdErr = validatePasswordBody(body, "password");
+    if (pwdErr) return send(response, pwdErr.status, { error: pwdErr.error });
+    if (!restId || typeof restId !== "string" || String(restId).length > 64) {
+      return send(response, 400, { error: "restaurant_id is required." });
+    }
     const password = String(body.password || "").trim();
     let restaurant = null;
     let firestoreFailed = false;
@@ -912,7 +1071,8 @@ async function route(request, response, pathParts) {
   }
 
   if (request.method === "POST" && path === "/api/queue/join") {
-    if (!body.restaurant_id || !String(body.name || "").trim()) return send(response, 400, { error: "Missing required fields" });
+    const joinErr = validateJoinBody(body);
+    if (joinErr) return send(response, joinErr.status, { error: joinErr.error });
     const restaurant = await findRestaurantById(body.restaurant_id);
     if (!restaurant) return send(response, 404, { error: "Invalid restaurant" });
     if (!restaurant.is_queue_open) return send(response, 400, { error: "Queue is currently closed" });
@@ -1111,6 +1271,9 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && (path === "/api/founder/verify-password" || path === "/api/founder/login")) {
     const provided = String(body.password || "").trim();
+    if (provided.length > 128) {
+      return send(response, 400, { error: "Password too long." });
+    }
     if (!provided) {
       return send(response, 401, { ok: false, success: false, authorized: false, error: "Missing password in request body." });
     }
@@ -1358,7 +1521,7 @@ async function route(request, response, pathParts) {
 
   if (request.method === "POST" && path === "/api/founder/restaurant/toggle") {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
-    const body = request.body || {};
+    // `body` is parsed at the top of route(); do not re-read the raw stream.
     let restaurant;
     try {
       restaurant = await getRawRestaurant(body.restaurant_id);
@@ -1427,13 +1590,11 @@ async function route(request, response, pathParts) {
 
     // Remove queue entries for this restaurant from Firestore
     const entries = await fetchQueueEntries();
-    const deletes = entries.filter(e => e.restaurant_id === restaurantId).map(e => ({
-      delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` }
-    }));
-    if (deletes.length) await safeCommit(deletes);
+    const targets = entries.filter(e => e.restaurant_id === restaurantId);
+    for (const e of targets) await deleteDocument("queue_entries", e.id);
 
     // Remove the restaurant document from Firestore
-    await safeCommit([{ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/restaurants/${encodeSegment(restaurantId)}` } }]);
+    await deleteDocument("restaurants", restaurantId);
 
     return send(response, 200, { success: true, message: "Restaurant removed from WaitMate Mumbai network." });
   }
@@ -1478,10 +1639,9 @@ async function route(request, response, pathParts) {
 
   // POST /api/reviews - Submit a new review
   if (request.method === "POST" && path === "/api/reviews") {
+    const reviewErr = validateReviewBody(body);
+    if (reviewErr) return send(response, reviewErr.status, { error: reviewErr.error });
     const { restaurantId, restaurantName, rating, comment } = body;
-    if (!restaurantId || !restaurantName || !rating || rating < 1 || rating > 5) {
-      return send(response, 400, { error: "Missing required fields: restaurantId, restaurantName, rating (1-5)" });
-    }
 
     const ticketId = body.ticket_id;
     const customerName = String(body.customer_name || body.guest_name || body.name || body.customerName || 'Guest').trim();
@@ -1787,13 +1947,13 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const firestoreEntries = await fetchQueueEntries();
     let entries = allQueueEntries(firestoreEntries);
-    // Auto-expire stale unarrived tickets whenever founder queues are loaded.
-    const { entries: expiredEntries } = await expireStaleUnarrivedTickets(entries);
-    entries = expiredEntries;
+    // ?status=all returns seated / cancelled / no_show / expired history too; default is live queues only.
+    // Stale-ticket expiration is best-effort and never blocks the founder read path.
+    const showAll = String(request.query?.status || "").toLowerCase() === "all";
+    const active = showAll ? entries : entries.filter(e => isActiveTicketStatus(e.status));
     const restaurants = await ensureRestaurants();
     const byId = {};
     for (const r of restaurants) byId[r.id] = r;
-    const active = entries.filter(e => isActiveTicketStatus(e.status));
     const enriched = active.map(e => {
       const r = byId[e.restaurant_id];
       return {
@@ -1807,7 +1967,7 @@ async function route(request, response, pathParts) {
       };
     });
     enriched.sort((a, b) => Number(b.joined_at || 0) - Number(a.joined_at || 0));
-    return send(response, 200, { success: true, queues: enriched });
+    return send(response, 200, { success: true, queues: enriched, status_filter: showAll ? "all" : "active" });
   }
 
   // Founder queue action on any ticket: notify / seat / remove / edit party size
@@ -1822,7 +1982,10 @@ async function route(request, response, pathParts) {
       updates.notified_time_ist = formatIST(updates.notified_at);
     } else if (body.action === "seat") {
       if (!ticket.has_arrived) {
-        return send(response, 400, { error: "Customer must click I've Arrived at the Venue before seating" });
+        // Founder god mode: seat any customer even if they never tapped "I've Arrived"
+        ticket.has_arrived = true;
+        ticket.arrived_at = ticket.arrived_at || Date.now();
+        ticket.arrived_time_ist = ticket.arrived_time_ist || formatIST(ticket.arrived_at);
       }
       const now = Date.now();
       markSeated(updates);
@@ -1850,8 +2013,7 @@ async function route(request, response, pathParts) {
     const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => e.restaurant_id === restaurantId && ["waiting","notified","delayed"].includes(e.status));
-    const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
-    if (deletes.length) await safeCommit(deletes);
+    for (const e of targets) await deleteDocument("queue_entries", e.id);
     // Update aggregates after clearing venue queue
     await updateRestaurantAggregates(restaurantId);
     return send(response, 200, { success: true, message: `Cleared ${targets.length} active ticket(s) from the venue queue.`, cleared: targets.length });
@@ -1863,8 +2025,7 @@ async function route(request, response, pathParts) {
     const firestoreEntries = await fetchQueueEntries();
     const entries = allQueueEntries(firestoreEntries);
     const targets = entries.filter(e => !["waiting","notified","delayed"].includes(e.status));
-    const deletes = targets.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
-    if (deletes.length) await safeCommit(deletes);
+    for (const e of targets) await deleteDocument("queue_entries", e.id);
     const affectedIds = new Set(targets.map(e => e.restaurant_id));
     // Update aggregates for all affected restaurants after purge
     for (const id of affectedIds) {
@@ -1880,8 +2041,7 @@ async function route(request, response, pathParts) {
     if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
     const rawEntries = await listCollection("queue_entries");
     const ghosts = rawEntries.filter(e => isGhostTicket(normalizeQueueEntry(e)));
-    const deletes = ghosts.map(e => ({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/queue_entries/${encodeSegment(e.id)}` } }));
-    if (deletes.length) await safeCommit(deletes);
+    for (const e of ghosts) await deleteDocument("queue_entries", e.id);
     const affectedIds = new Set(ghosts.map(e => normalizeQueueEntry(e).restaurant_id).filter(Boolean));
     for (const id of affectedIds) {
       await updateRestaurantAggregates(id);
@@ -1912,9 +2072,7 @@ async function route(request, response, pathParts) {
     const firestoreReviews = docs;
     const target = firestoreReviews.find(r => r.id === reviewId);
     const restaurantId = target ? target.restaurant_id : null;
-    const deletes = [];
-    if (target) deletes.push({ delete: { document: `projects/${PROJECT_ID}/databases/(default)/documents/reviews/${encodeSegment(reviewId)}` } });
-    if (deletes.length) await safeCommit(deletes);
+    if (target) await deleteDocument("reviews", reviewId);
     // Also un-rate the linked ticket so it can't be double counted
     if (target && target.ticket_id) {
       const t = await fetchQueueEntry(target.ticket_id);
@@ -1939,6 +2097,106 @@ async function route(request, response, pathParts) {
       }
     }
     return send(response, 200, { success: true, message: "Review deleted and Reliability Score recalculated." });
+  }
+
+  // Edit a review (rating / comment) and recalculate the restaurant's Reliability Score
+  if (request.method === "PATCH" && path.startsWith("/api/founder/reviews/")) {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const reviewId = path.split("/").pop();
+    if (!reviewId) return send(response, 400, { error: "Missing review id" });
+    const docs = await listCollection("reviews");
+    const target = docs.find(r => r && r.id === reviewId);
+    if (!target) return send(response, 404, { error: "Review not found" });
+    const restaurantId = target.restaurant_id;
+    const updates = { ...target };
+    let changed = false;
+    if (body.rating !== undefined) {
+      const stars = Number(body.rating);
+      if (Number.isNaN(stars) || stars < 1 || stars > 5) return send(response, 400, { error: "Rating must be between 1 and 5" });
+      updates.rating = stars;
+      updates.stars = stars;
+      updates.rated = true;
+      changed = true;
+    }
+    if (body.comment !== undefined || body.review_comment !== undefined) {
+      const text = String(body.review_comment !== undefined ? body.review_comment : body.comment || "").trim();
+      updates.review_comment = text;
+      updates.comment = text;
+      changed = true;
+    }
+    if (!changed) return send(response, 400, { error: "No review fields provided" });
+    updates.rated_at = updates.rated_at || Date.now();
+    updates.rated_time_ist = updates.rated_time_ist || formatIST(updates.rated_at);
+    await safeCommit([setDocument("reviews", reviewId, updates)]);
+    // Mirror the change onto the linked queue-entry ticket so the rating stays consistent
+    if (target.ticket_id) {
+      const t = await fetchQueueEntry(target.ticket_id);
+      if (t) {
+        const merged = { ...t };
+        if (updates.rating !== undefined) { merged.rating = updates.rating; merged.rated = true; }
+        if (updates.review_comment !== undefined) { merged.review_comment = updates.review_comment; merged.comment = updates.review_comment; }
+        await safeCommit([setDocument("queue_entries", target.ticket_id, toNumberedEntry(merged))]);
+      }
+    }
+    // Recalculate Reliability Score from remaining reviews
+    if (restaurantId) {
+      const all = await listCollection("reviews");
+      const rated = all.filter(r => r.restaurant_id === restaurantId);
+      const uniq = Object.values(rated.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+      if (uniq.length) {
+        const avg = uniq.reduce((s, r) => s + Number(r.rating || 0), 0) / uniq.length;
+        const score = Math.max(50, Math.min(99, Math.round(55 + (avg - 1) * 11)));
+        const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+        const rest = await findRestaurantById(restaurantId);
+        if (rest) {
+          await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, reliability_grade: grade, reliability_manual_override: false, total_verified_checkins: uniq.length, average_rating: avg })]);
+        }
+      }
+    }
+    return send(response, 200, { success: true, message: "Review updated and Reliability Score recalculated.", review: updates });
+  }
+
+  // Recalculate a restaurant's Reliability Score from its current reviews (clears manual override)
+  if (request.method === "POST" && path === "/api/founder/reliability/recalculate") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
+    const all = await listCollection("reviews");
+    const uniq = Object.values(all.filter(r => r.restaurant_id === restaurantId).reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
+    const rest = await findRestaurantById(restaurantId);
+    if (!rest) return send(response, 404, { error: "Restaurant not found" });
+    if (!uniq.length) return send(response, 400, { error: "No reviews to calculate from" });
+    const avg = uniq.reduce((s, r) => s + Number(r.rating || 0), 0) / uniq.length;
+    const score = Math.max(50, Math.min(99, Math.round(55 + (avg - 1) * 11)));
+    const grade = score >= 95 ? "A+" : score >= 90 ? "A" : score >= 80 ? "B" : "C";
+    await safeCommit([setDocument("restaurants", rest.id, { ...rest, reliability_score: score, reliability_grade: grade, reliability_verdict: "Recalculated from reviews", reliability_manual_override: false, total_verified_checkins: uniq.length, average_rating: avg })]);
+    return send(response, 200, { success: true, message: `Reliability Score recalculated to ${score}% (Grade ${grade}) from ${uniq.length} review(s).`, reliability: { score, grade, avg } });
+  }
+
+  // Reorder a restaurant's live queue: move ticket_id to new_position (1-based, earliest joined first)
+  if (request.method === "POST" && path === "/api/founder/queue/reorder") {
+    if (!isFounderAuthorized(request)) return send(response, 401, { error: "Invalid Founder Master Password." });
+    const restaurantId = body.restaurant_id;
+    const ticketId = body.ticket_id;
+    const newPosition = Number(body.new_position);
+    if (!restaurantId || !ticketId) return send(response, 400, { error: "Missing restaurant_id or ticket_id" });
+    if (!Number.isFinite(newPosition) || newPosition < 1) return send(response, 400, { error: "new_position must be >= 1" });
+    const firestoreEntries = await fetchQueueEntries();
+    const entries = allQueueEntries(firestoreEntries).filter(e => e.restaurant_id === restaurantId && ["waiting", "notified", "delayed"].includes(e.status));
+    entries.sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
+    if (!entries.find(e => e.id === ticketId)) return send(response, 404, { error: "Ticket not found in this venue's active queue" });
+    const position = Math.min(newPosition, entries.length);
+    const ordered = entries.filter(e => e.id !== ticketId);
+    ordered.splice(position - 1, 0, entries.find(e => e.id === ticketId));
+    const now = Date.now();
+    const writes = ordered.map((e, index) => {
+      const spaced = { ...e, joined_at: now - (ordered.length - 1 - index) * 60000, joined_at_ms: now - (ordered.length - 1 - index) * 60000 };
+      spaced.joined_time_ist = spaced.joined_time_ist || formatIST(spaced.joined_at);
+      return setDocument("queue_entries", e.id, toNumberedEntry(spaced));
+    });
+    if (writes.length) await safeCommit(writes);
+    await updateRestaurantAggregates(restaurantId);
+    return send(response, 200, { success: true, message: `Ticket moved to position ${position}.`, position });
   }
 
   // Export full network data (JSON). CSV is rendered client-side from this payload.
@@ -2003,17 +2261,27 @@ module.exports = async function handler(request, response) {
     pathParts = requestUrl.pathname.split("/").filter(Boolean);
   }
 
+  // Rate limit public endpoints before any routing / Firestore access.
+  const rl = checkRateLimit(request, pathParts);
+  if (!rl.allowed) {
+    response.setHeader("Retry-After", Math.ceil((rl.reset - Date.now()) / 1000) || "1");
+    return send(response, 429, { error: "Too many requests. Please slow down.", retry_after_ms: rl.reset - Date.now() });
+  }
+
   try {
-    await route(request, response, pathParts);
+    // Hard response-time guard: Vercel functions must always answer, even when
+    // an outbound Firestore/OAuth2 fetch stalls without timing out.
+    await Promise.race([
+      route(request, response, pathParts),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Upstream timeout")), 8000))
+    ]);
   } catch (error) {
     console.error("WaitMate API error:", error);
-    // Surface the exact underlying cause (missing FIREBASE_SERVICE_ACCOUNT env
-    // var, malformed credentials, RSA signing failure, Firestore 403/429, etc.)
-    // so the failure can be diagnosed as a config issue vs a Firestore rule issue.
-    const underlying = String(error.message || error || "Firebase permissions are not configured yet.");
-    if (error.status === 503 || error.status === 403) return send(response, 503, { error: "Firebase permissions are not configured yet.", details: underlying });
-    if (error.status === 404) return send(response, 503, { error: "Firebase database is not available yet.", details: underlying });
-    if (error instanceof SyntaxError) return send(response, 503, { error: "Firebase credentials are malformed.", details: underlying });
-    return send(response, 500, { error: error.message || "Unexpected server error." });
+    // Never leak internal stack traces, raw Firestore errors, or credential
+    // details to the client. Return clean, generic messages only.
+    if (error.status === 503 || error.status === 403) return send(response, 503, { error: "Service temporarily unavailable." });
+    if (error.status === 404) return send(response, 503, { error: "Database is not available yet." });
+    if (error instanceof SyntaxError) return send(response, 503, { error: "Service configuration error." });
+    return send(response, 504, { error: "Upstream timeout." });
   }
 };

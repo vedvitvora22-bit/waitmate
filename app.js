@@ -424,7 +424,7 @@ function getOrCreateDeviceId() {
 // tick at 750ms, so there is never a blank screen between steps.
 // ============================================================================
 window.WaitMateBoot = (function () {
-  const SPLASH_MS = 750;
+  const SPLASH_MS = 500;
   let started = false;
   let splashTimer = null;
 
@@ -434,7 +434,7 @@ window.WaitMateBoot = (function () {
 
   function hideSecondaryModals() {
     [
-      'onboardingModal','waitInfoModal','joinQueueModal','ticketModal',
+      'waitInfoModal','joinQueueModal','ticketModal',
       'reliabilityModal','feedbackModal','ownerPasswordModal','founderLoginModal',
       'ownerChangePasswordModal','founderResetPasswordModal','walkinModal',
       'venueQrModal','friendPassModal','deviceBlockedModal','sharePassModal'
@@ -493,20 +493,8 @@ window.WaitMateBoot = (function () {
   }
 
   function hideGuideline() {
-    var m = $('onboardingModal');
-    if (m) {
-      m.style.display = 'none';
-      m.style.opacity = '0';
-      m.setAttribute('aria-hidden', 'true');
-      try { m.classList.add('hidden'); m.classList.remove('flex'); } catch (e) {}
-    }
-    var b = $('onboardingBackdrop');
-    if (b) {
-      b.style.display = 'none';
-      b.style.opacity = '0';
-      b.setAttribute('hidden', 'true');
-      try { b.classList.add('hidden'); } catch (e) {}
-    }
+    // Onboarding guideline modal removed: landing now goes straight from the
+    // fast splash to the customer view. Nothing to hide here.
   }
 
   function hasDeepLink() {
@@ -596,8 +584,9 @@ window.WaitMateBoot = (function () {
           runDeepLink();
         }
       } else {
-        if (typeof openOnboarding === 'function') openOnboarding();
-        else if (window.openOnboarding) window.openOnboarding();
+        // No deep link: visitors land directly on the customer view after the
+        // fast splash — no blocking onboarding modal, no localStorage gate.
+        enterCustomerView();
       }
     }, SPLASH_MS);
   }
@@ -859,10 +848,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const founderDiv = document.getElementById('founderInterface');
   if (founderDiv && !founderDiv.classList.contains('hidden')) founderDiv.classList.add('hidden');
 
-  // Safety: guarantee every secondary modal EXCEPT the onboarding guideline
-  // is strictly closed on initial load. #onboardingModal is left alone: it
-  // starts hidden in HTML and is opened exclusively by the inline boot
-  // script at 750ms (Logo Splash -> 6-Slide Guideline -> Customer View).
+  // Safety: guarantee every secondary modal is strictly closed on initial load.
   const SECONDARY_MODAL_IDS = [
     'waitInfoModal','joinQueueModal','ticketModal','reliabilityModal','feedbackModal',
     'ownerPasswordModal','founderLoginModal','ownerChangePasswordModal','founderResetPasswordModal',
@@ -880,10 +866,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   allRestaurants = JSON.parse(JSON.stringify(fallbackRestaurants));
   renderRestaurantsGrid();
 
-  // Splash / onboarding are controlled exclusively by the inline boot script
-  // at the bottom of index.html (3-step: Logo Splash 0-750ms -> 6-Slide
-  // Guideline -> Customer View). app.js only loads data and initializes the
-  // customer shell; never touches splash/modal visibility here to avoid races.
+  // Splash / landing are controlled exclusively by the inline boot script
+  // at the bottom of index.html: Logo Splash (0-500ms) -> Customer View,
+  // with no blocking onboarding modal or localStorage gate. app.js only
+  // loads data and initializes the customer shell here to avoid races.
 
   const dataPromise = (async () => {
     try { await loadRestaurants(); } catch (err) { console.warn('Pre-load: restaurants failed', err); }
@@ -1743,6 +1729,7 @@ async function submitNewRestaurant(e) {
 let founderRestaurantsCache = [];
 let founderQueuesCache = [];
 let founderReviewsCache = [];
+let founderQueueView = 'active';
 let globalAnnouncementText = '';
 
 async function loadFounderDashboard() {
@@ -1973,6 +1960,7 @@ function renderFounderData(data) {
                 <button onclick="founderSetManualWait('${id}')" class="px-2 py-1 bg-orange-50 text-orange-700 rounded text-[10px] font-bold hover:bg-orange-100 border border-orange-200 transition">Set Wait</button>
                 <input type="number" id="fnd-score-${id}" min="0" max="100" placeholder="Score" class="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 <button onclick="founderSetReliability('${id}')" class="px-2 py-1 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold hover:bg-emerald-100 border border-emerald-200 transition">Set Score</button>
+                <button onclick="founderRecalculateReliability('${id}')" class="px-2 py-1 bg-slate-50 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-100 border border-slate-200 transition">Recalc</button>
               </div>
               <div class="flex items-center justify-end gap-1.5 mt-1">
                 <input type="text" id="fnd-ann-${id}" placeholder="Announcement" class="w-32 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-amber-500 focus:outline-none">
@@ -2048,6 +2036,9 @@ function renderFounderData(data) {
                 <button onclick="founderEditPartySize('${id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[10px] font-bold hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1">
                   <i data-lucide="edit-3" class="w-2.5 h-2.5"></i> Size
                 </button>
+                <button onclick="founderReorderTicket('${id}', '${jsEscape(q.restaurant_id || '')}')" class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-[10px] font-bold hover:bg-indigo-100 border border-indigo-200 transition flex items-center gap-1" title="Move to a new position in line">
+                  <i data-lucide="arrows-up-down" class="w-2.5 h-2.5"></i> Order
+                </button>
               </div>
             </td>
           </tr>
@@ -2095,6 +2086,9 @@ ${reviews.map(rev => {
                   <td class="py-2 px-2 text-right">
                     <button onclick="founderDeleteReview('${id}', '${jsEscape(rev.restaurant_id || '')}')" class="px-2 py-1 bg-rose-50 text-rose-700 rounded text-[9px] font-bold hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1">
                       <i data-lucide="trash-2" class="w-2.5 h-2.5"></i> Delete
+                    </button>
+                    <button onclick="founderEditReview('${id}', '${jsEscape(rev.restaurant_id || '')}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[9px] font-bold hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-1">
+                      <i data-lucide="edit-3" class="w-2.5 h-2.5"></i> Edit
                     </button>
                   </td>
                 </tr>
@@ -2350,6 +2344,8 @@ function renderRestaurantsGrid() {
   const totalGuestsInLine = filtered.reduce((sum, r) => sum + (Number(r.live_stats?.total_waiting_people ?? r.total_waiting_people) || 0), 0);
   const topCountEl = document.getElementById('topLiveDinersCount');
   if (topCountEl) topCountEl.textContent = `${totalGuestsInLine} active diners`;
+  const sectionCBadge = document.getElementById('sectionCDinerBadge');
+  if (sectionCBadge) sectionCBadge.textContent = `${totalGuestsInLine} active diners in line`;
 
   // Sorting — favorited spots are pinned to the top of the default discovery grid
   const isDefaultGrid = currentCategory === 'all' && !currentSearch && currentCity === 'all' && currentArea === 'all';
@@ -5562,6 +5558,106 @@ async function founderEditPartySize(ticketId) {
   } catch (err) { showToast('Error editing party size', 'error'); }
 }
 
+// Switch the founder queue stream between live queues and full history (seated / cancelled / no_show / expired)
+async function founderSetQueueView(view) {
+  founderQueueView = view;
+  const activeBtn = document.getElementById('fndQvActive');
+  const allBtn = document.getElementById('fndQvAll');
+  if (activeBtn && allBtn) {
+    if (view === 'all') {
+      activeBtn.className = 'px-2 py-1 rounded text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100';
+      allBtn.className = 'px-2 py-1 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100';
+    } else {
+      activeBtn.className = 'px-2 py-1 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100';
+      allBtn.className = 'px-2 py-1 rounded text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100';
+    }
+  }
+  try {
+    const res = await fetch(`/api/founder/queues?status=${view}`, { headers: founderHeaders(), cache: 'no-store' });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Failed to load queue stream');
+    const q = await res.json();
+    const entries = getSafeEntries(q);
+    const venues = (founderRestaurantsCache && founderRestaurantsCache.length) ? founderRestaurantsCache : (allRestaurants || []);
+    const reviews = (founderReviewsCache && founderReviewsCache.length) ? founderReviewsCache : [];
+    renderFounderData({
+      summary: {
+        total_restaurants: venues.length,
+        total_cities: [...new Set(venues.map(r => r.city || 'Mumbai'))].length,
+        cities_list: [...new Set(venues.map(r => r.city || 'Mumbai'))],
+        active_parties_in_queue: entries.filter(e => e.status === 'waiting').length,
+        active_diners_in_queue: entries.filter(e => e.status === 'waiting').reduce((s, e) => s + Number(e.party_size || 0), 0),
+        total_seated_parties: entries.filter(e => e.status === 'seated').length,
+        total_seated_diners: entries.filter(e => e.status === 'seated').reduce((s, e) => s + Number(e.party_size || 0), 0),
+        platform_avg_reliability: venues.length ? Math.round(venues.reduce((a, r) => a + Number((r.reliability || {}).score || 92), 0) / venues.length) : 92
+      },
+      restaurants: venues,
+      recent_queues: entries,
+      recent_reviews: reviews
+    });
+  } catch (err) {
+    console.error("[Founder] queue stream error:", err);
+    showToast('Error loading queue stream', 'error');
+  }
+}
+
+// Move a ticket to a new position (1 = first) within its venue's active queue
+async function founderReorderTicket(ticketId, restaurantId) {
+  if (!restaurantId) { showToast('Cannot reorder: missing venue.', 'error'); return; }
+  const entered = window.prompt('Move this ticket to which position in line? (1 = first)');
+  if (entered === null) return;
+  const position = Number(entered);
+  if (!Number.isFinite(position) || position < 1) { showToast('Invalid position.', 'error'); return; }
+  try {
+    const res = await fetch('/api/founder/queue/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: restaurantId, ticket_id: ticketId, new_position: position })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Reorder failed');
+    showToast(`Ticket moved to position ${position}.`, 'success');
+    await founderSetQueueView(founderQueueView);
+  } catch (err) { showToast('Error reordering ticket', 'error'); }
+}
+
+// Recalculate a venue's Reliability Score from its current reviews (clears manual override)
+async function founderRecalculateReliability(venueId) {
+  try {
+    const res = await fetch('/api/founder/reliability/recalculate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ restaurant_id: venueId })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Recalculation failed');
+    const data = await res.json().catch(() => ({}));
+    showToast(data.message || 'Reliability Score recalculated.', 'success');
+    await loadFounderDashboard();
+    await loadRestaurants();
+  } catch (err) { showToast('Error recalculating Reliability Score', 'error'); }
+}
+
+// Edit a review's rating and comment; Reliability Score is recalculated automatically
+async function founderEditReview(reviewId, restaurantId) {
+  if (!reviewId) { showToast('Cannot edit: missing review.', 'error'); return; }
+  const enteredRating = window.prompt('Enter new rating (1-5 stars):');
+  if (enteredRating === null) return;
+  const rating = Number(enteredRating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) { showToast('Rating must be between 1 and 5.', 'error'); return; }
+  const comment = window.prompt('Enter new review comment (leave blank to clear):');
+  if (comment === null) return;
+  try {
+    const res = await fetch(`/api/founder/reviews/${reviewId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', ...founderHeaders() },
+      body: JSON.stringify({ rating, comment })
+    });
+    if (res.status === 401) { sessionStorage.removeItem(FOUNDER_PWD_KEY); openFounderLoginModal(); return; }
+    if (!res.ok) throw new Error('Review edit failed');
+    showToast('Review updated. Reliability Score recalculated.', 'success');
+    await founderSetQueueView(founderQueueView);
+    await loadFounderDashboard();
+  } catch (err) { showToast('Error editing review', 'error'); }
+}
+
 function openFounderEditRestaurantModal(venueId) {
   const r = (founderRestaurantsCache || []).find(x => x.id === venueId) || (allRestaurants || []).find(x => x.id === venueId);
   if (!r) return;
@@ -5684,228 +5780,138 @@ async function founderSeedReviews() {
 window.calculateRestaurantWaitTime = calculateRestaurantWaitTime;
 
 // ==========================================
-// 17. ONBOARDING TOUR — Photo-led 5-Slide Problem → WaitMate Solution
+// Navigation & Landing-Page Helpers
 // ==========================================
-let onboardingCurrentStep = 1;
-const onboardingTotalSteps = 6;
-const ONBOARDING_SEEN_KEY = 'wm_onboarding_seen';
 
-function showCustomerInterface() {
-  const main = document.getElementById('mainContainer');
-  if (main) { main.classList.remove('hidden'); main.style.display = 'block'; }
-  const custDiv = document.getElementById('customerInterface');
-  if (custDiv) { custDiv.classList.remove('hidden'); custDiv.style.display = 'block'; }
-
-  // Always switch to customer view and render so the grid is never blank.
-  switchInterface('customer');
-
-  // Load/refresh restaurants in the background; falls back to the default
-  // 12 Mumbai venues if the API is slow or errors out, so the grid is
-  // never left empty.
-  loadRestaurants();
+// Smooth-scroll to a page section, compensating for the sticky navbar height.
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const header = document.getElementById('topNavbar');
+  const offset = header ? header.getBoundingClientRect().height : 80;
+  const top = el.getBoundingClientRect().top + window.pageYOffset - offset;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
-function initOnboarding() {
-  const modal = document.getElementById('onboardingModal');
-  if (!modal) return;
-
-  const backdrop = document.getElementById('onboardingBackdrop');
-  if (backdrop) backdrop.classList.remove('hidden');
-
-  onboardingCurrentStep = 1;
-  updateOnboardingUI();
-  lucide.createIcons();
-
-  document.addEventListener('keydown', handleOnboardingKeydown);
-  initOnboardingTouch();
-}
-
-function openOnboarding() {
-  const modal = document.getElementById('onboardingModal');
-  if (!modal) return;
-  localStorage.removeItem(ONBOARDING_SEEN_KEY);
-  onboardingCurrentStep = 1;
-  // True centered full-screen overlay (inline !important styles win over any CSS class).
-  modal.style.setProperty('display', 'flex', 'important');
-  modal.style.setProperty('position', 'fixed', 'important');
-  modal.style.setProperty('inset', '0', 'important');
-  modal.style.setProperty('width', '100vw', 'important');
-  modal.style.setProperty('height', '100vh', 'important');
-  modal.style.setProperty('z-index', '99998', 'important');
-  modal.style.setProperty('align-items', 'center', 'important');
-  modal.style.setProperty('justify-content', 'center', 'important');
-  modal.style.setProperty('padding', '1rem', 'important');
-  modal.style.setProperty('background', 'rgba(15, 23, 42, 0.85)', 'important');
-  modal.style.setProperty('backdrop-filter', 'blur(6px)');
-  modal.style.setProperty('opacity', '1');
-  modal.style.setProperty('pointer-events', 'auto');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-  modal.removeAttribute('hidden');
-  modal.setAttribute('aria-hidden', 'false');
-  const backdrop = document.getElementById('onboardingBackdrop');
-  if (backdrop) {
-    backdrop.style.removeProperty('display');
-    backdrop.style.removeProperty('pointer-events');
-    backdrop.style.opacity = '1';
-    backdrop.classList.remove('hidden');
-    backdrop.removeAttribute('hidden');
-  }
-  updateOnboardingUI();
-  lucide.createIcons();
-  document.addEventListener('keydown', handleOnboardingKeydown);
-  initOnboardingTouch();
-}
-
-function handleOnboardingKeydown(e) {
-  const modal = document.getElementById('onboardingModal');
-  if (!modal || modal.classList.contains('hidden')) return;
-
-  switch (e.key) {
-    case 'ArrowRight':
-      e.preventDefault();
-      if (onboardingCurrentStep < onboardingTotalSteps) nextOnboardingStep();
-      break;
-    case 'ArrowLeft':
-      e.preventDefault();
-      if (onboardingCurrentStep > 1) prevOnboardingStep();
-      break;
-    case 'Escape':
-      e.preventDefault();
-      skipOnboarding();
-      break;
+// Open the existing Host Stand: switch to the owner view and prompt for the
+// venue dashboard password. Host Stand login flow and passwords are unchanged.
+function openHostStand() {
+  switchInterface('owner');
+  const firstVenue = (allRestaurants && allRestaurants.length) ? allRestaurants[0] : null;
+  if (firstVenue) {
+    openOwnerPasswordModal(firstVenue.id);
+  } else {
+    openOwnerPasswordModal();
   }
 }
 
-function initOnboardingTouch() {
-  const modal = document.getElementById('onboardingModal');
-  let startX = 0;
-  modal.addEventListener('touchstart', (e) => {
-    startX = e.changedTouches[0].screenX;
-  }, { passive: true });
-  modal.addEventListener('touchend', (e) => {
-    if (modal.classList.contains('hidden')) return;
-    const diffX = e.changedTouches[0].screenX - startX;
-    if (Math.abs(diffX) > 50) {
-      diffX > 0 ? prevOnboardingStep() : nextOnboardingStep();
+// ==========================================
+// Section B — Sandbox-only interactive mini preview hero
+// Local component state only — never touches real Firestore/API data.
+// ==========================================
+let heroStageCurrent = 0;
+
+const heroStages = [
+  {
+    label: 'Queue Open · Demo',
+    progress: 0,
+    calls: [
+      'Sandbox preview — no live data is touched.',
+      'Tap a stage to simulate the diner journey.',
+      'Local component state only — demo data.'
+    ]
+  },
+  {
+    label: 'Joined · Rank #4',
+    progress: 35,
+    calls: [
+      'Remote Join locks your queue rank before you travel.',
+      'No sidewalk wait — join before you step out.',
+      'The host sees your rank before you arrive.'
+    ]
+  },
+  {
+    label: 'Arrived · Table Prepped',
+    progress: 75,
+    calls: [
+      '"I\'ve Arrived" confirms you are physically at the venue.',
+      'Prevents no-shows from holding tables unfairly.',
+      'Keeps queue order fair for walk-ins too.'
+    ]
+  },
+  {
+    label: 'Seated · Rated',
+    progress: 100,
+    calls: [
+      'Seated & rated by you.',
+      'Your check-in sharpens the Reliability Score.',
+      'The next diner gets an honest ETA.'
+    ]
+  }
+];
+
+function heroStage(n) {
+  heroStageCurrent = n;
+  const s = heroStages[n];
+  const badge = document.getElementById('heroStatusBadge');
+  const bar = document.getElementById('heroProgressBar');
+  if (badge) badge.textContent = s.label;
+  if (bar) bar.style.width = s.progress + '%';
+
+  const calls = document.getElementById('heroCallouts');
+  if (calls && s.calls) {
+    const pills = calls.querySelectorAll('.hero-callout');
+    s.calls.forEach(function (text, i) {
+      if (pills[i]) pills[i].textContent = text;
+    });
+  }
+
+  document.querySelectorAll('.hero-stage-btn').forEach(function (btn, i) {
+    var active = (i + 1 === n);
+    if (active) {
+      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-orange-200 bg-orange-50 text-orange-700 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-orange-100 transition-all active:scale-95';
+    } else {
+      btn.className = 'hero-stage-btn px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold flex flex-col items-center gap-1.5 hover:bg-slate-50 transition-all active:scale-95';
     }
-  }, { passive: true });
+  });
 }
 
-function updateOnboardingUI() {
-  const modal = document.getElementById('onboardingModal');
-  if (!modal) return;
+// ==========================================
+// Section D — Expandable score breakdown cards
+// ==========================================
+function toggleScoreCard(el) {
+  if (!el || !el.classList.contains('score-card')) return;
+  var body = el.querySelector('.score-body');
+  var icon = el.querySelector('i[data-lucide="chevron-down"], i[data-lucide="chevron-up"]');
+  var isOpen = (body.style.maxHeight && body.style.maxHeight !== '0px' && body.style.maxHeight !== '');
 
-  document.querySelectorAll('.onboarding-screen').forEach((screen) => {
-    screen.classList.add('hidden');
-    screen.classList.remove('flex');
+  // Close any other open card first (one at a time)
+  document.querySelectorAll('.score-card').forEach(function (card) {
+    if (card === el) return;
+    var b = card.querySelector('.score-body');
+    var ic = card.querySelector('i[data-lucide="chevron-down"], i[data-lucide="chevron-up"]');
+    b.style.maxHeight = '0';
+    if (ic) {
+      ic.setAttribute('data-lucide', 'chevron-down');
+      ic.className = 'w-4 h-4 text-slate-400 group-hover:text-orange-500 transition-transform duration-300';
+    }
   });
 
-  const currentScreen = document.querySelector(`.onboarding-screen[data-step="${onboardingCurrentStep}"]`);
-  if (currentScreen) {
-    currentScreen.classList.remove('hidden');
-    currentScreen.classList.add('flex');
-  }
-
-  updateOnboardingNav();
-
-  setTimeout(() => {
-    const primaryBtn = currentScreen?.querySelector('.onboarding-next, .onboarding-cta');
-    if (primaryBtn) primaryBtn.focus();
-  }, 50);
-
-  lucide.createIcons();
-}
-
-function updateOnboardingNav() {
-  const prevBtn = document.querySelector('.onboarding-prev');
-  if (prevBtn) {
-    if (onboardingCurrentStep === 1) {
-      prevBtn.disabled = true;
-      prevBtn.classList.add('opacity-40', 'cursor-not-allowed');
-    } else {
-      prevBtn.disabled = false;
-      prevBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+  if (isOpen) {
+    body.style.maxHeight = '0';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'chevron-down');
+      icon.className = 'w-4 h-4 text-slate-400 group-hover:text-orange-500 transition-transform duration-300';
+    }
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'chevron-up');
+      icon.className = 'w-4 h-4 text-slate-400 group-hover:text-orange-500 transition-transform duration-300';
     }
   }
-
-  const nextBtn = document.querySelector('.onboarding-next');
-  const ctaBtn = document.querySelector('.onboarding-cta');
-  if (onboardingCurrentStep === onboardingTotalSteps) {
-    if (nextBtn) nextBtn.classList.add('hidden');
-    if (ctaBtn) ctaBtn.classList.remove('hidden');
-  } else {
-    if (nextBtn) nextBtn.classList.remove('hidden');
-    if (ctaBtn) ctaBtn.classList.add('hidden');
-  }
-
-  const progressText = document.getElementById('onboardingProgressText');
-  const progressFill = document.querySelector('.onboarding-progress-fill');
-  if (progressText) progressText.textContent = `${onboardingCurrentStep} / ${onboardingTotalSteps}`;
-  if (progressFill) progressFill.style.width = `${(onboardingCurrentStep / onboardingTotalSteps) * 100}%`;
+  if (window.lucide) lucide.createIcons();
 }
-
-function nextOnboardingStep() {
-  if (onboardingCurrentStep < onboardingTotalSteps) {
-    onboardingCurrentStep++;
-    updateOnboardingUI();
-  }
-}
-
-function prevOnboardingStep() {
-  if (onboardingCurrentStep > 1) {
-    onboardingCurrentStep--;
-    updateOnboardingUI();
-  }
-}
-
-function skipOnboarding() {
-  completeOnboarding(true);
-}
-
-function completeOnboarding(skipped = false) {
-  const modal = document.getElementById('onboardingModal');
-  if (!modal) return;
-
-  // Step 3a: explicitly close the guideline overlay so nothing invisible
-  // blocks the customer view.
-  modal.style.setProperty('display', 'none', 'important');
-  modal.style.opacity = '0';
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
-  modal.style.pointerEvents = 'none';
-  modal.setAttribute('aria-hidden', 'true');
-
-  const backdrop = document.getElementById('onboardingBackdrop');
-  if (backdrop) {
-    backdrop.style.setProperty('display', 'none', 'important');
-    backdrop.style.opacity = '0';
-    backdrop.classList.add('hidden');
-    backdrop.style.pointerEvents = 'none';
-  }
-
-  document.removeEventListener('keydown', handleOnboardingKeydown);
-
-  // Step 3b: hand off to the single boot state machine — forces <main> and
-  // #customerInterface visible, renders the restaurant cards, then completes launch.
-  if (window.WaitMateBoot && typeof window.WaitMateBoot.enterCustomerView === 'function') {
-    window.WaitMateBoot.enterCustomerView();
-  } else {
-    showCustomerInterface();
-  }
-
-  if (!skipped) {
-    showToast('Welcome to WaitMate! 🎉', 'success');
-  }
-
-  lucide.createIcons();
-}
-
-window.nextOnboardingStep = nextOnboardingStep;
-window.prevOnboardingStep = prevOnboardingStep;
-window.skipOnboarding = skipOnboarding;
-window.completeOnboarding = completeOnboarding;
-window.openOnboarding = openOnboarding;
 
 (() => {
   console.log("👀 Watching for Rating UI when customer is marked 'seated'...");
