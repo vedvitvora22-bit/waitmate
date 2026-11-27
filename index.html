@@ -198,14 +198,14 @@
           <div class="flex items-center gap-3">
             <a href="#" onclick="event.preventDefault(); openCustomerFlow()" class="text-sm font-semibold text-slate-200 hover:text-white transition-colors px-4 py-1.5 border border-white/10 hover:bg-white/5 rounded-lg">Customer App</a>
             <a href="#" onclick="event.preventDefault(); openHostStand()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold backdrop-blur-sm shadow-sm transition active:scale-95">Host Stand</a>
-            <button id="landingThemeToggle" onclick="toggleLandingTheme()" aria-label="Switch to light mode" title="Switch to Light Mode" class="w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 text-slate-300 hover:text-white">
-              <!-- Dark Mode Sun icon (shown when dark) -->
-              <svg id="landingThemeIconSun" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="#FBBF24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="5"/>
+            <button id="landingThemeToggle" onclick="toggleLandingTheme()" aria-label="Switch to light mode" title="Switch to Light Mode" class="w-9 h-9 rounded-full bg-[#000000] border border-white/20 hover:border-white/50 flex items-center justify-center transition-all duration-300">
+              <!-- Dark Mode Sun icon (shown when dark) — pure white -->
+              <svg id="landingThemeIconSun" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="2"/>
                 <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
               </svg>
-              <!-- Light Mode Moon icon (shown when light) -->
-              <svg id="landingThemeIconMoon" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="#0F172A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Light Mode Moon icon (shown when light) — pure white -->
+              <svg id="landingThemeIconMoon" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79"/>
               </svg>
             </button>
@@ -1133,6 +1133,19 @@
           <input type="text" id="joinCustomerName" required placeholder="Enter your name" class="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
         </div>
 
+        <!-- WhatsApp Number (pre-filled from saved number; editable if they skipped the landing prompt) -->
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <label class="block text-xs font-bold text-slate-400">WhatsApp Number (+91)</label>
+            <span id="joinPhoneSavedHint" class="text-[10px] text-emerald-400 font-medium hidden">Saved number</span>
+          </div>
+          <div class="relative">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">+91</span>
+            <input type="tel" id="joinCustomerPhone" inputmode="numeric" maxlength="10" placeholder="9XXXXXXXX" autocomplete="tel" class="w-full pl-10 pr-4 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+          </div>
+          <p id="joinPhoneError" class="text-[10px] text-rose-400 hidden">Enter a valid 10-digit Indian mobile number starting with 6–9.</p>
+        </div>
+
         <!-- Special Requests -->
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1">Special Notes (Optional)</label>
@@ -1170,7 +1183,7 @@
         </div>
         <p id="customerPhoneError" class="text-[11px] text-rose-400 hidden font-medium">Please enter a valid 10-digit Indian mobile number starting with 6–9.</p>
         <div class="flex items-center justify-between">
-          <a href="#" onclick="closeCustomerPhoneModal(); openCustomerFlow()" class="text-[12px] text-slate-400 hover:text-white underline whitespace-nowrap">Skip for now</a>
+          <a href="#" id="customerPhoneSkipLink" onclick="closeCustomerPhoneModal(); openCustomerFlow()" class="text-[12px] text-slate-400 hover:text-white underline whitespace-nowrap">Skip for now</a>
           <button type="submit" id="customerPhoneSubmit" class="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
             <i data-lucide="send" class="w-4 h-4"></i>
             <span>Save & Send Welcome on WhatsApp →</span>

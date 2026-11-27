@@ -644,28 +644,28 @@ html.landing-light #landingView .text-emerald-400{ color: #10b981 !important; }
 html.landing-light #landingView .text-emerald-300{ color: #34d399 !important; }
 html.landing-light #landingView .text-emerald-500{ color: #059669 !important; }
 
-/* Theme toggle button: sun (dark) vs moon (light) circle styling */
-html.landing-light #landingThemeToggle{
-  background-color: #FFFFFF !important;
-  border-color: rgba(226,232,240,0.6) !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
-  color: #0F172A !important;
+/* Theme toggle button: SOLID BLACK in BOTH dark and light modes,
+   with pure white SVG icons. Never changes background per theme. */
+#landingThemeToggle{
+  background-color: #000000 !important;
+  border-color: rgba(255,255,255,0.20) !important;
 }
-html.landing-light #landingThemeToggle:hover{
-  border-color: rgba(16,185,129,0.5) !important;
-  color: #059669 !important;
+#landingThemeToggle:hover{
+  border-color: rgba(255,255,255,0.50) !important;
 }
+html.landing-light #landingThemeToggle,
 html:not(.landing-light) #landingThemeToggle{
-  background-color: rgba(15,23,42,0.8) !important;
-  border-color: rgba(255,255,255,0.15) !important;
-  color: #D1D5DB !important;
+  background-color: #000000 !important;
+  border-color: rgba(255,255,255,0.20) !important;
+  color: #FFFFFF !important;
 }
+html.landing-light #landingThemeToggle:hover,
 html:not(.landing-light) #landingThemeToggle:hover{
-  border-color: rgba(251,191,36,0.5) !important;
-  color: #FBBF24 !important;
+  border-color: rgba(255,255,255,0.50) !important;
+  color: #FFFFFF !important;
 }
 
-/* SVG icon swap with tactile rotate/scale */
+/* SVG icon swap — pure white icons in both modes */
 html.landing-light #landingThemeIconSun{ display: none !important; }
 html.landing-light #landingThemeIconMoon{ display: block !important; }
 html:not(.landing-light) #landingThemeIconSun{ display: block !important; }

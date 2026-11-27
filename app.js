@@ -1553,14 +1553,17 @@ function switchView(view) {
   // Bootstrap the freshly shown view
   if (view === 'customer' && typeof renderRestaurantsGrid === 'function') {
     renderRestaurantsGrid();
+    renderCustomerPhonePill();
   }
 }
 
 // =========================================================================
 // Landing Page Light / Dark Theme Toggle
 // Persists to localStorage (wm_landing_theme), applies via .landing-light on
-// <html> (zero-flash head script), and swaps the vector SVG sun/moon icon
-// with a tactile rotate/scale transition.
+// <html> (zero-flash head script), and swaps the pure-white SVG sun/moon icon.
+// The toggle button stays solid black (#000000) in BOTH modes; only the
+// icon swaps between Sun (dark mode -> switch to light) and Moon (light mode
+// -> switch to dark).
 // =========================================================================
 function toggleLandingTheme() {
   const html = document.documentElement;
@@ -1576,7 +1579,7 @@ function toggleLandingTheme() {
 
   const isLight = html.classList.toggle('landing-light');
 
-  // Full-page background color switching: documentElement, body, and #landingView
+  // Full-page background color switching: html, body, and #landingView
   if (isLight) {
     html.style.backgroundColor = '#F8FAFC';
     body.style.backgroundColor = '#F8FAFC';
@@ -1610,19 +1613,16 @@ function toggleLandingTheme() {
 function syncLandingThemeIcon(isLight) {
   const sun = document.getElementById('landingThemeIconSun');
   const moon = document.getElementById('landingThemeIconMoon');
-  const btn = document.getElementById('landingThemeToggle');
   if (!sun || !moon) return;
 
+  // Button stays solid black with white icons in BOTH modes — only swap
+  // which SVG icon is visible (Sun = dark mode active, Moon = light mode active).
   if (isLight) {
-    // Light Mode: show Moon icon, light circle
     sun.classList.add('hidden');
     moon.classList.remove('hidden');
-    btn.className = 'w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 bg-white border-slate-300 shadow-sm text-slate-900 hover:border-emerald-500';
   } else {
-    // Dark Mode: show Sun icon, dark glass circle
     moon.classList.add('hidden');
     sun.classList.remove('hidden');
-    btn.className = 'w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 bg-slate-900/80 border-white/15 hover:border-amber-400/50 text-slate-300 hover:text-white';
   }
 }
 
@@ -2091,7 +2091,7 @@ function renderFounderData(data) {
             <td class="py-2.5 px-4 font-medium text-slate-800">${escapeHtml(q.restaurant_name)}</td>
             <td class="py-2.5 px-4">
               <div class="font-bold text-slate-900">${escapeHtml(q.customer_name)}</div>
-              <div class="text-[10px] text-slate-600">${escapeHtml(q.phone || '—')}</div>
+              <div class="text-[10px] text-slate-600">${q.phone ? escapeHtml(formatIndiaPhone(q.phone)) : '—'}</div>
             </td>
             <td class="py-2.5 px-4">
               <div class="text-slate-800 font-medium">${Number(q.party_size || 0)} guests</div>
@@ -2702,6 +2702,11 @@ function openJoinModal(venueId, channelOverride = null) {
   const savedName = localStorage.getItem('waitmate_guest_name') || '';
   document.getElementById('joinCustomerName').value = savedName;
   document.getElementById('joinSpecialReq').value = '';
+  const savedPhone = getCustomerPhone();
+  const joinPhoneInput = document.getElementById('joinCustomerPhone');
+  const joinPhoneHint = document.getElementById('joinPhoneSavedHint');
+  if (joinPhoneInput) joinPhoneInput.value = savedPhone ? phoneDigits10(savedPhone) : '';
+  if (joinPhoneHint) joinPhoneHint.classList.toggle('hidden', !savedPhone);
 
   // Entry channel: walk-in when opened via a venue QR/deep link, remote otherwise
   const channel = channelOverride === 'walk_in' ? 'walk_in' : 'remote';
@@ -2821,6 +2826,20 @@ async function submitJoinQueue(e) {
   }
   localStorage.setItem('waitmate_guest_name', name);
 
+  // WhatsApp number: validate + save so it attaches to this queue entry and
+  // persists for future joins / the header phone pill.
+  const joinPhoneInput = document.getElementById('joinCustomerPhone');
+  const joinPhoneError = document.getElementById('joinPhoneError');
+  const phoneDigits = (joinPhoneInput ? joinPhoneInput.value : '').trim();
+  if (phoneDigits && !INDIAN_PHONE_RE.test(phoneDigits)) {
+    if (joinPhoneError) joinPhoneError.classList.remove('hidden');
+    if (joinPhoneInput) joinPhoneInput.focus();
+    return;
+  }
+  if (joinPhoneError) joinPhoneError.classList.add('hidden');
+  const joinPhone = phoneDigits ? '+91' + phoneDigits : '';
+  if (joinPhone) localStorage.setItem(WM_CUSTOMER_PHONE_KEY, joinPhone);
+
   // One active ticket per device: block a second join if this device already
   // holds an active (waiting / arrived, not expired) ticket saved locally.
   const savedActive = JSON.parse(localStorage.getItem('waitmate_active_ticket') || 'null');
@@ -2843,7 +2862,7 @@ async function submitJoinQueue(e) {
   const joinPayload = {
     restaurant_id: restId,
     name: name,
-    phone: '',
+    phone: joinPhone,
     party_size: partySize,
     seating_pref: seatingPref,
     special_requests: specialReq,
@@ -2903,7 +2922,7 @@ async function submitJoinQueue(e) {
       ticket_number: data.ticket_number,
       restaurant_id: restId,
       customer_name: name,
-      phone: '',
+      phone: joinPhone,
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
@@ -2963,7 +2982,7 @@ async function submitJoinQueue(e) {
       ticket_number: ticketNum,
       restaurant_id: restId,
       customer_name: name,
-      phone: '',
+      phone: joinPhone,
       party_size: partySize,
       seating_pref: seatingPref,
       special_requests: specialReq,
@@ -4510,6 +4529,152 @@ function stopHostStandPolling() {
 }
 
 // ==========================================
+// Customer WhatsApp Phone System (+91 India)
+// Zero API cost: wa.me deep-links, localStorage,
+// server-side Firestore writes via /api endpoints.
+// ==========================================
+
+const WM_CUSTOMER_PHONE_KEY = 'wm_customer_phone';
+const INDIAN_PHONE_RE = /^[6-9]\d{9}$/;
+
+// Return stored "+91XXXXXXXXXX" only when it passes the 10-digit Indian
+// mobile validation, else null.
+function getCustomerPhone() {
+  try {
+    const raw = String(localStorage.getItem(WM_CUSTOMER_PHONE_KEY) || '').trim();
+    const digits = raw.replace(/^\+91/, '').replace(/\D/g, '');
+    return INDIAN_PHONE_RE.test(digits) ? '+91' + digits : null;
+  } catch (e) { return null; }
+}
+
+// Strip everything but digits, then drop a leading "91" country code so
+// callers always get the bare 10 digits for wa.me links.
+function phoneDigits10(phone) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (d.startsWith('91') && d.length === 12) d = d.slice(2);
+  return d;
+}
+
+// "+919999999999" → "+91 99999 99999"
+function formatIndiaPhone(phone) {
+  const d = phoneDigits10(phone);
+  if (!INDIAN_PHONE_RE.test(d)) return String(phone || '');
+  return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
+}
+
+// Gate every explicit Landing → Customer entry point. When no valid phone is
+// saved yet, open the capture modal first; the modal hands off to
+// switchInterface('customer') after save. "Skip for now" also passes through.
+function openCustomerFlow() {
+  if (getCustomerPhone()) {
+    switchInterface('customer');
+    renderCustomerPhonePill();
+  } else {
+    openCustomerPhoneModal(false);
+  }
+}
+
+let customerPhoneEditMode = false;
+
+function openCustomerPhoneModal(editMode = false) {
+  customerPhoneEditMode = !!editMode;
+  const modal = document.getElementById('customerPhoneModal');
+  const input = document.getElementById('customerPhoneInput');
+  const err = document.getElementById('customerPhoneError');
+  const skipLink = document.getElementById('customerPhoneSkipLink');
+  const btn = document.getElementById('customerPhoneSubmit');
+  const saved = getCustomerPhone();
+  if (input) input.value = saved ? phoneDigits10(saved) : '';
+  if (err) err.classList.add('hidden');
+  if (skipLink) skipLink.style.display = editMode ? 'none' : 'inline-block';
+  if (btn) {
+    btn.innerHTML = editMode
+      ? `<i data-lucide="send" class="w-4 h-4"></i> <span>Save Changes →</span>`
+      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Send Welcome on WhatsApp →</span>`;
+  }
+  if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+  lucide.createIcons();
+  setTimeout(() => input && input.focus(), 50);
+}
+
+function closeCustomerPhoneModal() {
+  const modal = document.getElementById('customerPhoneModal');
+  if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+async function submitCustomerPhone(event) {
+  event.preventDefault();
+  const input = document.getElementById('customerPhoneInput');
+  const err = document.getElementById('customerPhoneError');
+  const btn = document.getElementById('customerPhoneSubmit');
+  const digits = (input.value || '').trim();
+
+  if (!INDIAN_PHONE_RE.test(digits)) {
+    err.classList.remove('hidden');
+    input.focus();
+    return;
+  }
+  err.classList.add('hidden');
+
+  const phone = '+91' + digits;
+  try {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Saving...`;
+    lucide.createIcons();
+
+    // 1. Persist locally so the join form, header pill, and queue entries all reuse it.
+    localStorage.setItem(WM_CUSTOMER_PHONE_KEY, phone);
+
+    // 2. Log the diner lead in Firestore (customer_leads collection).
+    //    Server-side service account write — no client Firebase config,
+    //    zero API cost, works seamlessly with existing security rules.
+    try {
+      await fetch('/api/customer/lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, source: 'landing', created_at: Date.now() })
+      });
+    } catch (leadErr) {
+      console.warn('customer_leads write failed (non-fatal):', leadErr);
+    }
+
+    // 3. Free WhatsApp welcome deep-link in a new tab.
+    const welcome = encodeURIComponent("Namaste! Welcome to WaitMate India 🇮🇳. Your number is registered for instant queue updates and Table Ready alerts. Happy dining!");
+    window.open(`https://wa.me/91${digits}?text=${welcome}`, '_blank');
+
+    // 4. Transition to the Customer directory and paint the editable phone pill.
+    closeCustomerPhoneModal();
+    switchInterface('customer');
+    renderCustomerPhonePill();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = customerPhoneEditMode
+      ? `<i data-lucide="send" class="w-4 h-4"></i> <span>Save Changes →</span>`
+      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Send Welcome on WhatsApp →</span>`;
+    lucide.createIcons();
+  }
+}
+
+function renderCustomerPhonePill() {
+  const pill = document.getElementById('customerPhonePill');
+  const text = document.getElementById('customerPhoneText');
+  const phone = getCustomerPhone();
+  if (!pill || !text) return;
+  if (!phone) { pill.classList.add('hidden'); return; }
+  text.textContent = `📱 ${formatIndiaPhone(phone)}`;
+  pill.classList.remove('hidden');
+}
+
+// Send a free WhatsApp "Table Ready" alert from the Host Stand.
+function hostWhatsAppReady(ticketId, guestName, venueName, phone) {
+  const digits = phoneDigits10(phone);
+  if (!INDIAN_PHONE_RE.test(digits)) { showToast('No valid phone number on this guest.', 'error'); return; }
+  const text = encodeURIComponent(`Namaste ${guestName}! 🍽️ Your table at ${venueName} is READY. Please head to the host desk within 5 minutes so we can seat you. - Sent via WaitMate`);
+  window.open(`https://wa.me/91${digits}?text=${text}`, '_blank');
+  showToast(`WhatsApp Ready alert opened for ${guestName}`, 'success');
+}
+
+// ==========================================
 // Live Host Announcement / Specials
 // ==========================================
 async function updateHostAnnouncement(announcement = null) {
@@ -4662,6 +4827,7 @@ function renderHostDashboard() {
 
         <td class="py-3 px-4">
           <div class="font-bold text-slate-100 flex items-center gap-1.5 flex-wrap">${q.customer_name}</div>
+          ${q.phone ? `<div class="text-[10px] text-emerald-300 font-medium mt-0.5 flex items-center gap-1">📱 ${formatIndiaPhone(q.phone)}</div>` : ''}
           ${q.special_requests ? `<div class="text-[10px] text-amber-400 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
@@ -4700,6 +4866,12 @@ function renderHostDashboard() {
                 <i data-lucide="check" class="w-3 h-3"></i> Seat
               </button>
 
+              ${q.phone ? `
+                <button onclick="hostWhatsAppReady('${q.id}', '${jsEscape(q.customer_name)}', '${jsEscape(q.restaurant_name || '')}', '${q.phone}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1" title="Send Table Ready on WhatsApp">
+                  <i data-lucide="smartphone" class="w-3 h-3"></i> 📲 WhatsApp Ready
+                </button>
+              ` : ''}
+              
               <button onclick="hostAction('${q.id}', 'remove')" class="px-2 py-1 bg-white/5 hover:bg-rose-500/30 text-slate-400 hover:text-rose-400 border border-white/10 rounded text-[11px] transition" title="Mark No-Show">
                 <i data-lucide="user-x" class="w-3 h-3"></i>
               </button>
