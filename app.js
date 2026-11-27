@@ -1558,17 +1558,19 @@ function switchView(view) {
 }
 
 // =========================================================================
-// Landing Page Light / Dark Theme Toggle
-// Persists to localStorage (wm_landing_theme), applies via .landing-light on
-// <html> (zero-flash head script), and swaps the pure-white SVG sun/moon icon.
-// The toggle button stays solid black (#000000) in BOTH modes; only the
-// icon swaps between Sun (dark mode -> switch to light) and Moon (light mode
-// -> switch to dark).
+// App-Wide Light / Dark Theme Toggle
+// Persists to localStorage (wm_landing_theme), applies via data-theme="light"
+// on <html> (zero-flash head script), and swaps the pure-white SVG sun/moon
+// icon. Works across ALL views: #landingView, #customerView, #ownerInterface,
+// #founderInterface. The toggle button stays solid black (#000000) in BOTH
+// modes; only the icon swaps (Sun = dark active -> switch to light, Moon =
+// light active -> switch to dark).
 // =========================================================================
+const THEME_VIEWS = ['#landingView', '#customerView', '#ownerInterface', '#founderInterface'];
+
 function toggleLandingTheme() {
   const html = document.documentElement;
   const body = document.body;
-  const landingView = document.getElementById('landingView');
   const btn = document.getElementById('landingThemeToggle');
 
   // Tactile rotate/scale transition on the toggle button
@@ -1577,37 +1579,30 @@ function toggleLandingTheme() {
     setTimeout(() => btn.classList.remove('rotate-180', 'scale-95'), 150);
   }
 
-  const isLight = html.classList.toggle('landing-light');
+  const isLight = html.hasAttribute('data-theme') ? !html.getAttribute('data-theme') === 'light' : false;
+  const nextLight = !isLight;
 
-  // Full-page background color switching: html, body, and #landingView
-  if (isLight) {
-    html.style.backgroundColor = '#F8FAFC';
-    body.style.backgroundColor = '#F8FAFC';
-    html.classList.remove('text-slate-100');
-    html.classList.add('text-slate-900');
-    body.classList.remove('bg-[#060913]', 'text-slate-100');
-    body.classList.add('bg-[#F8FAFC]', 'text-slate-900');
-    if (landingView) {
-      landingView.classList.remove('bg-[#060913]', 'text-slate-100');
-      landingView.classList.add('bg-[#F8FAFC]', 'text-slate-900');
-    }
+  if (nextLight) {
+    html.setAttribute('data-theme', 'light');
+    body.setAttribute('data-theme', 'light');
+    // Apply white canvas to all view wrappers (CSS !important handles colors)
+    THEME_VIEWS.forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) el.setAttribute('data-theme', 'light');
+    });
     if (btn) { btn.title = 'Switch to Dark Mode'; btn.setAttribute('aria-label', 'Switch to Dark Mode'); }
   } else {
-    html.style.backgroundColor = '#060913';
-    body.style.backgroundColor = '#060913';
-    html.classList.remove('text-slate-900');
-    html.classList.add('text-slate-100');
-    body.classList.remove('bg-[#F8FAFC]', 'text-slate-900');
-    body.classList.add('bg-[#060913]', 'text-slate-100');
-    if (landingView) {
-      landingView.classList.remove('bg-[#F8FAFC]', 'text-slate-900');
-      landingView.classList.add('bg-[#060913]', 'text-slate-100');
-    }
+    html.removeAttribute('data-theme');
+    body.removeAttribute('data-theme');
+    THEME_VIEWS.forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) el.removeAttribute('data-theme');
+    });
     if (btn) { btn.title = 'Switch to Light Mode'; btn.setAttribute('aria-label', 'Switch to Light Mode'); }
   }
 
-  try { localStorage.setItem('wm_landing_theme', isLight ? 'light' : 'dark'); } catch (e) {}
-  syncLandingThemeIcon(isLight);
+  try { localStorage.setItem('wm_landing_theme', nextLight ? 'light' : 'dark'); } catch (e) {}
+  syncLandingThemeIcon(nextLight);
 }
 
 function syncLandingThemeIcon(isLight) {
@@ -1616,7 +1611,7 @@ function syncLandingThemeIcon(isLight) {
   if (!sun || !moon) return;
 
   // Button stays solid black with white icons in BOTH modes — only swap
-  // which SVG icon is visible (Sun = dark mode active, Moon = light mode active).
+  // which SVG icon is visible.
   if (isLight) {
     sun.classList.add('hidden');
     moon.classList.remove('hidden');
@@ -1627,7 +1622,10 @@ function syncLandingThemeIcon(isLight) {
 }
 
 // Reflect the persisted theme in the toggle icon once the DOM is ready.
-(function(){ try { syncLandingThemeIcon(document.documentElement.classList.contains('landing-light')); } catch(e){} })();
+(function(){ try {
+  const isLight = document.documentElement.hasAttribute('data-theme') && document.documentElement.getAttribute('data-theme') === 'light';
+  syncLandingThemeIcon(isLight);
+} catch(e){} })();
 
 function switchInterface(role) {
   // Route guard: when ?founder=1 is active, never let a background callback
@@ -4562,16 +4560,29 @@ function formatIndiaPhone(phone) {
   return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
 }
 
-// Gate every explicit Landing → Customer entry point. When no valid phone is
-// saved yet, open the capture modal first; the modal hands off to
-// switchInterface('customer') after save. "Skip for now" also passes through.
+// Platform-default Host WhatsApp Alert Number used for every venue that has
+// not yet configured its own number. Owners/founders may override it with any
+// 10-digit Indian number, or clear it to "" to disable WhatsApp alerts.
+const DEFAULT_WHATSAPP_ALERT_PHONE = '9702132819';
+
+// Effective alert number for a venue: stored whatsappAlertPhone when set,
+// otherwise the platform default. Explicitly blank ("") means disabled.
+function getRestaurantWhatsAppPhone(restaurant) {
+  if (!restaurant) return DEFAULT_WHATSAPP_ALERT_PHONE;
+  const val = restaurant.whatsappAlertPhone;
+  return (val === undefined || val === null) ? DEFAULT_WHATSAPP_ALERT_PHONE : String(val);
+}
+
+// Mask a +91 10-digit number for host-stand table display: +91 ••••• ••123
+function maskIndiaPhone(phone) {
+  const d = phoneDigits10(phone);
+  if (!INDIAN_PHONE_RE.test(d)) return String(phone || '');
+  return `+91 ••••• ••${d.slice(7)}`;
+}
+
 function openCustomerFlow() {
-  if (getCustomerPhone()) {
-    switchInterface('customer');
-    renderCustomerPhonePill();
-  } else {
-    openCustomerPhoneModal(false);
-  }
+  switchInterface('customer');
+  renderCustomerPhonePill();
 }
 
 let customerPhoneEditMode = false;
@@ -4638,9 +4649,10 @@ async function submitCustomerPhone(event) {
       console.warn('customer_leads write failed (non-fatal):', leadErr);
     }
 
-    // 3. Free WhatsApp welcome deep-link in a new tab.
-    const welcome = encodeURIComponent("Namaste! Welcome to WaitMate India 🇮🇳. Your number is registered for instant queue updates and Table Ready alerts. Happy dining!");
-    window.open(`https://wa.me/91${digits}?text=${welcome}`, '_blank');
+    // 3. Free WhatsApp welcome deep-link in a new tab to the official WaitMate
+    //    India number, pre-filled with the opt-in request carrying the diner's number.
+    const welcome = encodeURIComponent(`Hi WaitMate India! 🇮🇳 Please activate live queue & Table Ready alerts for my number (+91 ${digits}).`);
+    window.open(`https://wa.me/919702132819?text=${welcome}`, '_blank');
 
     // 4. Transition to the Customer directory and paint the editable phone pill.
     closeCustomerPhoneModal();
@@ -4669,7 +4681,7 @@ function renderCustomerPhonePill() {
 function hostWhatsAppReady(ticketId, guestName, venueName, phone) {
   const digits = phoneDigits10(phone);
   if (!INDIAN_PHONE_RE.test(digits)) { showToast('No valid phone number on this guest.', 'error'); return; }
-  const text = encodeURIComponent(`Namaste ${guestName}! 🍽️ Your table at ${venueName} is READY. Please head to the host desk within 5 minutes so we can seat you. - Sent via WaitMate`);
+  const text = encodeURIComponent(`Namaste ${guestName}! 🍽️ Your table at ${venueName} is READY. Please head to the host desk within 5 minutes. - WaitMate`);
   window.open(`https://wa.me/91${digits}?text=${text}`, '_blank');
   showToast(`WhatsApp Ready alert opened for ${guestName}`, 'success');
 }
@@ -4703,6 +4715,46 @@ async function updateHostAnnouncement(announcement = null) {
   }
 }
 
+// Save or clear the venue's Host WhatsApp Alert Number (password-protected).
+async function updateHostWhatsAppPhone() {
+  if (!currentHostVenueId) return;
+  const input = document.getElementById('hostWhatsAppPhoneInput');
+  const btn = document.getElementById('hostWhatsAppPhoneSaveBtn');
+  const phone = (input ? input.value : '').trim();
+  if (phone !== '' && !INDIAN_PHONE_RE.test(phone)) {
+    showToast('Enter a valid 10-digit Indian number (starting 6–9) or leave blank.', 'error');
+    input && input.focus();
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    const res = await fetch('/api/host/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': getSavedHostPassword(currentHostVenueId) },
+      body: JSON.stringify({
+        restaurant_id: currentHostVenueId,
+        action: 'update_whatsapp_phone',
+        whatsappAlertPhone: phone
+      })
+    });
+    let data = {};
+    try { data = await res.json(); } catch (parseErr) { data = {}; }
+    if (!res.ok) { showToast(data.error || 'Error saving WhatsApp number', 'error'); return; }
+    showToast(data.message || 'WhatsApp alert number saved', 'success');
+    await loadHostStand();
+  } catch (err) {
+    showToast('Error saving WhatsApp number', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  }
+}
+
+function clearHostWhatsAppPhone() {
+  const input = document.getElementById('hostWhatsAppPhoneInput');
+  if (input) input.value = '';
+  updateHostWhatsAppPhone();
+}
+
 // Resolve a queue entry's join moment (accepts ms or seconds stamps) and format
 // it as an Asia/Kolkata IST time plus a relative "Xm ago" string for the owner
 // Host Stand waitlist rows.
@@ -4725,6 +4777,7 @@ function renderHostDashboard() {
   const stats = hostData.live_stats || { queue_count: 0, total_waiting_people: 0, estimated_wait_mins: 0, is_queue_open: true };
   const rel = hostData.reliability || { score: 95, grade: 'A' };
   const queue = getSafeEntries(hostData.queue);
+  const whatsappConfigured = Boolean(getRestaurantWhatsAppPhone(hostData.restaurant));
   // Host waiting table shows only live parties. Seated (and no_show/cancelled)
   // guests drop off cleanly here while their Firestore doc stays alive for the
   // diner's 1–5★ rating screen.
@@ -4827,7 +4880,7 @@ function renderHostDashboard() {
 
         <td class="py-3 px-4">
           <div class="font-bold text-slate-100 flex items-center gap-1.5 flex-wrap">${q.customer_name}</div>
-          ${q.phone ? `<div class="text-[10px] text-emerald-300 font-medium mt-0.5 flex items-center gap-1">📱 ${formatIndiaPhone(q.phone)}</div>` : ''}
+          ${q.phone ? `<div class="text-[10px] text-emerald-300 font-medium mt-0.5 flex items-center gap-1">📱 ${maskIndiaPhone(q.phone)}</div>` : ''}
           ${q.special_requests ? `<div class="text-[10px] text-amber-400 font-medium mt-0.5">Note: ${q.special_requests}</div>` : ''}
         </td>
 
@@ -4866,7 +4919,7 @@ function renderHostDashboard() {
                 <i data-lucide="check" class="w-3 h-3"></i> Seat
               </button>
 
-              ${q.phone ? `
+              ${q.phone && whatsappConfigured ? `
                 <button onclick="hostWhatsAppReady('${q.id}', '${jsEscape(q.customer_name)}', '${jsEscape(q.restaurant_name || '')}', '${q.phone}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[11px] transition shadow-xs flex items-center gap-1" title="Send Table Ready on WhatsApp">
                   <i data-lucide="smartphone" class="w-3 h-3"></i> 📲 WhatsApp Ready
                 </button>
@@ -4884,6 +4937,10 @@ function renderHostDashboard() {
       </tr>
     `;
   }).join('');
+
+  // Paint the venue's stored WhatsApp alert number (blank when disabled).
+  const waInput = document.getElementById('hostWhatsAppPhoneInput');
+  if (waInput) waInput.value = (hostData.restaurant && hostData.restaurant.whatsappAlertPhone) || '';
 
   lucide.createIcons();
 }
@@ -5449,6 +5506,11 @@ async function submitFounderAddRestaurant(event) {
   const pace = parseInt(document.getElementById('fndNewPace').value) || 15;
   const imageUrl = document.getElementById('fndNewPhoto').value.trim() || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80';
   const bio = document.getElementById('fndNewBio').value.trim();
+  const whatsappAlertPhone = (document.getElementById('fndNewWhatsAppPhone')?.value || '').trim();
+  if (whatsappAlertPhone !== '' && !INDIAN_PHONE_RE.test(whatsappAlertPhone)) {
+    showToast('Host WhatsApp Alert Number must be a 10-digit Indian number (6–9 start) or left blank.', 'error');
+    return;
+  }
   const mealTimes = getCheckedMealTimes('fndNewMealTime');
   if (mealTimes.length === 0) {
     const err = document.getElementById('fndNewMealError');
@@ -5486,7 +5548,8 @@ async function submitFounderAddRestaurant(event) {
         total_tables: totalTables,
         base_prep_time: pace,
         image_url: imageUrl,
-        description: bio || `Authentic ${category} located in ${city}.`
+        description: bio || `Authentic ${category} located in ${city}.`,
+        whatsappAlertPhone
       })
     });
     let data = {};
@@ -5935,6 +5998,7 @@ function openFounderEditRestaurantModal(venueId) {
   document.getElementById('fndEditPace').value = r.base_prep_time || '';
   document.getElementById('fndEditPhoto').value = r.image_url || '';
   document.getElementById('fndEditBio').value = r.description || '';
+  document.getElementById('fndEditWhatsAppPhone').value = r.whatsappAlertPhone || '';
   const editBoxes = document.querySelectorAll('input[name="fndEditMealTime"]');
   const editMeals = Array.isArray(r.meal_times) ? r.meal_times : ["Lunch", "Dinner"];
   editBoxes.forEach((box) => {
@@ -5973,6 +6037,11 @@ async function submitFounderEditRestaurant(event) {
   const pace = parseInt(document.getElementById('fndEditPace').value) || undefined;
   const imageUrl = document.getElementById('fndEditPhoto').value.trim();
   const bio = document.getElementById('fndEditBio').value.trim();
+  const whatsappAlertPhone = (document.getElementById('fndEditWhatsAppPhone')?.value || '').trim();
+  if (whatsappAlertPhone !== '' && !INDIAN_PHONE_RE.test(whatsappAlertPhone)) {
+    showToast('Host WhatsApp Alert Number must be a 10-digit Indian number (6–9 start) or left blank.', 'error');
+    return;
+  }
   const mealTimes = getCheckedMealTimes('fndEditMealTime');
   if (mealTimes.length === 0) {
     const err = document.getElementById('fndEditMealError');
@@ -5997,6 +6066,7 @@ async function submitFounderEditRestaurant(event) {
         ...(totalTables !== undefined ? { total_tables: totalTables } : {}),
         ...(pace !== undefined ? { base_prep_time: pace } : {}),
         ...(imageUrl ? { image_url: imageUrl } : {}),
+        ...(whatsappAlertPhone !== undefined ? { whatsappAlertPhone } : {}),
         description: bio || `Authentic ${category} located in ${city}.`
       })
     });
