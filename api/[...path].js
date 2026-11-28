@@ -34,6 +34,7 @@ const MAX_BODY_BYTES = 100 * 1024; // 100KB request body cap
 // Endpoint -> max requests per window. Public/mutation endpoints are strictest.
 const RATE_LIMITS = {
   "/api/queue/join": 20,
+  "/api/customer/lead": 20,
   "/api/host/verify-password": 15,
   "/api/founder/verify-password": 15,
   "/api/founder/login": 15,
@@ -1070,6 +1071,25 @@ async function route(request, response, pathParts) {
     return send(response, 200, { ok: true, valid: true, authenticated: true, success: true, message: "Access granted.", firestore_unavailable: firestoreFailed });
   }
 
+  if (request.method === "POST" && path === "/api/customer/lead") {
+    // Zero-cost lead capture: store the diner's verified +91 number in the
+    // customer_leads collection with an IST timestamp. Service-account write,
+    // so no client Firebase config and no security-rule changes needed.
+    const phone = String(body.phone || "").trim();
+    if (!/^\+91[6-9]\d{9}$/.test(phone)) {
+      return send(response, 400, { error: "Invalid phone number. Use a 10-digit Indian mobile starting with 6–9." });
+    }
+    const leadId = `lead-${String(Date.now()).slice(-8)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const now = Date.now();
+    await safeCommit([setDocument("customer_leads", leadId, {
+      phone,
+      source: String(body.source || "landing"),
+      created_at: now,
+      created_at_ist: new Date(now).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST'
+    })]);
+    return send(response, 200, { success: true, lead_id: leadId, phone });
+  }
+
   if (request.method === "POST" && path === "/api/queue/join") {
     const joinErr = validateJoinBody(body);
     if (joinErr) return send(response, joinErr.status, { error: joinErr.error });
@@ -1177,7 +1197,7 @@ async function route(request, response, pathParts) {
       restaurant_id: body.restaurant_id,
       restaurant_name: restaurant.name || "",
       customer_name: String(body.name).trim(),
-      phone: "",
+      phone: String(body.phone || ""),
       party_size: partySize,
       seating_pref: body.seating_pref || "First Available",
       special_requests: body.special_requests || "",
@@ -1266,7 +1286,7 @@ async function route(request, response, pathParts) {
     const { entries: expiredQueue } = await expireStaleUnarrivedTickets(queue);
     queue = expiredQueue;
     const entries = queue.filter(entry => entry.restaurant_id === id && ["waiting", "notified", "delayed"].includes(entry.status)).sort((a, b) => Number(a.joined_at || 0) - Number(b.joined_at || 0));
-    return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => { const { phone, ...safe } = entry; return { ...safe, phone: "", position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(safe.status) }; }) });
+    return send(response, 200, { restaurant: sanitizeRestaurant(restaurant), live_stats: await getLiveStats(restaurant, entries), reliability: reliabilityFallback(), queue: entries.map((entry, index) => ({ ...entry, position_rank: index + 1, is_table_near: index < 2 && ["waiting", "delayed"].includes(entry.status) })) });
   }
 
   if (request.method === "POST" && (path === "/api/founder/verify-password" || path === "/api/founder/login")) {
@@ -1493,6 +1513,19 @@ async function route(request, response, pathParts) {
       await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, manual_override_wait: body.manual_wait_mins })]);
       return send(response, 200, { success: true, message: "Wait time estimate updated." });
     }
+    if (body.action === "update_whatsapp_phone") {
+      const restaurant = await getRawRestaurant(body.restaurant_id);
+      if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
+      if (!verifyRestaurantPassword(restaurant, suppliedPwd)) {
+        return send(response, 401, { error: "Invalid restaurant password." });
+      }
+      const phone = String(body.whatsappAlertPhone || "").trim();
+      if (phone !== "" && !/^[6-9]\d{9}$/.test(phone)) {
+        return send(response, 400, { error: "Enter a valid 10-digit Indian mobile number (must start with 6–9) or leave blank to disable WhatsApp alerts." });
+      }
+      await safeCommit([setDocument("restaurants", restaurant.id, { ...restaurant, whatsappAlertPhone: phone })]);
+      return send(response, 200, { success: true, message: "WhatsApp alert number updated.", whatsappAlertPhone: phone });
+    }
     if (body.action === "add_walkin") {
       const restaurant = await findRestaurantById(body.restaurant_id);
       if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
@@ -1556,6 +1589,11 @@ async function route(request, response, pathParts) {
     if (!name || !address || !password) return send(response, 400, { error: "Restaurant name, address, and owner dashboard password are required." });
     if (password.length < 8) return send(response, 400, { error: "Owner dashboard password must be at least 8 characters." });
 
+    const whatsappAlertPhone = String(body.whatsappAlertPhone || "").trim();
+    if (whatsappAlertPhone !== "" && !/^[6-9]\d{9}$/.test(whatsappAlertPhone)) {
+      return send(response, 400, { error: "Host WhatsApp Alert Number must be a 10-digit Indian mobile number (6–9 start) or left blank." });
+    }
+
     const id = `rest-${Date.now()}`;
     const restaurant = {
       id,
@@ -1570,6 +1608,7 @@ async function route(request, response, pathParts) {
       image_url: imageUrl,
       description,
       password_hash: hashPassword(password),
+      whatsappAlertPhone,
       base_prep_time: basePrepTime,
       available_tables: Math.max(1, Math.floor(totalTables / 4)),
       total_tables: totalTables,
@@ -1851,12 +1890,18 @@ async function route(request, response, pathParts) {
     if (!restaurantId) return send(response, 400, { error: "Missing restaurant_id" });
     const restaurant = await getRawRestaurant(restaurantId);
     if (!restaurant) return send(response, 404, { error: "Restaurant not found" });
-    const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open","meal_times"];
+    const updatable = ["name","category","type","city","address","price_range","image_url","description","total_tables","base_prep_time","is_queue_open","meal_times","whatsappAlertPhone"];
     const updates = { ...restaurant };
     let changed = false;
     for (const field of updatable) {
       if (body[field] !== undefined) {
-        if (field === "meal_times") {
+        if (field === "whatsappAlertPhone") {
+          const phone = String(body[field] || "").trim();
+          if (phone !== "" && !/^[6-9]\d{9}$/.test(phone)) {
+            return send(response, 400, { error: "Host WhatsApp Alert Number must be a 10-digit Indian mobile number (6–9 start) or left blank." });
+          }
+          updates[field] = phone;
+        } else if (field === "meal_times") {
           const normalized = normalizeMealTimes(body[field]);
           updates[field] = normalized;
         } else {

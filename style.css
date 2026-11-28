@@ -459,6 +459,14 @@ button[aria-label="Toggle password visibility"] i {
 .area-pill-row::-webkit-scrollbar {
   display: none;
 }
+/* Hide scrollbars on horizontal pill rows without sacrificing scrollability */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 .area-pill {
   flex-shrink: 0;
   white-space: nowrap;
@@ -571,19 +579,25 @@ button[aria-label="Toggle password visibility"] i {
 }
 
 /* =========================================================================
-   App-Wide Light Theme — Dark Cards on White Canvas
+   App-Wide Light Theme — All-White Canvas with White Cards
    Triggered by `data-theme="light"` on <html> / <body>.
    Applies to ALL views: #landingView, #customerView, #ownerInterface,
    #founderInterface.
-   Page canvas = pure white #FFFFFF. Content cards stay dark #0B0F19
-   with white headings + light gray body text + border-slate-800.
+   Page canvas = pure white #FFFFFF. All content boxes/cards = #FFFFFF
+   with crisp borders (1px solid #CBD5E1) and soft shadows
+   (0 4px 16px rgba(0,0,0,0.06)). Headings/numbers = #0F172A, body text
+   = #1E293B, emerald accents = #059669. Dark mode untouched.
    ========================================================================= */
 
 /* Zero-flash: apply light canvas at root before paint */
-html[data-theme="light"] { background-color: #FFFFFF !important; color: #0F172A !important; }
-html[data-theme="light"] body { background-color: #FFFFFF !important; color: #0F172A !important; }
+html[data-theme="light"],
+html[data-theme="light"] body {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+}
 
 /* Page wrappers: pure white canvas (all views) */
+html[data-theme="light"] #mainContainer,
 html[data-theme="light"] #landingView,
 html[data-theme="light"] #customerView,
 html[data-theme="light"] #ownerInterface,
@@ -592,11 +606,10 @@ html[data-theme="light"] #founderInterface {
   color: #0F172A !important;
 }
 
-/* Section wrappers inside views → white background */
-html[data-theme="light"] #landingView section,
-html[data-theme="light"] #customerView section,
-html[data-theme="light"] #ownerInterface section,
-html[data-theme="light"] #founderInterface section {
+/* Section wrappers → white canvas (all views) */
+html[data-theme="light"] section,
+html[data-theme="light"] header,
+html[data-theme="light"] footer {
   background-color: #FFFFFF !important;
 }
 
@@ -609,321 +622,120 @@ html[data-theme="light"] #landingView *,
 html[data-theme="light"] #customerView *,
 html[data-theme="light"] #ownerInterface *,
 html[data-theme="light"] #founderInterface * {
-  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease;
+  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
 }
 
-/* ── PAGE-LEVEL TEXT on white canvas → DARK ── */
-/* Headings directly on white bg */
-html[data-theme="light"] #landingView h1,
-html[data-theme="light"] #landingView h2,
-html[data-theme="light"] #landingView h3,
-html[data-theme="light"] #landingView h4,
-html[data-theme="light"] #customerView h1,
-html[data-theme="light"] #customerView h2,
-html[data-theme="light"] #customerView h3,
-html[data-theme="light"] #customerView h4,
-html[data-theme="light"] #ownerInterface h1,
-html[data-theme="light"] #ownerInterface h2,
-html[data-theme="light"] #ownerInterface h3,
-html[data-theme="light"] #ownerInterface h4,
-html[data-theme="light"] #founderInterface h1,
-html[data-theme="light"] #founderInterface h2,
-html[data-theme="light"] #founderInterface h3,
-html[data-theme="light"] #founderInterface h4 {
-  color: #0F172A !important;
+/* ── ALL CONTENT BOXES / CARDS → WHITE with crisp border + soft shadow ── */
+html[data-theme="light"] [class*="bg-slate-"]:not(body),
+html[data-theme="light"] [class*="bg-[#060913]"],
+html[data-theme="light"] [class*="bg-emerald-950/"],
+html[data-theme="light"] .bg-emerald-500,
+html[data-theme="light"] .bg-white,
+html[data-theme="light"] [class*="bg-white/"],
+html[data-theme="light"] .glass-dark {
+  background-color: #FFFFFF !important;
+  border: 1px solid #CBD5E1 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
 }
 
-/* Body/subtitle text directly on white bg */
-html[data-theme="light"] #landingView .text-white,
-html[data-theme="light"] #landingView .text-slate-100,
-html[data-theme="light"] #landingView .text-slate-400,
-html[data-theme="light"] #landingView .text-slate-300,
-html[data-theme="light"] #landingView .text-slate-200,
-html[data-theme="light"] #customerView .text-white,
-html[data-theme="light"] #customerView .text-slate-100,
-html[data-theme="light"] #customerView .text-slate-400,
-html[data-theme="light"] #customerView .text-slate-300,
-html[data-theme="light"] #customerView .text-slate-200,
-html[data-theme="light"] #ownerInterface .text-white,
-html[data-theme="light"] #ownerInterface .text-slate-100,
-html[data-theme="light"] #ownerInterface .text-slate-400,
-html[data-theme="light"] #ownerInterface .text-slate-300,
-html[data-theme="light"] #ownerInterface .text-slate-200,
-html[data-theme="light"] #founderInterface .text-white,
-html[data-theme="light"] #founderInterface .text-slate-100,
-html[data-theme="light"] #founderInterface .text-slate-400,
-html[data-theme="light"] #founderInterface .text-slate-300,
-html[data-theme="light"] #founderInterface .text-slate-200 {
-  color: #475569 !important;
+/* Ticket modal: hardcoded #0b1120 canvas (not a Tailwind class) */
+html[data-theme="light"] .ticket-container {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+}
+html[data-theme="light"] .ticket-notch-left,
+html[data-theme="light"] .ticket-notch-right {
+  background-color: #FFFFFF !important;
 }
 
-/* ── CARDS STAY DARK ── #0B0F19 with border-slate-800 ── */
-html[data-theme="light"] .bg-slate-900/30,
-html[data-theme="light"] .bg-slate-900/40,
-html[data-theme="light"] .bg-slate-900/50,
-html[data-theme="light"] .bg-slate-900/60,
-html[data-theme="light"] .bg-slate-900/70,
-html[data-theme="light"] .bg-slate-900/80,
-html[data-theme="light"] .bg-slate-900/90,
-html[data-theme="light"] .bg-slate-950/60,
-html[data-theme="light"] .bg-slate-950/75,
-html[data-theme="light"] .bg-slate-950/80 {
-  background-color: #0B0F19 !important;
-  border-color: #1e293b !important;
+/* Dark gradient stops on cards (from/via/to-slate, from/to-[#060913]) —
+   not bg-* classes, so they need their own override → white. */
+html[data-theme="light"] [class*="from-slate-"],
+html[data-theme="light"] [class*="via-slate-"],
+html[data-theme="light"] [class*="to-slate-"],
+html[data-theme="light"] [class*="from-[#060913]"],
+html[data-theme="light"] [class*="to-[#060913]"] {
+  background-image: none !important;
+  background-color: #FFFFFF !important;
 }
 
-/* Card internal headings → WHITE on dark cards (view-scoped to beat page-level text rules) */
-html[data-theme="light"] #landingView .bg-slate-900/30 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/40 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/50 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/60 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/70 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/80 .text-white,
-html[data-theme="light"] #landingView .bg-slate-900/90 .text-white,
-html[data-theme="light"] #landingView .bg-slate-950/60 .text-white,
-html[data-theme="light"] #landingView .bg-slate-950/75 .text-white,
-html[data-theme="light"] #landingView .bg-slate-950/80 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/30 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/40 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/50 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/60 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/70 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/80 .text-white,
-html[data-theme="light"] #customerView .bg-slate-900/90 .text-white,
-html[data-theme="light"] #customerView .bg-slate-950/60 .text-white,
-html[data-theme="light"] #customerView .bg-slate-950/75 .text-white,
-html[data-theme="light"] #customerView .bg-slate-950/80 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/30 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/40 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/50 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/60 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/70 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/80 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-900/90 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-950/60 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-950/75 .text-white,
-html[data-theme="light"] #ownerInterface .bg-slate-950/80 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/30 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/40 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/50 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/60 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/70 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/80 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-900/90 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-950/60 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-950/75 .text-white,
-html[data-theme="light"] #founderInterface .bg-slate-950/80 .text-white {
-  color: #FFFFFF !important;
+/* Crisp hairline borders on white cards */
+html[data-theme="light"] [class*="border-white/"],
+html[data-theme="light"] .border-slate-800,
+html[data-theme="light"] .border-slate-900,
+html[data-theme="light"] .border-slate-950,
+html[data-theme="light"] .border-slate-200,
+html[data-theme="light"] [class*="divide-white/"],
+html[data-theme="light"] [class*="divide-slate-"] {
+  border-color: #CBD5E1 !important;
 }
 
-/* Card internal body text → light gray on dark cards (view-scoped) */
-html[data-theme="light"] #landingView .bg-slate-900/30 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/40 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/50 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/60 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/70 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/80 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-900/90 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-950/60 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-950/75 .text-slate-400,
-html[data-theme="light"] #landingView .bg-slate-950/80 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/30 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/40 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/50 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/60 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/70 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/80 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-900/90 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-950/60 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-950/75 .text-slate-400,
-html[data-theme="light"] #customerView .bg-slate-950/80 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/30 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/40 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/50 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/60 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/70 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/80 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-900/90 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-950/60 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-950/75 .text-slate-400,
-html[data-theme="light"] #ownerInterface .bg-slate-950/80 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/30 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/40 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/50 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/60 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/70 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/80 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-900/90 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-950/60 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-950/75 .text-slate-400,
-html[data-theme="light"] #founderInterface .bg-slate-950/80 .text-slate-400 {
-  color: #CBD5E1 !important;
+/* ── PAGE-LEVEL TEXT on white canvas ── */
+/* Universal darken: headings, body copy, labels, numbers → legible on white
+   (beats inline styles; accent classes re-applied below). */
+html[data-theme="light"] * { color: #0F172A !important; }
+
+/* Hardcoded white toggle icons stay white on the black toggle button */
+html[data-theme="light"] #landingThemeToggle svg {
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 
-/* Card internal slate-300 / slate-200 → light gray on dark cards */
-html[data-theme="light"] #landingView .bg-slate-900/30 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/40 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/50 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/60 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/70 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/80 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/90 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-950/60 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-950/75 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-950/80 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/30 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/40 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/50 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/60 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/70 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/80 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-900/90 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-950/60 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-950/75 .text-slate-300,
-html[data-theme="light"] #customerView .bg-slate-950/80 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/30 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/40 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/50 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/60 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/70 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/80 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-900/90 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-950/60 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-950/75 .text-slate-300,
-html[data-theme="light"] #ownerInterface .bg-slate-950/80 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/30 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/40 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/50 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/60 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/70 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/80 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-900/90 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-950/60 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-950/75 .text-slate-300,
-html[data-theme="light"] #founderInterface .bg-slate-950/80 .text-slate-300,
-html[data-theme="light"] #landingView .bg-slate-900/30 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/40 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/50 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/60 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/70 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/80 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-900/90 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-950/60 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-950/75 .text-slate-200,
-html[data-theme="light"] #landingView .bg-slate-950/80 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/30 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/40 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/50 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/60 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/70 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/80 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-900/90 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-950/60 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-950/75 .text-slate-200,
-html[data-theme="light"] #customerView .bg-slate-950/80 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/30 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/40 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/50 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/60 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/70 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/80 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-900/90 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-950/60 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-950/75 .text-slate-200,
-html[data-theme="light"] #ownerInterface .bg-slate-950/80 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/30 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/40 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/50 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/60 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/70 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/80 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-900/90 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-950/60 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-950/75 .text-slate-200,
-html[data-theme="light"] #founderInterface .bg-slate-950/80 .text-slate-200 {
-  color: #CBD5E1 !important;
+/* Descriptions / body copy → #1E293B */
+html[data-theme="light"] .text-slate-100,
+html[data-theme="light"] .text-slate-200,
+html[data-theme="light"] .text-slate-300,
+html[data-theme="light"] .text-slate-400,
+html[data-theme="light"] .text-slate-500,
+html[data-theme="light"] .text-slate-600 {
+  color: #1E293B !important;
 }
 
-/* Card internal slate-100 → white on dark cards */
-html[data-theme="light"] #landingView .bg-slate-900/30 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/40 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/50 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/60 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/70 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/80 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-900/90 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-950/60 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-950/75 .text-slate-100,
-html[data-theme="light"] #landingView .bg-slate-950/80 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/30 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/40 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/50 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/60 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/70 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/80 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-900/90 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-950/60 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-950/75 .text-slate-100,
-html[data-theme="light"] #customerView .bg-slate-950/80 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/30 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/40 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/50 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/60 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/70 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/80 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-900/90 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-950/60 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-950/75 .text-slate-100,
-html[data-theme="light"] #ownerInterface .bg-slate-950/80 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/30 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/40 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/50 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/60 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/70 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/80 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-900/90 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-950/60 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-950/75 .text-slate-100,
-html[data-theme="light"] #founderInterface .bg-slate-950/80 .text-slate-100 {
-  color: #FFFFFF !important;
-}
-
-/* Subtle white fills on dark cards → barely visible dark-transparent */
-html[data-theme="light"] .bg-white/5,
-html[data-theme="light"] .bg-white/10,
-html[data-theme="light"] .bg-white/20 {
-  background-color: rgba(255,255,255,0.03) !important;
-}
-
-/* Card borders → slate-800 */
-html[data-theme="light"] .border-white/10,
-html[data-theme="light"] .border-white/20,
-html[data-theme="light"] .border-white/15 {
-  border-color: #1e293b !important;
-}
-
-/* Accent text on dark cards (kept sharp & readable) */
-html[data-theme="light"] .text-emerald-400,
+/* Emerald accents → #059669 (interactive actions stay obvious) */
 html[data-theme="light"] .text-emerald-300,
+html[data-theme="light"] .text-emerald-400,
 html[data-theme="light"] .text-emerald-500,
+html[data-theme="light"] .text-emerald-600,
+html[data-theme="light"] .text-emerald-700,
+html[data-theme="light"] .text-emerald-900,
+html[data-theme="light"] .text-emerald-950,
 html[data-theme="light"] .text-cyan-400 {
-  color: #10b981 !important;
+  color: #059669 !important;
 }
-html[data-theme="light"] .text-cyan-400 { color: #22d3ee !important; }
+html[data-theme="light"] .text-emerald-300 svg,
+html[data-theme="light"] .text-emerald-400 svg,
+html[data-theme="light"] .text-cyan-400 svg {
+  fill: #059669 !important;
+  stroke: #059669 !important;
+}
 
-/* Ambient motion toned down for light canvas */
+/* White text on colored accents (emerald/orange/indigo buttons, pills,
+   gradients) stays white so the accents stay high-contrast. */
+html[data-theme="light"] .bg-emerald-600,
+html[data-theme="light"] .bg-orange-500,
+html[data-theme="light"] .bg-indigo-600,
+html[data-theme="light"] [class*="from-emerald"],
+html[data-theme="light"] [class*="to-emerald"],
+html[data-theme="light"] [class*="from-orange"],
+html[data-theme="light"] [class*="to-orange"] {
+  color: #FFFFFF !important;
+}
+
+/* ── Form placeholders ── */
+html[data-theme="light"] ::placeholder { color: #64748b !important; opacity: 1 !important; }
+html[data-theme="light"] ::-webkit-input-placeholder { color: #64748b !important; }
+html[data-theme="light"] ::-moz-placeholder { color: #64748b !important; }
+
+/* Ambient motion toned down for the light canvas */
 html[data-theme="light"] .wm-grid {
   background-image: linear-gradient(to_right,rgba(16,185,129,0.015) 1px,transparent 1px),linear-gradient(to_bottom,rgba(16,185,129,0.015) 1px,transparent 1px) !important;
   opacity: 0.5 !important;
 }
 html[data-theme="light"] .wm-radar { border-color: rgba(16,185,129,0.06) !important; }
 
-/* Hero / feature / FAQ hover states on dark cards stay legible */
-html[data-theme="light"] .bg-slate-900/50.reveal-hover:hover,
-html[data-theme="light"] .bg-slate-900/60.reveal-hover:hover {
-  border-color: rgba(16,185,129,0.45) !important;
-  box-shadow: 0 0 24px rgba(16,185,129,0.08) !important;
-}
+/* Toggle off emerald glows that compete with the light canvas */
+html[data-theme="light"] [class*="shadow-emerald"] { box-shadow: none !important; }
 
 /* ── Theme toggle button: SOLID BLACK in BOTH modes ── */
 #landingThemeToggle {
@@ -952,18 +764,13 @@ html[data-theme="light"] #landingThemeIconMoon { display: block !important; }
 html:not([data-theme="light"]) #landingThemeIconSun { display: block !important; }
 html:not([data-theme="light"]) #landingThemeIconMoon { display: none !important; }
 
-/* Toggle off ambient glows that compete with the light canvas */
-html.landing-light #landingView [class*="shadow-emerald"]{
-  box-shadow: none !important;
-}
-
 /* Customer App "Back to Overview" icon button — clean in both themes */
-html.landing-light #customerView .wm-back-btn {
+html[data-theme="light"] #customerView .wm-back-btn {
   background-color: #f1f5f9 !important;
   border-color: rgba(226,232,240,0.70) !important;
   color: #475569 !important;
 }
-html.landing-light #customerView .wm-back-btn:hover {
+html[data-theme="light"] #customerView .wm-back-btn:hover {
   background-color: #e2e8f0 !important;
   border-color: rgba(226,232,240,0.85) !important;
   color: #0f172a !important;

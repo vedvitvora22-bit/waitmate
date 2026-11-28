@@ -451,6 +451,14 @@ button[aria-label="Toggle password visibility"] i {
 .area-pill-row::-webkit-scrollbar {
   display: none;
 }
+/* Hide scrollbars on horizontal pill rows without sacrificing scrollability */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 .area-pill {
   flex-shrink: 0;
   white-space: nowrap;

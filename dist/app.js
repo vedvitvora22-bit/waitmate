@@ -5809,16 +5809,12 @@ function scrollToSection(id) {
   window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
-// Open the existing Host Stand: switch to the owner view and prompt for the
-// venue dashboard password. Host Stand login flow and passwords are unchanged.
+// Open the existing Host Stand: switch to the owner view and show the
+// Registered Restaurants directory. No password modal is opened here — the
+// Unlock modal only appears when the user explicitly clicks a restaurant card
+// via openProtectedHostStand(venueId).
 function openHostStand() {
   switchInterface('owner');
-  const firstVenue = (allRestaurants && allRestaurants.length) ? allRestaurants[0] : null;
-  if (firstVenue) {
-    openOwnerPasswordModal(firstVenue.id);
-  } else {
-    openOwnerPasswordModal();
-  }
 }
 
 // ==========================================
@@ -6031,4 +6027,63 @@ function toggleFaq(el) {
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
   checkRatingUI();
+})();
+
+// =========================================================================
+// App-wide light/dark theme toggle (mirrors app.js)
+// =========================================================================
+function toggleLandingTheme() {
+  const html = document.documentElement;
+  const body = document.body;
+
+  [document.getElementById("landingThemeToggle"), document.getElementById("customerThemeToggle")].forEach((btn) => {
+    if (btn) {
+      btn.classList.add("rotate-180", "scale-95");
+      setTimeout(() => btn.classList.remove("rotate-180", "scale-95"), 150);
+    }
+  });
+
+  const isLight = html.hasAttribute("data-theme") ? html.getAttribute("data-theme") === "light" : false;
+  const nextLight = !isLight;
+
+  if (nextLight) {
+    html.setAttribute("data-theme", "light");
+    body.setAttribute("data-theme", "light");
+  } else {
+    html.removeAttribute("data-theme");
+    body.removeAttribute("data-theme");
+  }
+
+  try { localStorage.setItem("wm_landing_theme", nextLight ? "light" : "dark"); } catch (e) {}
+  syncLandingThemeIcon(nextLight);
+}
+
+function syncLandingThemeIcon(isLight) {
+  const sun = document.getElementById("landingThemeIconSun");
+  const moon = document.getElementById("landingThemeIconMoon");
+  if (isLight) {
+    sun && sun.classList.add("hidden");
+    moon && moon.classList.remove("hidden");
+  } else {
+    moon && moon.classList.add("hidden");
+    sun && sun.classList.remove("hidden");
+  }
+  const cSun = document.getElementById("customerThemeIconSun");
+  const cMoon = document.getElementById("customerThemeIconMoon");
+  if (cSun && cMoon) {
+    if (isLight) {
+      cSun.classList.add("hidden");
+      cMoon.classList.remove("hidden");
+    } else {
+      cMoon.classList.add("hidden");
+      cSun.classList.remove("hidden");
+    }
+  }
+}
+
+(function () {
+  try {
+    const isLight = document.documentElement.hasAttribute("data-theme") && document.documentElement.getAttribute("data-theme") === "light";
+    syncLandingThemeIcon(isLight);
+  } catch (e) {}
 })();

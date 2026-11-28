@@ -112,11 +112,24 @@ async function submitOwnerPassword(event) {
   if (event) event.preventDefault();
   const venueId = pendingUnlockVenueId || currentHostVenueId;
   const input = document.getElementById('ownerPwdInput');
+  const phoneInput = document.getElementById('ownerPhoneInput');
   const errEl = document.getElementById('ownerPwdError');
   const btn = document.getElementById('ownerPwdSubmitBtn');
   const pwd = (input ? input.value : '').trim();
+  const phone = (phoneInput ? phoneInput.value : '').trim();
 
   if (!pwd) return;
+
+  // If a phone number was entered, validate it as a 10-digit Indian mobile
+  // starting with 6–9 before allowing unlock.
+  if (phone !== '' && !INDIAN_PHONE_RE.test(phone)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 10-digit Indian mobile number (starting 6–9) or leave blank.';
+      errEl.classList.remove('hidden');
+    }
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
 
   if (btn) {
     btn.disabled = true;
@@ -134,6 +147,26 @@ async function submitOwnerPassword(event) {
     if (verifyRes.ok) {
       saveHostPassword(venueId, pwd);
       currentHostVenueId = venueId;
+
+      // Save the optional WhatsApp alert number for this restaurant.
+      try {
+        const phoneRes = await fetch('/api/host/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Restaurant-Password': pwd },
+          body: JSON.stringify({
+            restaurant_id: venueId,
+            action: 'update_whatsapp_phone',
+            whatsappAlertPhone: phone
+          })
+        });
+        if (!phoneRes.ok) {
+          const phoneErr = await phoneRes.json().catch(() => ({}));
+          showToast(phoneErr.error || 'Password verified, but WhatsApp number could not be saved.', 'warning');
+        }
+      } catch (phoneErr) {
+        showToast('Password verified, but WhatsApp number could not be saved.', 'warning');
+      }
+
       closeOwnerPasswordModal();
       await renderUnlockedHostStand(venueId, pwd);
       return;
@@ -1571,15 +1604,16 @@ const THEME_VIEWS = ['#landingView', '#customerView', '#ownerInterface', '#found
 function toggleLandingTheme() {
   const html = document.documentElement;
   const body = document.body;
-  const btn = document.getElementById('landingThemeToggle');
 
-  // Tactile rotate/scale transition on the toggle button
-  if (btn) {
-    btn.classList.add('rotate-180', 'scale-95');
-    setTimeout(() => btn.classList.remove('rotate-180', 'scale-95'), 150);
-  }
+  // Tactile rotate/scale transition on the toggle button(s)
+  [document.getElementById('landingThemeToggle'), document.getElementById('customerThemeToggle')].forEach((btn) => {
+    if (btn) {
+      btn.classList.add('rotate-180', 'scale-95');
+      setTimeout(() => btn.classList.remove('rotate-180', 'scale-95'), 150);
+    }
+  });
 
-  const isLight = html.hasAttribute('data-theme') ? !html.getAttribute('data-theme') === 'light' : false;
+  const isLight = html.getAttribute('data-theme') === 'light';
   const nextLight = !isLight;
 
   if (nextLight) {
@@ -1590,7 +1624,9 @@ function toggleLandingTheme() {
       const el = document.querySelector(sel);
       if (el) el.setAttribute('data-theme', 'light');
     });
-    if (btn) { btn.title = 'Switch to Dark Mode'; btn.setAttribute('aria-label', 'Switch to Dark Mode'); }
+    [document.getElementById('landingThemeToggle'), document.getElementById('customerThemeToggle')].forEach((b) => {
+      if (b) { b.title = 'Switch to Dark Mode'; b.setAttribute('aria-label', 'Switch to Dark Mode'); }
+    });
   } else {
     html.removeAttribute('data-theme');
     body.removeAttribute('data-theme');
@@ -1598,7 +1634,9 @@ function toggleLandingTheme() {
       const el = document.querySelector(sel);
       if (el) el.removeAttribute('data-theme');
     });
-    if (btn) { btn.title = 'Switch to Light Mode'; btn.setAttribute('aria-label', 'Switch to Light Mode'); }
+    [document.getElementById('landingThemeToggle'), document.getElementById('customerThemeToggle')].forEach((b) => {
+      if (b) { b.title = 'Switch to Light Mode'; b.setAttribute('aria-label', 'Switch to Light Mode'); }
+    });
   }
 
   try { localStorage.setItem('wm_landing_theme', nextLight ? 'light' : 'dark'); } catch (e) {}
@@ -1618,6 +1656,19 @@ function syncLandingThemeIcon(isLight) {
   } else {
     moon.classList.add('hidden');
     sun.classList.remove('hidden');
+  }
+
+  // Keep the Customer App navbar theme toggle in sync as well.
+  const cSun = document.getElementById('customerThemeIconSun');
+  const cMoon = document.getElementById('customerThemeIconMoon');
+  if (cSun && cMoon) {
+    if (isLight) {
+      cSun.classList.add('hidden');
+      cMoon.classList.remove('hidden');
+    } else {
+      cMoon.classList.add('hidden');
+      cSun.classList.remove('hidden');
+    }
   }
 }
 
@@ -1685,7 +1736,13 @@ function switchInterface(role) {
       founderInterfaceTemplate = founderInterfaceTemplate.cloneNode(true);
     }
     var founderEl = document.getElementById('founderInterface') || document.getElementById('founderView');
-    if (founderEl) { founderEl.classList.remove('hidden'); founderEl.style.display = 'block'; }
+    if (founderEl) {
+      founderEl.classList.remove('hidden');
+      founderEl.style.display = 'block';
+      // Preserve the active theme across view switches so the Founder view
+      // never flashes a dark canvas when Light Mode is active.
+      if (document.documentElement.getAttribute('data-theme') === 'light') founderEl.setAttribute('data-theme', 'light');
+    }
     if (tabFounder) {
       tabFounder.className = activeTabClass;
       tabFounder.style.removeProperty('display');
@@ -4560,17 +4617,13 @@ function formatIndiaPhone(phone) {
   return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
 }
 
-// Platform-default Host WhatsApp Alert Number used for every venue that has
-// not yet configured its own number. Owners/founders may override it with any
-// 10-digit Indian number, or clear it to "" to disable WhatsApp alerts.
-const DEFAULT_WHATSAPP_ALERT_PHONE = '9702132819';
-
 // Effective alert number for a venue: stored whatsappAlertPhone when set,
-// otherwise the platform default. Explicitly blank ("") means disabled.
+// otherwise blank ("") meaning WhatsApp alerts are disabled for that venue.
+// Explicitly blank means the 📲 WhatsApp Ready button stays hidden on the Host Stand.
 function getRestaurantWhatsAppPhone(restaurant) {
-  if (!restaurant) return DEFAULT_WHATSAPP_ALERT_PHONE;
+  if (!restaurant) return '';
   const val = restaurant.whatsappAlertPhone;
-  return (val === undefined || val === null) ? DEFAULT_WHATSAPP_ALERT_PHONE : String(val);
+  return (val === undefined || val === null) ? '' : String(val);
 }
 
 // Mask a +91 10-digit number for host-stand table display: +91 ••••• ••123
@@ -4601,7 +4654,7 @@ function openCustomerPhoneModal(editMode = false) {
   if (btn) {
     btn.innerHTML = editMode
       ? `<i data-lucide="send" class="w-4 h-4"></i> <span>Save Changes →</span>`
-      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Send Welcome on WhatsApp →</span>`;
+      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Continue →</span>`;
   }
   if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
   lucide.createIcons();
@@ -4649,20 +4702,16 @@ async function submitCustomerPhone(event) {
       console.warn('customer_leads write failed (non-fatal):', leadErr);
     }
 
-    // 3. Free WhatsApp welcome deep-link in a new tab to the official WaitMate
-    //    India number, pre-filled with the opt-in request carrying the diner's number.
-    const welcome = encodeURIComponent(`Hi WaitMate India! 🇮🇳 Please activate live queue & Table Ready alerts for my number (+91 ${digits}).`);
-    window.open(`https://wa.me/919702132819?text=${welcome}`, '_blank');
-
     // 4. Transition to the Customer directory and paint the editable phone pill.
     closeCustomerPhoneModal();
     switchInterface('customer');
     renderCustomerPhonePill();
+    showToast('Number saved for live table alerts', 'success');
   } finally {
     btn.disabled = false;
     btn.innerHTML = customerPhoneEditMode
       ? `<i data-lucide="send" class="w-4 h-4"></i> <span>Save Changes →</span>`
-      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Send Welcome on WhatsApp →</span>`;
+      : `<i data-lucide="send" class="w-4 h-4"></i> <span>Save & Continue →</span>`;
     lucide.createIcons();
   }
 }
@@ -4777,7 +4826,7 @@ function renderHostDashboard() {
   const stats = hostData.live_stats || { queue_count: 0, total_waiting_people: 0, estimated_wait_mins: 0, is_queue_open: true };
   const rel = hostData.reliability || { score: 95, grade: 'A' };
   const queue = getSafeEntries(hostData.queue);
-  const whatsappConfigured = Boolean(getRestaurantWhatsAppPhone(hostData.restaurant));
+  const whatsappConfigured = Boolean(hostData.restaurant && hostData.restaurant.whatsappAlertPhone);
   // Host waiting table shows only live parties. Seated (and no_show/cancelled)
   // guests drop off cleanly here while their Firestore doc stays alive for the
   // diner's 1–5★ rating screen.
@@ -6124,16 +6173,12 @@ function scrollToSection(id) {
   window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
-// Open the existing Host Stand: switch to the owner view and prompt for the
-// venue dashboard password. Host Stand login flow and passwords are unchanged.
+// Open the existing Host Stand: switch to the owner view and show the
+// Registered Restaurants directory. No password modal is opened here — the
+// Unlock modal only appears when the user explicitly clicks a restaurant card
+// via openProtectedHostStand(venueId).
 function openHostStand() {
   switchInterface('owner');
-  const firstVenue = (allRestaurants && allRestaurants.length) ? allRestaurants[0] : null;
-  if (firstVenue) {
-    openOwnerPasswordModal(firstVenue.id);
-  } else {
-    openOwnerPasswordModal();
-  }
 }
 
 // ==========================================
